@@ -167,10 +167,8 @@ def validar_licenca():
 def receber_log():
     # Tenta processar o log
     try:
-        dados = request.get_json(silent=True)
-
-        # Só salva se vieram dados válidos
-        if dados:
+        # CORREÇÃO SOURCERY: O operador Walrus (:=) atribui e testa na mesma linha
+        if dados := request.get_json(silent=True):
             novo_log = LogBot(
                 sessao_id=dados.get("sessao_id", "?"),
                 hwid=dados.get("hwid", "?"),
@@ -183,17 +181,14 @@ def receber_log():
             return jsonify({"status": "ok"})
 
     except Exception as e:
-        # 1. Registra o erro específico (Resolve o E722)
+        # 1. Registra o erro específico
         logger.error(f"Erro ao salvar log: {e}")
 
-        # 2. Reseta a conexão com o banco para não travar o próximo pedido
+        # 2. Reseta a conexão com o banco para não travar
         db.session.rollback()
 
     # Retorna erro se falhou ou se não vieram dados
     return jsonify({"status": "erro"}), 400
-
-
-# --- 💰 O CÉREBRO DA VENDA (WEBHOOK) 💰 ---
 
 
 @app.route("/webhook/mercadopago", methods=["POST"])
@@ -270,6 +265,79 @@ def webhook_mp():
         return jsonify({"error": str(e)}), 500
 
     return jsonify({"status": "ok"}), 200
+
+
+# --- 🛒 NOVA ROTA: CRIAR PAGAMENTO (PARA A LOJA) 🛒 ---
+@app.route("/api/pagamento/criar", methods=["POST"])
+def criar_pagamento():
+    """
+    Recebe dados da loja e gera um link de checkout do Mercado Pago.
+    Payload esperado: { "email": "cliente@email.com", "plano": "mensal" }
+    """
+    try:
+        dados = request.get_json()
+        email_comprador = dados.get("email")
+        plano = dados.get("plano", "mensal")
+
+        # URL base do servidor (para o Webhook)
+        # Se estiver no Render, ele usa a própria URL. Se local, define uma.
+        BASE_URL = "https://crash-api-jose.onrender.com"
+
+        # Define preço baseado no plano
+        if plano == "mensal":
+            preco = 99.90
+            titulo = "Licença CrashBot (Mensal)"
+        else:
+            preco = 199.90
+            titulo = "Licença CrashBot (Vitalício)"
+
+        if not MP_ACCESS_TOKEN:
+            return jsonify({"erro": "Servidor sem token MP"}), 500
+
+        # 1. Configura o SDK
+        sdk = mercadopago.SDK(MP_ACCESS_TOKEN)
+
+        # 2. Cria a preferência de pagamento
+        preference_data = {
+            "items": [
+                {
+                    "id": f"bot-{plano}",
+                    "title": titulo,
+                    "quantity": 1,
+                    "currency_id": "BRL",
+                    # CORREÇÃO SOURCERY: Removemos o float(), pois 'preco' já é float
+                    "unit_price": preco,
+                }
+            ],
+            "payer": {"email": email_comprador},
+            # Para onde o cliente vai depois de pagar
+            "back_urls": {
+                "success": "https://google.com",  # Futuramente sua página de 'Obrigado'
+                "failure": "https://google.com",
+                "pending": "https://google.com",
+            },
+            "auto_return": "approved",
+            # AQUI ESTÁ A MÁGICA: O Webhook que configuramos
+            "notification_url": f"{BASE_URL}/webhook/mercadopago",
+        }
+
+        preference_response = sdk.preference().create(preference_data)
+
+        # Extrai o link de pagamento
+        checkout_url = preference_response["response"]["init_point"]
+        sandbox_url = preference_response["response"]["sandbox_init_point"]
+
+        return jsonify(
+            {
+                "status": "sucesso",
+                "checkout_url": checkout_url,
+                "sandbox_url": sandbox_url,
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"Erro ao criar pagamento: {e}")
+        return jsonify({"erro": str(e)}), 500
 
 
 if __name__ == "__main__":
