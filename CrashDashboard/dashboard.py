@@ -1,22 +1,34 @@
-import time
+from datetime import datetime, timedelta
 
 import pandas as pd
 import streamlit as st
 from sqlalchemy import create_engine, text
 
-# --- CONFIGURAÇÃO ---
+# --- CONFIGURAÇÃO DA PÁGINA ---
 st.set_page_config(
-    page_title="CrashAdmin",
-    page_icon="🚀",
+    page_title="Crash AdminCenter",
+    page_icon="🕵️‍♂️",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-# --- CONEXÃO COM O BANCO ---
-# COLE AQUI A SUA 'EXTERNAL DATABASE URL' DO RENDER
+# --- ESTILO CSS PERSONALIZADO (Para ficar bonito) ---
+st.markdown(
+    """
+<style>
+    [data-testid="stMetricValue"] {
+        font-size: 24px;
+    }
+    .stDataFrame { border: 1px solid #333; }
+</style>
+""",
+    unsafe_allow_html=True,
+)
+
+# --- CONEXÃO COM O BANCO (RENDER) ---
+# Substitua pela sua URL Externa do Render se mudar
 DB_URL = "postgresql://crash_db_user:BQudpCSoH52uCJ1Nn7qDT9bHyxeUllSU@dpg-d4i9h3re5dus73egah5g-a.oregon-postgres.render.com/crash_db"
 
-# Correção para o SQLAlchemy (postgres -> postgresql)
 if DB_URL.startswith("postgres://"):
     DB_URL = DB_URL.replace("postgres://", "postgresql://", 1)
 
@@ -29,99 +41,168 @@ def get_connection():
 try:
     engine = get_connection()
 except Exception as e:
-    st.error(f"Erro ao conectar no banco: {e}")
+    st.error(f"❌ Erro crítico de conexão: {e}")
     st.stop()
 
 
-# --- FUNÇÕES DE DADOS ---
-def carregar_licencas():
-    query = "SELECT * FROM licenca ORDER BY id DESC"
-    return pd.read_sql(query, engine)
+# --- CARREGAMENTO DE DADOS OTIMIZADO ---
+def get_data(dias=7):
+    """Puxa logs e licenças dos últimos X dias"""
+    data_corte = datetime.now() - timedelta(days=dias)
+
+    with engine.connect() as conn:
+        # 1. Puxar Logs (Com filtro de data - query parametrizada e segura)
+        query_logs = text(
+            """
+            SELECT * FROM log_bot
+            WHERE timestamp >= :data_corte
+            ORDER BY timestamp DESC
+        """
+        )
+        df_logs = pd.read_sql(query_logs, conn, params={"data_corte": data_corte})
+
+        # 2. Puxar Licenças (Todas)
+        query_licencas = text("SELECT * FROM licenca ORDER BY id DESC")
+        df_licencas = pd.read_sql(query_licencas, conn)
+
+    return df_logs, df_licencas
 
 
-def carregar_logs_recentes():
-    query = "SELECT * FROM log_bot ORDER BY timestamp DESC LIMIT 50"
-    return pd.read_sql(query, engine)
+# --- BARRA LATERAL (FILTROS) ---
+st.sidebar.header("🎛️ Filtros")
+filtro_dias = st.sidebar.slider("Período de Análise (Dias)", 1, 30, 7)
 
-
-def carregar_kpis():
-    """Carrega KPIs principais usando queries diretas (Mais rápido e Type-Safe)."""
-    try:
-        with engine.connect() as conn:
-            # Executa a query e pega apenas o primeiro valor escalar
-            total_clientes = conn.execute(text("SELECT COUNT(*) FROM licenca")).scalar()
-            total_logs = conn.execute(text("SELECT COUNT(*) FROM log_bot")).scalar()
-
-        # Garante que se vier None (tabela vazia), retorna 0
-        return int(total_clientes or 0), int(total_logs or 0)
-
-    except Exception as e:
-        st.error(f"Erro ao carregar KPIs: {e}")
-        return 0, 0
-
-
-# --- INTERFACE (SIDEBAR) ---
-st.sidebar.title("🚀 Painel de Controle")
-pagina = st.sidebar.radio(
-    "Navegação", ["Visão Geral", "Gerenciar Licenças", "Telemetria ao Vivo"]
-)
-
-st.sidebar.markdown("---")
-if st.sidebar.button("🔄 Atualizar Dados"):
+if st.sidebar.button("🔄 Atualizar Dados Agora"):
     st.cache_data.clear()
     st.rerun()
 
-# --- PÁGINA: VISÃO GERAL ---
-if pagina == "Visão Geral":
-    st.title("📊 Visão Geral do Negócio")
+# Carrega os dados
+with st.spinner("Baixando dados da nuvem..."):
+    df_logs, df_licencas = get_data(filtro_dias)
 
-    # A função carregar_kpis agora retorna inteiros puros (int), sem sujeira do Pandas
-    total_clientes, total_logs = carregar_kpis()
+# --- CORPO PRINCIPAL ---
+st.title("🚀 CrashBot Command Center")
 
-    col1, col2, col3 = st.columns(3)
+# Abas para organizar a bagunça
+tab1, tab2, tab3 = st.tabs(["🦅 Visão Macro", "🕵️ Espionar Cliente", "💼 Gestão & CRM"])
 
-    # O Pylance não vai mais reclamar, pois as variáveis são do tipo 'int'
-    col1.metric("Clientes Totais", total_clientes)
-    col2.metric("Atividade (Logs)", total_logs)
-    col3.metric("Status do Servidor", "ONLINE 🟢")
+# ===================================================
+# ABA 1: VISÃO MACRO (Resumo do Negócio)
+# ===================================================
+with tab1:
+    st.markdown("### 📊 Performance Global do Sistema")
 
-    st.markdown("### 🕒 Últimas Atividades")
-    df_logs = carregar_logs_recentes()
-    st.dataframe(df_logs, use_container_width=True)
+    if not df_logs.empty:
+        # Métricas Calculadas
+        total_lucro_rede = df_logs["lucro"].sum()
+        total_apostas = df_logs[df_logs["tipo"] == "bet"].shape[0]
+        total_erros = df_logs[df_logs["tipo"] == "error"].shape[0]
 
-# --- PÁGINA: GERENCIAR LICENÇAS ---
-elif pagina == "Gerenciar Licenças":
-    st.title("🔑 Gerenciamento de Licenças")
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric(
+            "Lucro da Rede (Pontos)", f"{total_lucro_rede:.2f}", delta_color="normal"
+        )
+        col2.metric("Total de Apostas", total_apostas)
+        col3.metric(
+            "Erros Registrados", total_erros, delta_color="inverse"
+        )  # Vermelho se subir
+        col4.metric("Licenças Ativas", int(df_licencas["ativa"].sum()))
 
-    df_licencas = carregar_licencas()
+        # Gráfico de Lucro Global (Agrupado por hora)
+        st.subheader("📈 Tendência de Lucro (Todos os Bots)")
+        # Converter timestamp para datetime se necessário
+        df_logs["timestamp"] = pd.to_datetime(df_logs["timestamp"])
+        chart_data = df_logs.set_index("timestamp").resample("H")["lucro"].sum()
+        st.line_chart(chart_data)
 
-    # Mostra tabela colorida
-    st.dataframe(
-        df_licencas,
-        use_container_width=True,
-        column_config={
-            "ativa": st.column_config.CheckboxColumn("Ativa?", disabled=True),
-            "data_expiracao": st.column_config.DatetimeColumn(
-                "Expira em", format="D/M/Y"
-            ),
-        },
+    else:
+        st.info("Nenhum dado de log encontrado no período selecionado.")
+
+# ===================================================
+# ABA 2: ESPIONAR CLIENTE (Detalhe Individual)
+# ===================================================
+with tab2:
+    st.markdown("### 🕵️ Análise Individual")
+
+    # Seletor de Cliente (Pelo nome ou HWID)
+    lista_clientes = df_licencas["cliente_nome"].unique().tolist()
+    cliente_selecionado = st.selectbox(
+        "Selecione o Cliente:", ["Todos"] + lista_clientes
     )
 
-    st.info("💡 Para criar novas chaves, implementaremos o botão aqui em breve.")
+    if cliente_selecionado != "Todos":
+        # Descobrir o HWID desse cliente
+        hwid_alvo = df_licencas[df_licencas["cliente_nome"] == cliente_selecionado][
+            "hwid"
+        ].iloc[0]
 
-# --- PÁGINA: TELEMETRIA ---
-elif pagina == "Telemetria ao Vivo":
-    st.title("📡 Telemetria em Tempo Real")
+        # Filtrar logs só desse cara
+        df_cliente = df_logs[df_logs["hwid"] == hwid_alvo]
 
-    # Auto-refresh simples
-    placeholder = st.empty()
+        if not df_cliente.empty:
+            lucro_cliente = df_cliente["lucro"].sum()
 
-    if st.button("Parar Monitoramento"):
-        st.stop()
+            c1, c2 = st.columns(2)
+            c1.metric(f"Lucro de {cliente_selecionado}", f"{lucro_cliente:.2f}")
 
-    # Loop de atualização (simulação de real-time)
-    for _ in range(100):
-        df_logs = carregar_logs_recentes()
-        with placeholder.container():
-            st.dataframe(df_logs, height=600, use_container_width=True)
-            time.sleep(2)  # Atualiza a cada 2 segundos
+            if lucro_cliente > 0:
+                c2.success("✅ Este cliente está Lucrando!")
+            else:
+                c2.error("🔻 Este cliente está no Prejuízo!")
+
+            # Gráfico do Cliente
+            st.markdown("#### Performance Financeira")
+            st.line_chart(df_cliente.set_index("timestamp")["lucro"].cumsum())
+
+            # Tabela de Ações
+            st.markdown("#### 📜 Últimas Ações do Bot")
+            st.dataframe(
+                df_cliente[["timestamp", "tipo", "dados", "lucro"]],
+                use_container_width=True,
+                hide_index=True,
+            )
+        else:
+            st.warning("Este cliente ainda não rodou o bot ou não enviou logs.")
+    else:
+        st.info("Selecione um cliente acima para ver os detalhes.")
+
+# ===================================================
+# ABA 3: GESTÃO & CRM (Dados Cadastrais)
+# ===================================================
+with tab3:
+    st.markdown("### 💼 Base de Clientes")
+
+    # Tratamento para link de WhatsApp
+    df_view = df_licencas.copy()
+
+    # Tabela Bonita
+    st.dataframe(
+        df_view,
+        use_container_width=True,
+        column_config={
+            "chave": "Licença (Key)",
+            "cliente_nome": "Nome",
+            "email_cliente": "E-mail",
+            "whatsapp": "WhatsApp",
+            "ativa": st.column_config.CheckboxColumn("Status", disabled=True),
+            "data_expiracao": st.column_config.DatetimeColumn(
+                "Vencimento", format="D/M/Y"
+            ),
+            "payment_id": "ID Pagamento",
+        },
+        hide_index=True,
+    )
+
+    st.divider()
+    st.markdown("#### 🛠️ Ferramentas Rápidas")
+    col_a, col_b = st.columns(2)
+    with col_a:
+        st.info(
+            "Para criar licenças manuais, use o script ou o endpoint da API por enquanto."
+        )
+    with col_b:
+        st.warning("⚠️ Cuidado ao alterar dados diretamente no banco.")
+
+# Rodapé
+st.markdown("---")
+st.caption(f"Dados atualizados em: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
