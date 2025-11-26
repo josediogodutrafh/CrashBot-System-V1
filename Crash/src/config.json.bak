@@ -1,0 +1,153 @@
+{
+    "jogadores": [],
+    "tempo_horas": 5,
+    "max_rodadas": 1800,
+    "meta_lucro_total": 155220,
+    "horario_inicio": "08:00",
+    "profiles": {
+        "FF90%ESCDIR": {
+            "multiplier_area": {
+                "x": 2649,
+                "y": 362,
+                "width": 144,
+                "height": 45
+            },
+            "balance_area": {
+                "x": 3371,
+                "y": 104,
+                "width": 72,
+                "height": 20
+            },
+            "bet_area": {
+                "x": 2644,
+                "y": 417,
+                "width": 194,
+                "height": 52
+            },
+            "bet_value_click_1": {
+                "x": 2540,
+                "y": 799
+            },
+            "target_click_1": {
+                "x": 2732,
+                "y": 802
+            },
+            "bet_value_click_2": {
+                "x": 2532,
+                "y": 920
+            },
+            "target_click_2": {
+                "x": 2729,
+                "y": 924
+            },
+            "bet_value_area_1": {
+                "x": 2539,
+                "y": 798,
+                "width": 8,
+                "height": 4
+            },
+            "target_area_1": {
+                "x": 2723,
+                "y": 794,
+                "width": 9,
+                "height": 8
+            },
+            "bet_value_area_2": {
+                "x": 2505,
+                "y": 933,
+                "width": 27,
+                "height": 17
+            },
+            "target_area_2": {
+                "x": 2733,
+                "y": 931,
+                "width": 10,
+                "height": 15
+            },
+            "bet_button_area_1": {
+                "x": 2897,
+                "y": 786,
+                "width": 37,
+                "height": 16
+            },
+            "bet_button_area_2": {
+                "x": 2906,
+                "y": 920,
+                "width": 26,
+                "height": 25
+            }
+        },
+        "FF90%DIOB": {
+            "multiplier_area": {
+                "x": 2658,
+                "y": 361,
+                "width": 140,
+                "height": 43
+            },
+            "balance_area": {
+                "x": 3371,
+                "y": 106,
+                "width": 71,
+                "height": 15
+            },
+            "bet_area": {
+                "x": 2635,
+                "y": 422,
+                "width": 205,
+                "height": 47
+            },
+            "bet_value_click_1": {
+                "x": 2542,
+                "y": 797
+            },
+            "target_click_1": {
+                "x": 2737,
+                "y": 800
+            },
+            "bet_value_click_2": {
+                "x": 2536,
+                "y": 916
+            },
+            "target_click_2": {
+                "x": 2741,
+                "y": 916
+            },
+            "bet_value_area_1": {
+                "x": 2538,
+                "y": 795,
+                "width": 8,
+                "height": 9
+            },
+            "target_area_1": {
+                "x": 2723,
+                "y": 794,
+                "width": 8,
+                "height": 11
+            },
+            "bet_value_area_2": {
+                "x": 2539,
+                "y": 925,
+                "width": 9,
+                "height": 5
+            },
+            "target_area_2": {
+                "x": 2730,
+                "y": 913,
+                "width": 12,
+                "height": 3
+            },
+            "bet_button_area_1": {
+                "x": 2899,
+                "y": 791,
+                "width": 45,
+                "height": 24
+            },
+            "bet_button_area_2": {
+                "x": 2914,
+                "y": 911,
+                "width": 13,
+                "height": 14
+            }
+        }
+    }
+}

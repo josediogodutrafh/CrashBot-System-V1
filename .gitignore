@@ -1,0 +1,23 @@
+# Ignorar TODOS os ambientes virtuais de qualquer pasta
+.venv/
+venv/
+env/
+
+# Ignorar arquivos compilados
+__pycache__/
+*.pyc
+*.spec
+dist/
+build/
+# --- Ignorar arquivos de dados locais e logs ---
+*.log
+*.db
+*.db-shm
+*.db-wal
+.ipynb_checkpoints/
+
+# --- SEGURANÇA (MUITO IMPORTANTE) ---
+# Ignorar chaves de licença e configs com senhas
+license_key.txt
+config.json
+settings.json
