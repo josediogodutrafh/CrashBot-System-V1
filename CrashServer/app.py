@@ -1,47 +1,87 @@
+import logging
 import os
-from datetime import datetime
+import uuid
+from datetime import datetime, timedelta, timezone
 
+import mercadopago  # BIBLIOTECA DE PAGAMENTOS
 from flask import Flask, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
 
-# Configuração do App
+try:
+    from email_service import enviar_email_licenca
+except ImportError:
+    print("⚠️ AVISO: email_service.py não encontrado! O envio de e-mail falhará.")
+
+    def enviar_email_licenca(
+        email_cliente: str, nome_cliente: str, chave_licenca: str, link_download: str
+    ) -> bool:
+        """Mock da função de envio de email para desenvolvimento."""
+        logger.info(f"MOCK EMAIL: Para {email_cliente} | Chave: {chave_licenca}")
+        return False
+
+
+# Configuração de Logs (Para ver o que acontece no Render)
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 app = Flask(__name__)
 
-# --- CONFIGURAÇÃO HÍBRIDA DE BANCO DE DADOS ---
-# Usa o operador := para pegar e testar a variável ao mesmo tempo
+# --- VARIÁVEIS DE VENDA ---
+MP_ACCESS_TOKEN = os.environ.get("MP_ACCESS_TOKEN")  # A senha que colamos no Render
+LINK_DOWNLOAD_PADRAO = os.environ.get(
+    "LINK_DOWNLOAD_BOT", "https://seu-link.com/bot.zip"
+)
+
+# --- BANCO DE DADOS ---
 if database_url := os.environ.get("DATABASE_URL"):
-    # Estamos na Nuvem (Render) -> Usar PostgreSQL
     if database_url.startswith("postgres://"):
         database_url = database_url.replace("postgres://", "postgresql://", 1)
-
     app.config["SQLALCHEMY_DATABASE_URI"] = database_url
 else:
-    # Estamos no PC Local -> Usar SQLite
     app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///server.db"
 
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 db = SQLAlchemy(app)
 
-# --- MODELOS DO BANCO DE DADOS (AS TABELAS) ---
+# --- TABELAS (MODELOS) ---
 
 
 class Licenca(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    chave = db.Column(
-        db.String(50), unique=True, nullable=False
-    )  # A chave (ex: CRASH-1234)
-    hwid = db.Column(db.String(100), nullable=True)  # O ID do PC do usuário
-    ativa = db.Column(db.Boolean, default=True)  # Se a gente bloqueou ou não
-    data_expiracao = db.Column(db.DateTime, nullable=False)  # Até quando vale
-    cliente_nome = db.Column(db.String(100))  # Nome do cliente (opcional)
+    # Dados de Controle
+    chave = db.Column(db.String(50), unique=True, nullable=False)
+    ativa = db.Column(db.Boolean, default=True)
+    data_expiracao = db.Column(db.DateTime, nullable=True)  # None = Vitalício
 
-    def __init__(self, chave, data_expiracao, cliente_nome, hwid=None, ativa=True):
+    # Dados do Cliente
+    cliente_nome = db.Column(db.String(100))
+    email_cliente = db.Column(db.String(120), nullable=True)  # NOVO: Para suporte
+    payment_id = db.Column(db.String(50), unique=True, nullable=True)  # NOVO: Segurança
+    hwid = db.Column(db.String(100), nullable=True)
+
+    def __init__(
+        self,
+        chave,
+        cliente_nome,
+        email_cliente=None,
+        payment_id=None,
+        dias_validade=None,
+    ):
         self.chave = chave
-        self.data_expiracao = data_expiracao
         self.cliente_nome = cliente_nome
-        self.hwid = hwid
-        self.ativa = ativa
+        self.email_cliente = email_cliente
+        self.payment_id = payment_id
+        self.hwid = None
+        self.ativa = True
+
+        if dias_validade:
+            # CORREÇÃO SOURCERY: Usar datetime com fuso horário explícito (UTC)
+            self.data_expiracao = datetime.now(timezone.utc) + timedelta(
+                days=dias_validade
+            )
+        else:
+            self.data_expiracao = None
 
 
 class LogBot(db.Model):
@@ -49,171 +89,188 @@ class LogBot(db.Model):
     sessao_id = db.Column(db.String(100), nullable=False)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
     hwid = db.Column(db.String(100))
-    tipo = db.Column(db.String(50))  # 'round', 'bet', 'alert', 'error'
-    dados = db.Column(db.String(500))  # Conteúdo do log (JSON string ou mensagem)
+    tipo = db.Column(db.String(50))
+    dados = db.Column(db.String(500))
     lucro = db.Column(db.Float, default=0.0)
 
     def __init__(self, sessao_id, hwid, tipo, dados, lucro=0.0):
         self.sessao_id = sessao_id
         self.hwid = hwid
         self.tipo = tipo
-        self.dados = dados
+        self.dados = str(dados)
         self.lucro = lucro
 
 
-# --- ROTAS (O PORTEIRO) ---
+# --- ROTAS DE UTILIDADE ---
 
 
-# 1. Rota para criar o banco de dados (apenas na primeira vez)
-@app.route("/setup")
-def setup():
-    with app.app_context():
-        db.create_all()
-        return "Banco de dados criado com sucesso!"
+@app.route("/")
+def home():
+    return "CrashBot API V2 - Sistema de Vendas Ativo 🚀"
 
 
-# 2. Rota de Verificação (O Bot chama esta rota)
+@app.route("/admin/reset_total_db", methods=["GET"])
+def reset_total_db():
+    """⚠️ Reseta o banco para aplicar as novas colunas de email e pagamento."""
+    try:
+        with app.app_context():
+            db.drop_all()
+            db.create_all()
+        return "✅ Banco RESETADO. Novas colunas criadas com sucesso!", 200
+    except Exception as e:
+        return f"Erro: {str(e)}", 500
+
+
+# --- ROTAS DO BOT (CLIENTE) ---
+
+
 @app.route("/validar", methods=["POST"])
 def validar_licenca():
     dados = request.get_json(silent=True)
-
     if not dados:
-        return jsonify({"status": "erro", "mensagem": "JSON inválido ou ausente"}), 400
+        return jsonify({"status": "erro"}), 400
 
-    chave_recebida = dados.get("chave")
-    hwid_recebido = dados.get("hwid")
+    chave = dados.get("chave")
+    hwid = dados.get("hwid")
 
-    if not chave_recebida or not hwid_recebido:
-        return jsonify({"status": "erro", "mensagem": "Dados incompletos"}), 400
+    licenca = Licenca.query.filter_by(chave=chave).first()
 
-    # Busca a licença no banco
-    licenca = Licenca.query.filter_by(chave=chave_recebida).first()
-
-    # 2.1 Checa se a licença existe
     if not licenca:
         return jsonify({"status": "erro", "mensagem": "Chave inválida"}), 403
-
-    # 2.2 Checa se está bloqueada manualmente por você
     if not licenca.ativa:
-        return (
-            jsonify(
-                {"status": "erro", "mensagem": "Licença bloqueada pelo administrador"}
-            ),
-            403,
-        )
+        return jsonify({"status": "erro", "mensagem": "Bloqueada"}), 403
 
-    # 2.3 Checa a data de validade
-    if licenca.data_expiracao < datetime.now():
-        return jsonify({"status": "erro", "mensagem": "Licença expirada"}), 403
+    # --- CORREÇÃO DE DATA (FUSO HORÁRIO) ---
+    if licenca.data_expiracao:
+        # 1. Pega a data do banco
+        expiracao = licenca.data_expiracao
 
-    # 2.4 Checa o HWID (Hardware ID)
+        # 2. Se ela vier sem fuso (Naive), colocamos o selo UTC nela
+        if expiracao.tzinfo is None:
+            expiracao = expiracao.replace(tzinfo=timezone.utc)
+
+        # 3. Agora comparamos maçã com maçã (Aware vs Aware)
+        if expiracao < datetime.now(timezone.utc):
+            return jsonify({"status": "erro", "mensagem": "Expirada"}), 403
+
     if licenca.hwid is None:
-        # É o primeiro acesso! Vamos "casar" a chave com este PC.
-        licenca.hwid = hwid_recebido
+        licenca.hwid = hwid
         db.session.commit()
-        return jsonify(
-            {"status": "sucesso", "mensagem": "Licença ativada neste computador!"}
-        )
+        return jsonify({"status": "sucesso", "mensagem": "Ativada!"})
+    elif licenca.hwid != hwid:
+        return jsonify({"status": "erro", "mensagem": "HWID Incorreto"}), 403
 
-    elif licenca.hwid != hwid_recebido:
-        # A chave já tem um dono e o HWID não bate
-        return (
-            jsonify(
-                {"status": "erro", "mensagem": "Esta chave já está em uso em outro PC!"}
-            ),
-            403,
-        )
-
-    # Se passou por tudo...
-    return jsonify({"status": "sucesso", "mensagem": "Acesso permitido"})
+    return jsonify({"status": "sucesso", "mensagem": "OK"})
 
 
 @app.route("/telemetria/log", methods=["POST"])
 def receber_log():
-    dados = request.get_json(silent=True)
-
-    if not dados:
-        return jsonify({"status": "erro", "mensagem": "JSON inválido ou ausente"}), 400
-
-    # 1. Validação básica (HWID é necessário para rastrear)
-    if not dados.get("hwid") or not dados.get("sessao_id") or not dados.get("tipo"):
-        return jsonify({"status": "erro", "mensagem": "Dados de log incompletos"}), 400
-
-    # 2. Cria o novo registro de log
-    novo_log = LogBot(
-        sessao_id=dados["sessao_id"],
-        hwid=dados["hwid"],
-        tipo=dados["tipo"],
-        dados=dados.get("dados", "N/A"),
-        lucro=dados.get("lucro", 0.0),
-    )
-
+    # Tenta processar o log
     try:
-        db.session.add(novo_log)
-        db.session.commit()
-        return jsonify({"status": "sucesso", "mensagem": "Log recebido"}), 200
+        dados = request.get_json(silent=True)
+
+        # Só salva se vieram dados válidos
+        if dados:
+            novo_log = LogBot(
+                sessao_id=dados.get("sessao_id", "?"),
+                hwid=dados.get("hwid", "?"),
+                tipo=dados.get("tipo", "info"),
+                dados=dados.get("dados", ""),
+                lucro=dados.get("lucro", 0.0),
+            )
+            db.session.add(novo_log)
+            db.session.commit()
+            return jsonify({"status": "ok"})
+
     except Exception as e:
+        # 1. Registra o erro específico (Resolve o E722)
+        logger.error(f"Erro ao salvar log: {e}")
+
+        # 2. Reseta a conexão com o banco para não travar o próximo pedido
         db.session.rollback()
-        return jsonify({"status": "erro", "mensagem": str(e)}), 500
+
+    # Retorna erro se falhou ou se não vieram dados
+    return jsonify({"status": "erro"}), 400
 
 
-# 3. Rota para VOCÊ criar licenças (Painel Admin simplificado)
-@app.route("/admin/criar_licenca", methods=["POST"])
-def criar_licenca():
-    # IMPORTANTE: Em produção, precisaremos proteger esta rota com senha!
-    dados = request.get_json(silent=True)
-    if not dados:
-        return jsonify({"status": "erro", "mensagem": "JSON inválido ou ausente"}), 400
+# --- 💰 O CÉREBRO DA VENDA (WEBHOOK) 💰 ---
 
-    nova_chave = dados.get("chave")
-    dias_validade = dados.get("dias", 30)
-    nome = dados.get("nome", "Cliente")
 
-    from datetime import timedelta
+@app.route("/webhook/mercadopago", methods=["POST"])
+def webhook_mp():
+    # 1. Tenta pegar ID da URL (Padrão GET)
+    payment_id = request.args.get("id") or request.args.get("data.id")
 
-    expiracao = datetime.now() + timedelta(days=dias_validade)
+    # 2. Se não achou, tenta pegar do JSON (Padrão POST) de forma SEGURA e OTIMIZADA
+    if not payment_id and request.is_json:
+        # Sourcery: Usando 'named expression' (:=) para atribuir e checar numa linha só
+        if data := request.get_json(silent=True):
+            if data.get("action") == "payment.created" or data.get("type") == "payment":
+                # Blindagem contra erro de tipo do Pylance
+                raw_data = data.get("data")
+                if isinstance(raw_data, dict):
+                    payment_id = raw_data.get("id")
 
-    nova_licenca = Licenca(
-        chave=nova_chave, data_expiracao=expiracao, cliente_nome=nome
-    )
+    if not payment_id:
+        return jsonify({"status": "ignored"}), 200
 
+    logger.info(f"🔔 Webhook recebido: {payment_id}")
+
+    # 3. Verificar se é real (Segurança)
     try:
-        db.session.add(nova_licenca)
-        db.session.commit()
-        return jsonify({"status": "sucesso", "mensagem": f"Chave {nova_chave} criada!"})
-    except Exception as e:
-        return jsonify({"status": "erro", "mensagem": str(e)}), 400
+        if not MP_ACCESS_TOKEN:
+            logger.error("❌ Token MP não configurado!")
+            return jsonify({"error": "config missing"}), 500
 
+        sdk = mercadopago.SDK(MP_ACCESS_TOKEN)
+        payment_info = sdk.payment().get(payment_id)
 
-# ADICIONE ISTO no app.py (junto com as outras rotas)
-@app.route("/admin/limpar_licencas", methods=["POST"])
-def limpar_licencas():
-    # Isso apaga TUDO da tabela de Licencas!
-    try:
-        db.session.query(Licenca).delete()
-        db.session.commit()
-        return jsonify(
-            {"status": "sucesso", "mensagem": "Todas as licenças foram excluídas."}
-        )
+        if payment_info["status"] == 404:
+            return jsonify({"error": "not found"}), 404
+
+        response = payment_info["response"]
+        status = response.get("status")
+
+        email = response.get("payer", {}).get("email")
+        nome = response.get("payer", {}).get("first_name", "Cliente")
+        desc = response.get("description", "")
+
+        logger.info(f"🔎 Status: {status} | Email: {email}")
+
+        # 4. Se Aprovado -> Entregar Produto
+        if status == "approved":
+            # Evitar duplicidade
+            if Licenca.query.filter_by(payment_id=str(payment_id)).first():
+                return jsonify({"status": "ok", "msg": "already processed"}), 200
+
+            # Gerar Chave
+            nova_chave = f"KEY-{str(uuid.uuid4()).upper()[:14]}"
+            dias = 30 if "Mensal" in desc else None
+
+            # Salvar no Banco
+            nova_licenca = Licenca(
+                chave=nova_chave,
+                cliente_nome=nome,
+                email_cliente=email,
+                payment_id=str(payment_id),
+                dias_validade=dias,
+            )
+            db.session.add(nova_licenca)
+            db.session.commit()
+
+            # Enviar Email
+            enviar_email_licenca(email, nome, nova_chave, LINK_DOWNLOAD_PADRAO)
+            logger.info("✅ Venda concluída e entregue!")
+
+            return jsonify({"status": "created"}), 201
+
     except Exception as e:
+        logger.error(f"❌ Erro Webhook: {e}")
         db.session.rollback()
-        return jsonify({"status": "erro", "mensagem": str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
-
-# --- ROTA DE EMERGÊNCIA (ADICIONE NO FINAL DO ARQUIVO) ---
-@app.route("/admin/reset_total_db", methods=["GET"])
-def reset_total_db():
-    """Apaga e recria o banco de dados do zero."""
-    try:
-        with app.app_context():
-            db.drop_all()  # Apaga todas as tabelas velhas
-            db.create_all()  # Cria as tabelas novas e corretas
-        return "✅ Banco de dados RESETADO e RECRIADO com sucesso!", 200
-    except Exception as e:
-        return f"❌ Erro ao resetar: {str(e)}", 500
+    return jsonify({"status": "ok"}), 200
 
 
 if __name__ == "__main__":
     app.run(debug=True)
-
-# Forcando atualizacao do servidor
