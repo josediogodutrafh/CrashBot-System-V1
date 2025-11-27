@@ -10,6 +10,7 @@ Fluxo de Dados:
 """
 
 import time
+import uuid
 from datetime import datetime, timedelta
 from typing import Tuple
 
@@ -64,8 +65,7 @@ if DB_URL.startswith("postgres://"):
 def get_connection():
     """Cria e mantém a conexão com o banco de dados."""
     try:
-        engine = create_engine(DB_URL, pool_pre_ping=True)
-        return engine
+        return create_engine(DB_URL, pool_pre_ping=True)
     except Exception as e:
         st.error(f"❌ Erro crítico ao conectar no banco: {e}")
         st.stop()
@@ -276,30 +276,8 @@ def carregar_dados_crm(dias_analise: int) -> Tuple[pd.DataFrame, pd.DataFrame]:
 # =============================================================================
 
 
-def calcular_metricas_macro(df_logs: pd.DataFrame, df_licencas: pd.DataFrame) -> dict:
-    """
-    🎯 ETAPA 2: Cálculos Financeiros e Operacionais Globais
-
-    Calcula KPIs gerenciais:
-    - Faturamento baseado em planos vendidos
-    - Performance operacional dos bots
-    - Distribuição de vendas por tipo de plano
-
-    Args:
-        df_logs: Logs de atividade dos bots
-        df_licencas: Base de clientes/licenças
-
-    Returns:
-        dict: Dicionário com todas as métricas calculadas
-    """
-
-    metricas = {}
-
-    # -------------------------------------------------------------------------
-    # 💰 MÉTRICAS FINANCEIRAS
-    # -------------------------------------------------------------------------
-
-    # Tabela de preços dos planos (configure aqui os valores reais)
+def _calcular_metricas_financeiras(df_licencas: pd.DataFrame) -> dict:
+    """Helper: Calcula apenas as métricas financeiras."""
     PRECOS_PLANOS = {
         "Experimental": 4.99,
         "Semanal": 149.00,
@@ -307,59 +285,71 @@ def calcular_metricas_macro(df_logs: pd.DataFrame, df_licencas: pd.DataFrame) ->
         "Não especificado": 0.00,
     }
 
-    if not df_licencas.empty:
-        # Conta quantas licenças ativas de cada tipo
-        distribuicao_planos = df_licencas[df_licencas["ativa"]][
-            "plano_tipo"
-        ].value_counts()
+    if df_licencas.empty:
+        return {
+            "faturamento_total": 0,
+            "distribuicao_planos": {},
+            "clientes_ativos": 0,
+            "clientes_vencidos": 0,
+            "clientes_expirando": 0,
+        }
 
-        # Calcula faturamento total (soma: quantidade × preço)
-        faturamento_total = sum(
-            distribuicao_planos.get(plano, 0) * preco
-            for plano, preco in PRECOS_PLANOS.items()
-        )
+    # Cálculos
+    distribuicao_planos = df_licencas[df_licencas["ativa"]]["plano_tipo"].value_counts()
 
-        metricas["faturamento_total"] = faturamento_total
-        metricas["distribuicao_planos"] = distribuicao_planos.to_dict()
-        metricas["clientes_ativos"] = int(df_licencas["ativa"].sum())
-        metricas["clientes_vencidos"] = len(
+    faturamento_total = sum(
+        distribuicao_planos.get(plano, 0) * preco
+        for plano, preco in PRECOS_PLANOS.items()
+    )
+
+    return {
+        "faturamento_total": faturamento_total,
+        "distribuicao_planos": distribuicao_planos.to_dict(),
+        "clientes_ativos": int(df_licencas["ativa"].sum()),
+        "clientes_vencidos": len(
             df_licencas[df_licencas["status_tempo"] == "🔴 Vencida"]
-        )
-        metricas["clientes_expirando"] = len(
+        ),
+        "clientes_expirando": len(
             df_licencas[df_licencas["status_tempo"] == "🟡 Expirando"]
-        )
-    else:
-        metricas["faturamento_total"] = 0
-        metricas["distribuicao_planos"] = {}
-        metricas["clientes_ativos"] = 0
-        metricas["clientes_vencidos"] = 0
-        metricas["clientes_expirando"] = 0
+        ),
+    }
 
-    # -------------------------------------------------------------------------
-    # 🤖 MÉTRICAS OPERACIONAIS (Performance dos Bots)
-    # -------------------------------------------------------------------------
 
-    if not df_logs.empty:
-        metricas["lucro_rede"] = df_logs["lucro"].sum()
-        metricas["total_apostas"] = len(df_logs[df_logs["tipo"] == "bet"])
-        metricas["total_erros"] = len(df_logs[df_logs["tipo"] == "error"])
-        metricas["total_operacoes"] = len(df_logs)
+def _calcular_metricas_operacionais(df_logs: pd.DataFrame) -> dict:
+    """Helper: Calcula apenas as métricas operacionais dos bots."""
+    if df_logs.empty:
+        return {
+            "lucro_rede": 0,
+            "total_apostas": 0,
+            "total_erros": 0,
+            "total_operacoes": 0,
+            "taxa_erro": 0,
+        }
 
-        # Taxa de erro (%)
-        if metricas["total_operacoes"] > 0:
-            metricas["taxa_erro"] = (
-                metricas["total_erros"] / metricas["total_operacoes"]
-            ) * 100
-        else:
-            metricas["taxa_erro"] = 0
-    else:
-        metricas["lucro_rede"] = 0
-        metricas["total_apostas"] = 0
-        metricas["total_erros"] = 0
-        metricas["total_operacoes"] = 0
-        metricas["taxa_erro"] = 0
+    total_operacoes = len(df_logs)
+    total_erros = len(df_logs[df_logs["tipo"] == "error"])
 
-    return metricas
+    taxa_erro = (total_erros / total_operacoes * 100) if total_operacoes > 0 else 0
+
+    return {
+        "lucro_rede": df_logs["lucro"].sum(),
+        "total_apostas": len(df_logs[df_logs["tipo"] == "bet"]),
+        "total_erros": total_erros,
+        "total_operacoes": total_operacoes,
+        "taxa_erro": taxa_erro,
+    }
+
+
+def calcular_metricas_macro(df_logs: pd.DataFrame, df_licencas: pd.DataFrame) -> dict:
+    """
+    ETAPA 2: Cálculos Financeiros e Operacionais Globais
+    (Agora refatorada para usar helpers, deixando o Sourcery feliz)
+    """
+    # Combina os dois dicionários em um só
+    metricas_fin = _calcular_metricas_financeiras(df_licencas)
+    metricas_ops = _calcular_metricas_operacionais(df_logs)
+
+    return {**metricas_fin, **metricas_ops}
 
 
 def renderizar_visao_macro(df_logs: pd.DataFrame, df_licencas: pd.DataFrame):
@@ -759,10 +749,180 @@ def renderizar_crm(df_licencas: pd.DataFrame):
 
 
 # =============================================================================
-# 🚀 APLICAÇÃO PRINCIPAL
+# 🛠️ ETAPA 5: ADMIN & AÇÕES - REFATORADO (CORREÇÃO SOURCERY)
 # =============================================================================
 
 
+def _renderizar_aba_gerar_licenca(engine):
+    """Sub-função: Gerencia o formulário de criação de licenças."""
+    st.caption("Use para criar cortesias ou vendas feitas fora do site.")
+
+    with st.form("form_licenca"):
+        col1, col2 = st.columns(2)
+
+        with col1:
+            nome = st.text_input("Nome do Cliente", placeholder="Ex: João Silva")
+            whatsapp = st.text_input("WhatsApp", placeholder="Ex: 11999999999")
+            plano = st.selectbox(
+                "Tipo de Plano", ["mensal", "semanal", "experimental", "anual"]
+            )
+
+        with col2:
+            email = st.text_input("Email (Opcional)", placeholder="joao@email.com")
+            telegram = st.text_input("Telegram (Opcional)")
+            dias = st.number_input("Dias de Validade", min_value=1, value=30, step=1)
+
+        if st.form_submit_button("🚀 Gerar Licença Agora", use_container_width=True):
+            if not nome:
+                st.error("O campo 'Nome' é obrigatório.")
+                return
+
+            # Lógica de Geração
+            chave = f"KEY-{str(uuid.uuid4()).upper()[:14]}"
+            payment_id_fake = f"MANUAL-{uuid.uuid4().hex[:8]}"
+            data_expiracao = datetime.now() + timedelta(days=dias)
+
+            sql_insert = text(
+                """
+                INSERT INTO licenca (
+                    chave, cliente_nome, email_cliente, whatsapp,
+                    telegram_chat_id, plano_tipo, payment_id,
+                    dias_validade, data_expiracao, ativa, created_at, hwid
+                ) VALUES (
+                    :chave, :nome, :email, :whatsapp,
+                    :telegram, :plano, :pid,
+                    :dias, :data_exp, :ativa, :created_at, :hwid
+                )
+            """
+            )
+
+            params = {
+                "chave": chave,
+                "nome": nome,
+                "email": email or "manual@sem_email.com",
+                "whatsapp": whatsapp or "Não informado",
+                "telegram": telegram or "Não informado",
+                "plano": plano,
+                "pid": payment_id_fake,
+                "dias": dias,
+                "data_exp": data_expiracao,
+                "ativa": True,
+                "created_at": datetime.now(),
+                "hwid": None,
+            }
+
+            try:
+                with engine.begin() as conn:
+                    conn.execute(sql_insert, params)
+                st.success("✅ Licença criada com sucesso!")
+                st.code(chave, language="text")
+            except Exception as e:
+                st.error(f"Erro ao gravar no banco: {e}")
+
+
+def _renderizar_aba_cancelar_licenca(engine):
+    """Sub-função: Gerencia a busca e cancelamento de licenças."""
+    st.warning(
+        "⚠️ Atenção: Ao cancelar uma licença, o bot do cliente parará de funcionar imediatamente."
+    )
+
+    termo_busca = st.text_input("🔍 Buscar Cliente (Nome, Email ou Chave):")
+
+    if not termo_busca:
+        return
+
+    sql_busca = text(
+        """
+        SELECT id, cliente_nome, email_cliente, chave, ativa, plano_tipo
+        FROM licenca
+        WHERE cliente_nome ILIKE :busca OR email_cliente ILIKE :busca OR chave ILIKE :busca
+        LIMIT 10
+    """
+    )
+
+    try:
+        with engine.connect() as conn:
+            resultados = pd.read_sql(
+                sql_busca, conn, params={"busca": f"%{termo_busca}%"}
+            )
+
+        if resultados.empty:
+            st.info("Nenhum cliente encontrado com esse termo.")
+            return
+
+        st.write("Resultados encontrados:")
+
+        opcoes = resultados.apply(
+            lambda x: f"[{'🟢 ATIVA' if x['ativa'] else '🔴 CANCELADA'}] {x['cliente_nome']} ({x['email_cliente']}) - {x['chave']}",
+            axis=1,
+        ).tolist()
+
+        selecionado_str = st.selectbox(
+            "Selecione a licença para alterar:", options=opcoes
+        )
+
+        index_sel = opcoes.index(selecionado_str)
+        licenca = resultados.iloc[index_sel]
+
+        col_btn1, col_btn2 = st.columns(2)
+
+        with col_btn1:
+            if licenca["ativa"]:
+                if st.button(
+                    f"🚫 BLOQUEAR {licenca['cliente_nome']}",
+                    type="primary",
+                    use_container_width=True,
+                ):
+                    with engine.begin() as conn:
+                        conn.execute(
+                            text("UPDATE licenca SET ativa = FALSE WHERE id = :id"),
+                            {"id": int(licenca["id"])},
+                        )
+                    st.rerun()
+            else:
+                st.info("Esta licença já está bloqueada.")
+
+        with col_btn2:
+            if not licenca["ativa"]:
+                if st.button(
+                    f"✅ REATIVAR {licenca['cliente_nome']}", use_container_width=True
+                ):
+                    with engine.begin() as conn:
+                        conn.execute(
+                            text("UPDATE licenca SET ativa = TRUE WHERE id = :id"),
+                            {"id": int(licenca["id"])},
+                        )
+                    st.rerun()
+            else:
+                st.info("Esta licença já está ativa.")
+
+    except Exception as e:
+        st.error(f"Erro na busca: {e}")
+
+
+def renderizar_acoes_admin(engine):
+    """
+    🎯 ETAPA 5: Painel Administrativo (Controlador Principal)
+    Agora atua apenas como um gerenciador de fluxo, delegando o trabalho pesado.
+    """
+    st.markdown("### 🛠️ Painel Administrativo")
+
+    acao = st.radio(
+        "O que deseja fazer?",
+        ["✨ Gerar Nova Licença", "🚫 Cancelar/Revogar Licença"],
+        horizontal=True,
+    )
+    st.divider()
+
+    if acao == "✨ Gerar Nova Licença":
+        _renderizar_aba_gerar_licenca(engine)
+    elif acao == "🚫 Cancelar/Revogar Licença":
+        _renderizar_aba_cancelar_licenca(engine)
+
+
+# =============================================================================
+# 🚀 APLICAÇÃO PRINCIPAL
+# =============================================================================
 def main():
     """Função principal que orquestra todo o dashboard."""
 
@@ -813,8 +973,13 @@ def main():
     # 📑 SISTEMA DE ABAS
     # -------------------------------------------------------------------------
 
-    tab1, tab2, tab3 = st.tabs(
-        ["🦅 Visão Macro (Dono)", "🕵️ Espionar Bot (Cliente)", "💼 CRM & Vendas"]
+    tab1, tab2, tab3, tab4 = st.tabs(
+        [
+            "🦅 Visão Macro (Dono)",
+            "🕵️ Espionar Bot (Cliente)",
+            "💼 CRM & Vendas",
+            "🛠️ Gerar Licença",
+        ]
     )
 
     # ETAPA 2: Visão Macro
@@ -828,6 +993,12 @@ def main():
     # ETAPA 4: CRM
     with tab3:
         renderizar_crm(df_licencas)
+
+    # ETAPA 5: Gerador Manual (NOVO)
+    with tab4:
+        # Precisamos passar o engine para gravar no banco
+        engine = get_connection()
+        renderizar_acoes_admin(engine)
 
     # -------------------------------------------------------------------------
     # 📍 RODAPÉ
