@@ -1,0 +1,23 @@
+# --- Python ---
+__pycache__/
+*.pyc
+
+# --- Ambiente Virtual (CRUCIAL: Não enviar isso) ---
+.venv/
+venv/
+env/
+
+# --- Banco de Dados Local ---
+# Não queremos enviar o banco de dados local para a nuvem
+*.db
+*.sqlite3
+server.db
+
+# --- Arquivos de Log ---
+*.log
+
+# --- Variáveis de Ambiente (Segurança) ---
+.env
+
+# --- Configurações do VSCode (Opcional) ---
+.vscode/

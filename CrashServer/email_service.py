@@ -1,3 +1,4 @@
+import os
 import smtplib
 import ssl
 from email.mime.multipart import MIMEMultipart
@@ -8,7 +9,7 @@ SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
 EMAIL_REMETENTE = "contato.tucunare.bot@gmail.com"
 # COLE SUA SENHA DE 16 LETRAS AQUI (Mantenha as aspas)
-SENHA_APP = "ucgz cewf sspu jpwn"
+SENHA_APP = os.environ.get("EMAIL_SENHA_APP", "ucgz cewf sspu jpwn")
 
 
 def _enviar_smtp_gmail(destinatario, assunto, corpo_html):
