@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-"""STRATEGY ENGINE - Motor de estratégias Implementa ML"""
+"""STRATEGY ENGINE - Motor de estratégias com Modos de Risco Comerciais"""
 
 import logging
+import random
 import time
 from abc import ABC, abstractmethod
 from collections import deque
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
@@ -16,7 +18,7 @@ import numpy as np
 import notification_manager
 from learning_engine import REQUIRED_HISTORY_FOR_PREDICTION, LearningEngine
 
-# --- CONFIGURAÇÃO DO LOGGER (RESTAURAR ESTE BLOCO) ---
+# --- CONFIGURAÇÃO DO LOGGER ---
 project_root = Path(__file__).parent.parent
 log_path = project_root / "logs" / "strategy_engine.log"
 
@@ -25,29 +27,58 @@ log_path.parent.mkdir(parents=True, exist_ok=True)
 
 # Define o logger
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)  # Nível mais baixo para capturar tudo
+logger.setLevel(logging.DEBUG)
 
 # Evita duplicidade de handlers se o módulo for recarregado
 if not logger.handlers:
-    # Handler para o arquivo (com encoding para R$)
     file_handler = logging.FileHandler(log_path, encoding="utf-8")
-    file_handler.setLevel(logging.DEBUG)  # Salva tudo (DEBUG) no arquivo
+    file_handler.setLevel(logging.DEBUG)
 
-    # Handler para o console
     console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.INFO)  # Mostra apenas INFO no console
+    console_handler.setLevel(logging.INFO)
 
-    # Formatação
     formatter = logging.Formatter(
         "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
     file_handler.setFormatter(formatter)
     console_handler.setFormatter(formatter)
 
-    # Adiciona os handlers ao logger
     logger.addHandler(file_handler)
     logger.addHandler(console_handler)
 # --- FIM DO BLOCO DO LOGGER ---
+
+
+class RiskMode(Enum):
+    """Enum para os modos de risco comerciais."""
+    CONSERVADOR = 1
+    MODERADO = 2
+    AGRESSIVO = 3
+
+
+# Configurações de cada modo de risco
+RISK_MODE_CONFIG = {
+    RiskMode.CONSERVADOR: {
+        "banca_percent": 0.33,       # Usa 33% da banca real
+        "gatilho_opcoes": [8],       # Sempre 8 velas
+        "meta_min": 0.25,            # Meta entre 25% e 40%
+        "meta_max": 0.40,
+    },
+    RiskMode.MODERADO: {
+        "banca_percent": 0.50,       # Usa 50% da banca real
+        "gatilho_opcoes": [7, 8],    # Sorteia entre 7 ou 8
+        "meta_min": 0.30,            # Meta entre 30% e 45%
+        "meta_max": 0.45,
+    },
+    RiskMode.AGRESSIVO: {
+        "banca_percent": 1.00,       # Usa 100% da banca real
+        "gatilho_opcoes": [6, 7],    # Sorteia entre 6 ou 7
+        "meta_min": 0.35,            # Meta entre 35% e 55%
+        "meta_max": 0.55,
+    },
+}
+
+# Tempo de suspensão fixo (4 horas em segundos)
+TEMPO_SUSPENSAO_FIXO = 4 * 3600
 
 
 @dataclass
@@ -75,7 +106,7 @@ class StrategyPolicy(ABC):
     ):
         self.banca_inicial = banca_inicial
         self.le = learning_engine
-        self.is_active = False  # Cada estratégia controla se está ativa!
+        self.is_active = False
 
     @abstractmethod
     def check_trigger(self, history: deque) -> bool:
@@ -95,30 +126,61 @@ class StrategyPolicy(ABC):
         pass
 
 
-class Martingale8LowPolicy(StrategyPolicy):
+class CommercialMartingalePolicy(StrategyPolicy):
     """
-    Estratégia 'Martingale 8 Baixos' completa.
-    Esta classe agora detém seu próprio estado.
+    Estratégia Martingale Comercial com 3 Modos de Risco.
+    Substitui a antiga Martingale8LowPolicy.
     """
 
     def __init__(
-        self, banca_inicial: float, learning_engine: Optional[LearningEngine] = None
+        self,
+        banca_inicial: float,
+        risk_mode: RiskMode,
+        learning_engine: Optional[LearningEngine] = None,
     ):
         super().__init__(banca_inicial, learning_engine)
 
-        # O ESTADO FOI MOVIDO PARA CÁ
+        # Configuração do modo de risco
+        self.risk_mode = risk_mode
+        self.config = RISK_MODE_CONFIG[risk_mode]
+
+        # Calcula a banca operacional baseada no modo
+        self.banca_operacional = banca_inicial * self.config["banca_percent"]
+
+        # Estado do Martingale
         self.dobra_atual = 1
         self.perdas_consecutivas = 0
         self.modo_continuo = False
-        self.target_ativo = 1.84  # Definido aqui
+        self.target_ativo = 0.0
 
-        # Lógica do Trigger (8 baixos)
-        self.lows_needed = 8
+        # Gatilho - sorteia no início do ciclo
+        self.lows_needed = self._sortear_gatilho()
         self.threshold = 2.0
 
-        # Lógica de Sizing (1/15)
-        self.sizing_policy = Martingale15(banca_inicial)
+        # Política de sizing baseada na banca operacional
+        self.sizing_policy = CommercialMartingale15(self.banca_operacional)
+
+        # Alerta de 6 lows
         self.alerta_6_lows_enviado = False
+
+        logger.info(
+            f"CommercialMartingalePolicy iniciada - Modo: {risk_mode.name}, "
+            f"Banca Op.: R${self.banca_operacional:.2f}, "
+            f"Gatilho: {self.lows_needed} velas"
+        )
+
+    def _sortear_gatilho(self) -> int:
+        """Sorteia o número de velas baixas necessárias baseado no modo."""
+        opcoes = self.config["gatilho_opcoes"]
+        gatilho = random.choice(opcoes)
+        logger.debug(f"Gatilho sorteado: {gatilho} velas (opções: {opcoes})")
+        return gatilho
+
+    def _sortear_target(self) -> float:
+        """Sorteia o target de saída entre 1.81x e 1.95x."""
+        target = round(random.uniform(1.81, 1.95), 2)
+        logger.debug(f"Target sorteado: {target}x")
+        return target
 
     def _count_consecutive_lows(self, history: deque) -> int:
         """Conta os valores baixos consecutivos no final do histórico."""
@@ -136,53 +198,45 @@ class Martingale8LowPolicy(StrategyPolicy):
         self.dobra_atual = 1
         self.perdas_consecutivas = 0
         self.modo_continuo = False
-        logger.info("ATIVANDO Martingale8LowPolicy")
+        logger.info(
+            f"ATIVANDO CommercialMartingalePolicy - Modo {self.risk_mode.name}"
+        )
 
     def check_trigger(self, history: deque) -> bool:
-        """
-        Verifica o gatilho de 8 baixos (Orquestrador).
-        """
+        """Verifica o gatilho de velas baixas."""
         if self.is_active:
             return False
 
         lows_count = self._count_consecutive_lows(history)
 
-        # Logs de status
-        logger.debug("--- [MARTINGALE] Verificando Gatilho ---")
+        logger.debug("--- [MARTINGALE COMERCIAL] Verificando Gatilho ---")
         logger.debug(f"Histórico recente (últimos 10): {list(history)[-10:]}")
         logger.debug(
             f"Contagem de 'lows' consecutivos: {lows_count}/{self.lows_needed}"
         )
 
-        # (Este bloco usa o 'notification_manager' e corrige o F401)
+        # Alerta de 6 lows via Telegram
         try:
             if lows_count == 6 and not self.alerta_6_lows_enviado:
                 msg = (
-                    f"⚠️ ALERTA: 6 'lows' (< {self.threshold}x) consecutivos detectados."
+                    f"⚠️ ALERTA: 6 'lows' (< {self.threshold}x) consecutivos. "
+                    f"Modo: {self.risk_mode.name}"
                 )
                 notification_manager.send_telegram_alert(msg)
                 self.alerta_6_lows_enviado = True
             elif lows_count < 6 and self.alerta_6_lows_enviado:
-                # Reseta a flag se a sequência quebrar
                 self.alerta_6_lows_enviado = False
         except Exception as e:
             logger.error(f"Falha ao enviar alerta de 6 lows: {e}")
 
-        # Delega toda a lógica de decisão para a nova função
         return self._handle_trigger_condition(lows_count, history)
 
     def _handle_trigger_condition(self, lows_count: int, history: deque) -> bool:
-        """
-        Processa a lógica de decisão após a contagem de 'lows'.
-        Esta função é chamada por check_trigger.
-        Retorna True se a estratégia for ativada, False caso contrário.
-        """
-        # --- 1. CONDIÇÃO DE GATILHO ---
-        if lows_count >= self.lows_needed:  # self.lows_needed é 8
-
-            # --- 2. VERIFICAÇÃO DE SEGURANÇA ---
+        """Processa a lógica de decisão após a contagem de 'lows'."""
+        if lows_count >= self.lows_needed:
             logger.debug(
-                "Gatilho (8 lows) ATINGIDO. Verificando condições de segurança..."
+                f"Gatilho ({self.lows_needed} lows) ATINGIDO. "
+                "Verificando condições de segurança..."
             )
 
             resultado_seguranca = self._check_safety_conditions(history)
@@ -191,21 +245,22 @@ class Martingale8LowPolicy(StrategyPolicy):
             )
 
             if not resultado_seguranca:
-                # O próprio método _check_safety_conditions já logou o aviso
                 logger.warning(
-                    "[MARTINGALE] DECISÃO: Veto de segurança INTERNO. Não apostar."
+                    "[MARTINGALE COMERCIAL] DECISÃO: Veto de segurança. Não apostar."
                 )
-                return False  # Aborta a ativação devido ao risco
+                return False
 
-            # --- 3. ATIVAÇÃO (Seguro para prosseguir) ---
-            logger.info("Gatilho de 8 baixos validado. Stats de segurança OK.")
-            logger.debug("[MARTINGALE] DECISÃO: Seguro para APOSTAR.")
+            logger.info(
+                f"Gatilho de {self.lows_needed} baixos validado. "
+                "Stats de segurança OK."
+            )
+            logger.debug("[MARTINGALE COMERCIAL] DECISÃO: Seguro para APOSTAR.")
             self._activate_strategy()
             return True
 
-        # --- Gatilho Não Atingido ---
         logger.debug(
-            "[MARTINGALE] DECISÃO: Gatilho (8 lows) NÃO ATINGIDO. Não apostar."
+            f"[MARTINGALE COMERCIAL] DECISÃO: Gatilho ({self.lows_needed} lows) "
+            "NÃO ATINGIDO. Não apostar."
         )
         return False
 
@@ -213,45 +268,35 @@ class Martingale8LowPolicy(StrategyPolicy):
         """
         Verifica se as condições atuais do jogo são seguras para ativar,
         evitando a "Fase Arrecadatória".
-        Retorna True se for seguro, False se for perigoso.
         """
-        # --- VERIFICAÇÃO DE SEGURANÇA ---
-        # Usamos as features que o Jupyter provou serem importantes.
-
-        # Precisamos de pelo menos 20 de histórico (para rolling_std_20)
         if len(history) < 20:
             logger.warning(
-                "Gatilho de 8 baixos detectado, mas histórico < 20. Abortando por segurança."
+                f"Gatilho de {self.lows_needed} baixos detectado, "
+                "mas histórico < 20. Abortando por segurança."
             )
-            return False  # Não é seguro
+            return False
 
-        # Pega os últimos 20 multiplicadores
         recent_history = list(history)[-20:]
-
-        # Calcula as features de perigo que descobrimos
         current_std_20 = np.std(recent_history)
         current_mean_20 = np.mean(recent_history)
 
-        # --- Definição dos Limiares de Perigo ---
-        # (Baseado na Célula 3: Super-Streak teve std=1.31, mean=1.93)
-        # Vamos ser conservadores:
-        DANGER_STD_THRESHOLD = 2.3  # Se a volatilidade for QUASE NENHUMA
-        DANGER_MEAN_THRESHOLD = 2.5  # Se a média estiver MUITO BAIXA
+        DANGER_STD_THRESHOLD = 2.3
+        DANGER_MEAN_THRESHOLD = 2.5
 
         if (current_std_20 < DANGER_STD_THRESHOLD) or (
             current_mean_20 < DANGER_MEAN_THRESHOLD
         ):
             logger.warning(
-                "[SEGURANÇA] Gatilho de 8 baixos IGNORADO. "
+                "[SEGURANÇA] Gatilho IGNORADO. "
                 "Risco de 'Fase Arrecadatória' detectado!"
             )
             logger.warning(
-                f"[SEGURANÇA] Stats: Média(20)={current_mean_20:.2f} (Limite: {DANGER_MEAN_THRESHOLD:.2f}), "
+                f"[SEGURANÇA] Stats: Média(20)={current_mean_20:.2f} "
+                f"(Limite: {DANGER_MEAN_THRESHOLD:.2f}), "
                 f"Std(20)={current_std_20:.2f} (Limite: {DANGER_STD_THRESHOLD:.2f})"
             )
-            return False  # Perigoso! Não ative.
+            return False
 
-        # Se passou por todas as verificações, é seguro
         return True
 
     def get_bet_recommendation(
@@ -261,16 +306,17 @@ class Martingale8LowPolicy(StrategyPolicy):
             return None
 
         bet_1 = self.sizing_policy.get_bet(self.dobra_atual, current_balance)
-        target_1 = self.sizing_policy.get_target(self.dobra_atual)
-        self.target_ativo = target_1  # Salva o target para o process_result
+        # Target randomizado a cada aposta (anti-detecção)
+        target_1 = self._sortear_target()
+        self.target_ativo = target_1
 
         return BetRecommendation(
-            strategy_name=f"Martingale 8 Baixos - Dobra {self.dobra_atual}",
+            strategy_name=f"Martingale {self.risk_mode.name} - Dobra {self.dobra_atual}",
             bet_1=bet_1,
             target_1=target_1,
             bet_2=0,
             target_2=0,
-            justification=f"Dobra {self.dobra_atual}-{self.lows_needed} >2.0x",
+            justification=f"Dobra {self.dobra_atual}/{self.lows_needed} - Target {target_1}x",
             confidence=1.0,
             ready=True,
         )
@@ -279,91 +325,214 @@ class Martingale8LowPolicy(StrategyPolicy):
         if not self.is_active:
             return
 
-        # A LÓGICA DE '_process_martingale_result_automatic' VEM PARA CÁ
         target = self.target_ativo
 
         if explosion_value < target:
-            logger.warning(f"Martingale8LowPolicy: PERDEU (< {target:.2f}x)")
+            logger.warning(
+                f"CommercialMartingalePolicy: PERDEU (< {target:.2f}x)"
+            )
             self.perdas_consecutivas += 1
             if self.dobra_atual >= 4:
-                self._reset_cycle()  # Atingiu 4 dobras
+                self._reset_cycle()
             else:
                 self.dobra_atual += 1
 
         elif target <= explosion_value <= 1.99:
-            logger.info("Martingale8LowPolicy: GANHO (volta para dobra 2)")
+            logger.info(
+                "CommercialMartingalePolicy: GANHO (volta para dobra 2)"
+            )
             self.dobra_atual = 2
             self.perdas_consecutivas = 0
             self.modo_continuo = True
 
         else:  # Ganho >= 2.00
-            logger.info("Martingale8LowPolicy: GANHO TOTAL (Ciclo concluído)")
+            logger.info(
+                "CommercialMartingalePolicy: GANHO TOTAL (Ciclo concluído)"
+            )
             self._reset_cycle()
 
     def _reset_cycle(self):
-        """Função helper interna para resetar."""
+        """Reseta o ciclo e sorteia novo gatilho para o próximo ciclo."""
         self.is_active = False
         self.dobra_atual = 1
         self.perdas_consecutivas = 0
         self.modo_continuo = False
         self.target_ativo = 0.0
+        # Sorteia novo gatilho para o próximo ciclo
+        self.lows_needed = self._sortear_gatilho()
+
+
+class CommercialMartingale15(ABC):
+    """Política de sizing para o Martingale Comercial (banca/15)."""
+
+    def __init__(self, banca_operacional: float):
+        self.valores_fixos = self._definir_valores(banca_operacional)
+
+    def _definir_valores(self, banca_operacional: float):
+        multipliers = {1: 1, 2: 2, 3: 4, 4: 8}
+        return {
+            dobra: max(1.0, round((banca_operacional / 15) * mult, 2))
+            for dobra, mult in multipliers.items()
+        }
+
+    def get_bet(self, dobra_atual: int, banca_atual: float) -> float:
+        return self.valores_fixos.get(dobra_atual, self.valores_fixos[1])
+
+    def get_target(self, dobra_atual: int) -> float:
+        # Este método não é mais usado (target é randomizado)
+        return 1.84
+
+
+class MLHighConfidencePolicy(StrategyPolicy):
+    """
+    Uma estratégia que faz uma APOSTA ÚNICA quando o ML está
+    com alta confiança. (Sniper - Roda em paralelo)
+    """
+
+    def __init__(
+        self, banca_inicial: float, learning_engine: Optional[LearningEngine] = None
+    ):
+        super().__init__(banca_inicial, learning_engine)
+        self.confidence_threshold = 0.80
+        self.bet_size_percent = 0.01
+        self.last_calculated_prob: float = 0.0
+
+    def check_trigger(self, history: deque) -> bool:
+        if self.is_active or not self.le:
+            return False
+
+        recent_history = list(history)[-REQUIRED_HISTORY_FOR_PREDICTION:]
+        if len(recent_history) < REQUIRED_HISTORY_FOR_PREDICTION:
+            self.last_calculated_prob = 0.0
+            return False
+
+        probability = self.le.predict(recent_history)
+
+        if probability is None:
+            self.last_calculated_prob = 0.0
+            return False
+
+        self.last_calculated_prob = probability
+
+        if probability >= self.confidence_threshold:
+            logger.info(
+                f"ATIVANDO MLHighConfidencePolicy (Confiança: {probability:.2%})"
+            )
+            self.is_active = True
+            return True
+
+        return False
+
+    def get_bet_recommendation(
+        self, current_balance: float
+    ) -> Optional[BetRecommendation]:
+        if not self.is_active:
+            return None
+
+        bet_1 = max(1.0, current_balance * self.bet_size_percent)
+
+        return BetRecommendation(
+            strategy_name="ML High Confidence (Sniper)",
+            bet_1=bet_1,
+            target_1=2.0,
+            bet_2=0,
+            target_2=0,
+            justification=f"Confiança do modelo > {self.confidence_threshold:.0%}",
+            confidence=self.confidence_threshold,
+            ready=True,
+        )
+
+    def process_result(self, explosion_value: float):
+        if self.is_active:
+            if explosion_value >= 2.0:
+                logger.info("MLHighConfidencePolicy: HIT")
+            else:
+                logger.warning("MLHighConfidencePolicy: MISS")
+            self.is_active = False
+
+    def evaluate_executed_bet(self, explosion_value: float, executed_bet: Dict) -> Dict:
+        """Avalia resultado de aposta executada."""
+        target_1 = executed_bet.get("target_1", 0)
+        hit_1 = explosion_value >= target_1 if target_1 > 0 else False
+
+        return {
+            "explosion_value": explosion_value,
+            "recommendation_hit": hit_1,
+            "target_1": target_1,
+            "bet_1": executed_bet.get("bet_1", 0),
+            "strategy": executed_bet.get("strategy", ""),
+            "phase": "N/A",
+        }
 
 
 class StrategyEngine:
+    """Motor de estratégias com suporte a Modos de Risco Comerciais."""
+
     def __init__(self, learning_engine: LearningEngine):
         self.explosion_history = deque(maxlen=260)
         self.learning_engine = learning_engine
         self.policies: Sequence[StrategyPolicy] = []
 
-        # Estado do Motor.
+        # Estado do Motor
         self.banca_inicial: Optional[float] = None
+        self.banca_real: Optional[float] = None
         self.suspenso_ate: Optional[float] = None
-        self.meta_lucro_percentual = 1.4
-        self.tempo_suspensao_horas = 4
+        self.meta_lucro_percentual: Optional[float] = None
+        self.tempo_suspensao_horas = 4  # Fixo em 4 horas
 
-        # Aposta preparada (agora é um atributo global do motor)
+        # Modo de risco atual
+        self.risk_mode: Optional[RiskMode] = None
+
+        # Aposta preparada
         self.aposta_preparada: Optional[BetRecommendation] = None
 
         # Estatísticas
         self.strategy_stats: Dict[str, Dict] = {}
 
-        self.modo_ciclo: str = "reinvestir"
-        self.banca_original_sessao: Optional[float] = None
-
-    def iniciar_sessao(
-        self,
-        banca_inicial: float,
-        meta_pct: float,
-        tempo_suspensao: int,
-        modo_ciclo: str,
-    ):
+    def iniciar_sessao(self, banca_inicial: float, risk_mode: RiskMode):
         """
-        Inicia a sessão com as configurações recebidas do bot_controller.
+        Inicia a sessão com o modo de risco escolhido.
+        Calcula automaticamente a meta baseada no modo.
         """
+        self.banca_real = banca_inicial
+        self.risk_mode = risk_mode
 
-        # 1. Define os valores recebidos
+        # Pega a configuração do modo
+        config = RISK_MODE_CONFIG[risk_mode]
+
+        # Calcula a banca operacional
+        self.banca_operacional = banca_inicial * config["banca_percent"]
+        
         self.banca_inicial = banca_inicial
-        self.banca_original_sessao = banca_inicial
-        self.meta_lucro_percentual = 1.0 if meta_pct == 100.0 else (meta_pct / 100.0)
-        self.tempo_suspensao_horas = tempo_suspensao
-        self.modo_ciclo = modo_ciclo
 
-        # 2. Loga as configurações
-        meta_valor_abs = self.banca_inicial * (1 + self.meta_lucro_percentual)
-        logger.info(f"Sessão iniciada com banca: R$ {self.banca_inicial:.2f}")
-        logger.info(
-            f"Meta de lucro definida: {meta_pct:.0f}% (Atingir R$ {meta_valor_abs:.2f})"
+        # Sorteia a meta de lucro dentro do range do modo
+        self.meta_lucro_percentual = random.uniform(
+            config["meta_min"], config["meta_max"]
         )
-        logger.info(f"Suspensão após meta: {self.tempo_suspensao_horas} horas")
-        logger.info(f"Modo de Ciclo definido: {self.modo_ciclo}")
 
-        # 3. Inicia as políticas
+        # Loga as configurações
+        meta_valor_abs = self.banca_inicial * (1 + self.meta_lucro_percentual)
+        logger.info(f"=== SESSÃO INICIADA - MODO {risk_mode.name} ===")
+        logger.info(f"Banca Real: R$ {banca_inicial:.2f}")
+        logger.info(
+            f"Banca Operacional ({config['banca_percent']:.0%}): "
+            f"R$ {self.banca_operacional:.2f}"
+        )
+        logger.info(
+            f"Meta de Lucro Sorteada: {self.meta_lucro_percentual:.1%} "
+            f"(Atingir R$ {meta_valor_abs:.2f})"
+        )
+        logger.info(f"Suspensão após meta: {self.tempo_suspensao_horas} horas (fixo)")
+
+        # Inicia as políticas
         self.policies = [
-            Martingale8LowPolicy(self.banca_inicial, self.learning_engine),
-            MLHighConfidencePolicy(self.banca_inicial, self.learning_engine),
+            CommercialMartingalePolicy(
+                banca_inicial, risk_mode, self.learning_engine
+            ),
+            MLHighConfidencePolicy(banca_inicial, self.learning_engine),
         ]
 
-        # 4. Prepara o dict de estatísticas
+        # Prepara o dict de estatísticas
         for policy in self.policies:
             policy_name = policy.__class__.__name__
             if policy_name not in self.strategy_stats:
@@ -378,82 +547,66 @@ class StrategyEngine:
 
     def _reiniciar_ciclo_pos_meta(self, saldo_atual: float):
         """
-        Reinicia a 'banca_inicial' com base no modo selecionado,
-        para que o bot possa calcular uma nova meta e voltar a operar.
+        Reinicia o ciclo após a suspensão terminar.
+        Sempre usa o saldo atual como nova banca (modo reinvestir).
         """
+        if self.risk_mode is None:
+            logger.error("Risk mode não definido. Não é possível reiniciar.")
+            return
 
-        if self.modo_ciclo == "reinvestir":
-            self.banca_inicial = saldo_atual
-            logger.info(
-                f"MODO REINVESTIR: Próximo ciclo iniciado com nova banca de R$ {saldo_atual:.2f}"
-            )
-        else:
-            # Modo "preservar"
-            self.banca_inicial = self.banca_original_sessao
-            logger.info(
-                f"MODO PRESERVAR: Próximo ciclo iniciado com banca original de R$ {self.banca_original_sessao:.2f}"
-            )
+        config = RISK_MODE_CONFIG[self.risk_mode]
 
-        # Garantimos que, mesmo se self.banca_inicial for None (o que não
-        # deve acontecer aqui), não passaremos 'None' para as políticas.
-        if self.banca_inicial is None:
-            logger.error(
-                "Falha na definição da banca_inicial no reinício do ciclo. Usando 0.0 como fallback."
-            )
-            banca_para_politica = 0.0
-        else:
-            banca_para_politica = self.banca_inicial
-        # --- FIM DA CORREÇÃO ---
+        self.banca_real = saldo_atual
+        self.banca_inicial = saldo_atual * config["banca_percent"]
 
-        # CRÍTICO: Recria as políticas com a nova banca_inicial
-        # (Agora usando a variável 'banca_para_politica' verificada)
+        # Sorteia nova meta
+        self.meta_lucro_percentual = random.uniform(
+            config["meta_min"], config["meta_max"]
+        )
+
+        logger.info(
+            f"CICLO REINICIADO - Modo {self.risk_mode.name} | "
+            f"Nova Banca Op.: R$ {self.banca_inicial:.2f} | "
+            f"Nova Meta: {self.meta_lucro_percentual:.1%}"
+        )
+
+        # Recria as políticas com a nova banca
         self.policies = [
-            Martingale8LowPolicy(banca_para_politica, self.learning_engine),
-            MLHighConfidencePolicy(banca_para_politica, self.learning_engine),
+            CommercialMartingalePolicy(
+                saldo_atual, self.risk_mode, self.learning_engine
+            ),
+            MLHighConfidencePolicy(saldo_atual, self.learning_engine),
         ]
-        logger.info("Políticas de estratégia foram reiniciadas com a nova banca.")
 
     def add_explosion_value(
         self, value: float
     ) -> Tuple[bool, Optional[BetRecommendation], Optional[str]]:
-        """
-        Método 'coração' refatorado.
-        (SIMPLIFICADO: Sem o Veto TCS de volatilidade)
-        """
+        """Método principal que processa cada explosão."""
         self.explosion_history.append(value)
         veto_message: Optional[str] = None
 
-        # 1. Processar resultados das estratégias que JÁ ESTAVAM ativas
+        # 1. Processar resultados das estratégias ativas
         for policy in self.policies:
             if policy.is_active:
                 policy.process_result(value)
 
-        # 2. Verificar gatilhos de estratégias INATIVAS
+        # 2. Verificar gatilhos de estratégias inativas
         strategy_activated = False
         if not self.esta_suspenso():
-
             for policy in self.policies:
                 if not policy.is_active:
-
-                    # Chama o check_trigger (código original)
-                    # A Martingale8LowPolicy agora é checada toda vez.
                     triggered = policy.check_trigger(self.explosion_history)
 
                     if triggered:
                         strategy_activated = True
 
-                    # --- LÓGICA DE MENSAGEM SIMPLIFICADA ---
                     elif isinstance(policy, MLHighConfidencePolicy):
                         prob = policy.last_calculated_prob
                         thresh = policy.confidence_threshold
 
-                        # --- REMOVIDO: if tcs_veto_active: ... ---
-
                         if 0 < prob < thresh:
-                            # Veto normal do ML (não precisamos mais dizer "Vol Segura")
                             veto_message = f"ML Veto: {prob:.1%} < {thresh:.0%}"
                         elif not strategy_activated:
-                            # Nenhuma condição
                             veto_message = "Aguardando gatilhos..."
 
         return strategy_activated, None, veto_message
@@ -461,95 +614,94 @@ class StrategyEngine:
     def prepare_bets_for_balance(
         self, current_balance: float
     ) -> Optional[BetRecommendation]:
-
-        # Pergunta a TODAS as políticas por uma aposta
+        """Prepara apostas para o saldo atual."""
         for policy in self.policies:
             if policy.is_active:
-                # Retorna a recomendação da PRIMEIRA política ativa
                 if recommendation := policy.get_bet_recommendation(current_balance):
                     self.aposta_preparada = recommendation
-                    # Atualiza estatísticas (simples)
                     if stats := self.strategy_stats.get(policy.__class__.__name__):
                         stats["total_recommendations"] += 1
-
                     return recommendation
 
-        # Nenhuma política ativa quis apostar
         self.reset_prepared_bets()
         return None
 
     def check_suspension_ended(self, saldo_atual: float) -> bool:
-        """
-        Verifica se a suspensão terminou AGORA.
-        Se sim, reinicia o ciclo com a nova banca antes de retornar.
-        """
+        """Verifica se a suspensão terminou."""
         if self.suspenso_ate is None:
-            return False  # Não estava suspenso
+            return False
 
         if time.time() >= self.suspenso_ate:
-            self.suspenso_ate = None  # Reseta a suspensão
-
-            # --- ADIÇÃO CRÍTICA ---
-            # Chama o reset ANTES de liberar o bot para operar
+            self.suspenso_ate = None
             self._reiniciar_ciclo_pos_meta(saldo_atual)
-            # --- FIM DA ADIÇÃO ---
-
             logger.info("Período de suspensão encerrado. Operações retomadas!")
-            return True  # Retorna TRUE para o controller enviar o alerta
+            return True
 
-        return False  # Ainda está suspenso
+        return False
 
     def esta_suspenso(self) -> bool:
-        """Verifica se está no período de suspensão"""
-        return False if self.suspenso_ate is None else (time.time() < self.suspenso_ate)
+        """Verifica se está no período de suspensão."""
+        if self.suspenso_ate is None:
+            return False
+        return time.time() < self.suspenso_ate
+
+    def get_tempo_restante_suspensao(self) -> int:
+        """Retorna o tempo restante de suspensão em segundos."""
+        if self.suspenso_ate is None:
+            return 0
+        restante = self.suspenso_ate - time.time()
+        return max(0, int(restante))
 
     def checar_meta_lucro(self, saldo_atual: float) -> bool:
-        """Verifica se atingiu meta de lucro e suspende operações"""
+        """Verifica se atingiu meta de lucro e suspende operações."""
         if not self.banca_inicial or saldo_atual is None:
+            return False
+
+        if self.meta_lucro_percentual is None:
             return False
 
         meta = self.banca_inicial * (1 + self.meta_lucro_percentual)
         if saldo_atual >= meta:
             if not self.esta_suspenso():
-                self.suspenso_ate = time.time() + self.tempo_suspensao_horas * 3600
-                logger.info(f"META - Horas Suspensão: {self.tempo_suspensao_horas}.")
+                self.suspenso_ate = time.time() + TEMPO_SUSPENSAO_FIXO
+                logger.info(
+                    f"META ATINGIDA! Suspensão de {self.tempo_suspensao_horas} horas."
+                )
             return True
         return False
 
     def reset_prepared_bets(self):
-        """Reseta a aposta preparada no estado"""
+        """Reseta a aposta preparada."""
         self.aposta_preparada = None
 
     def get_prepared_bets(self) -> Optional[BetRecommendation]:
-        """Retorna apostas preparadas do estado"""
+        """Retorna apostas preparadas."""
         return self.aposta_preparada
 
     def get_current_analysis(self) -> Dict:
-        """Retorna análise atual do estado (para a UI)"""
+        """Retorna análise atual do estado (para a UI)."""
         prepared = self.aposta_preparada is not None
 
-        # Tenta obter o status da política Martingale
+        # Tenta obter o status da política Martingale Comercial
         martingale_policy = next(
-            (p for p in self.policies if isinstance(p, Martingale8LowPolicy)), None
+            (p for p in self.policies if isinstance(p, CommercialMartingalePolicy)),
+            None,
         )
 
-        # --- MUDANÇA: Definir valores padrão primeiro ---
         martingale_active = False
         dobra_atual = 1
         status_msg = "Aguardando gatilhos"
-        baixos_consecutivos_str = "0/8"  # Texto padrão
-        # --- FIM DA MUDANÇA ---
+        baixos_consecutivos_str = "0/8"
 
         if martingale_policy:
             if martingale_policy.is_active:
-                # --- MUDANÇA: Atualiza os valores se estiver ativo ---
-                status_msg = f"Martingale Ativo (Dobra {martingale_policy.dobra_atual})"
+                status_msg = (
+                    f"Martingale Ativo (Dobra {martingale_policy.dobra_atual})"
+                )
                 martingale_active = True
                 dobra_atual = martingale_policy.dobra_atual
 
-            # --- MUDANÇA: Calcula os baixos consecutivos (mesmo inativo) ---
             try:
-                # Chama o método que conta os baixos
                 current_lows = martingale_policy._count_consecutive_lows(
                     self.explosion_history
                 )
@@ -558,43 +710,39 @@ class StrategyEngine:
                 )
             except Exception:
                 baixos_consecutivos_str = "Erro/8"
-            # --- FIM DA MUDANÇA ---
 
-        # --- MUDANÇA: Lógica para calcular a confiança do ML ---
-        ml_confidence = 0.0  # Padrão é 0%
+        # Confiança do ML
+        ml_confidence = 0.0
         try:
-            # Verifica se o LE existe e se o histórico é suficiente (250)
             if (
                 self.learning_engine
                 and len(self.explosion_history) >= REQUIRED_HISTORY_FOR_PREDICTION
             ):
                 recent_history = list(self.explosion_history)
-                # Pede a previsão ao cérebro do ML
                 probability = self.learning_engine.predict(recent_history)
                 if probability is not None:
                     ml_confidence = probability
         except Exception as e:
             logger.error(f"Erro ao calcular confiança do ML: {e}")
-            ml_confidence = -1.0  # -1.0 indicará um erro na UI
-        # --- FIM DA MUDANÇA ---
+            ml_confidence = -1.0
 
         return {
             "history_size": len(self.explosion_history),
             "prepared_bets_ready": prepared,
             "status": status_msg,
-            # --- MUDANÇA: Adiciona os novos dados para a UI ---
             "martingale_active": martingale_active,
             "dobra_atual": dobra_atual,
             "ml_confidence": ml_confidence,
             "baixos_consecutivos": baixos_consecutivos_str,
-            # --- FIM DA MUDANÇA ---
+            "risk_mode": self.risk_mode.name if self.risk_mode else "N/A",
+            "suspenso": self.esta_suspenso(),
+            "tempo_restante_suspensao": self.get_tempo_restante_suspensao(),
         }
 
     def get_strategies_stats(self) -> List[Dict]:
-        """Retorna estatísticas das estratégias"""
+        """Retorna estatísticas das estratégias."""
         stats_list = []
         for strategy_name, data in self.strategy_stats.items():
-            # Cálculo do Hit Rate
             if data["total_recommendations"] > 0:
                 data["hit_rate"] = (
                     data["total_hits"] / data["total_recommendations"]
@@ -612,24 +760,29 @@ class StrategyEngine:
             )
         return stats_list
 
-    def evaluate_executed_bet(self, explosion_value: float, executed_bet: Dict) -> Dict:
-        """Avalia resultado de aposta executada (Adaptado)"""
+    def evaluate_executed_bet(
+        self, explosion_value: float, executed_bet: Dict
+    ) -> Dict:
+        """Avalia resultado de aposta executada."""
         target_1 = executed_bet.get("target_1", 0)
         hit_1 = explosion_value >= target_1 if target_1 > 0 else False
         strategy_name = executed_bet.get("strategy", "Desconhecida")
 
-        # Atualiza estatísticas de Hit/Miss
-        # Encontra o nome da classe da política
+        # Atualiza estatísticas
         policy_name = (
-            strategy_name.split(" - ")[0].replace(" ", "").replace("Baixos", "Low")
+            strategy_name.split(" - ")[0]
+            .replace(" ", "")
+            .replace("Baixos", "Low")
+            .replace("CONSERVADOR", "")
+            .replace("MODERADO", "")
+            .replace("AGRESSIVO", "")
         )
 
-        # Tenta encontrar a estatística correta
         if policy_stats := next(
             (
                 stats_dict
                 for key, stats_dict in self.strategy_stats.items()
-                if policy_name in key
+                if policy_name in key or "Commercial" in key or "Martingale" in key
             ),
             None,
         ):
@@ -648,134 +801,5 @@ class StrategyEngine:
         }
 
 
-class MLHighConfidencePolicy(StrategyPolicy):
-    """
-    Uma estratégia que faz uma APOSTA ÚNICA quando o ML está
-    com alta confiança.
-    """
-
-    def __init__(
-        self, banca_inicial: float, learning_engine: Optional[LearningEngine] = None
-    ):
-        super().__init__(banca_inicial, learning_engine)
-        self.confidence_threshold = 0.80  # Ex: 80% de confiança
-        self.bet_size_percent = 0.01  # Ex: 1% da banca
-        self.last_calculated_prob: float = 0.0
-
-    def check_trigger(self, history: deque) -> bool:
-        if self.is_active or not self.le:
-            return False
-
-        # Prepara o histórico para o modelo
-        recent_history = list(history)[-REQUIRED_HISTORY_FOR_PREDICTION:]
-        if len(recent_history) < REQUIRED_HISTORY_FOR_PREDICTION:
-            self.last_calculated_prob = 0.0  # Não temos histórico suficiente
-            return False
-
-        # PERGUNTA AO ML
-        probability = self.le.predict(recent_history)
-
-        if probability is None:
-            self.last_calculated_prob = 0.0
-            return False
-
-        # --- MUDANÇA: Salva a probabilidade ANTES de decidir ---
-        self.last_calculated_prob = probability
-        # --- FIM DA MUDANÇA ---
-
-        if probability >= self.confidence_threshold:
-            logger.info(
-                f"ATIVANDO MLHighConfidencePolicy (" f"Confiança: {probability:.2%}"
-            )
-            self.is_active = True
-            return True
-
-        # Se chegamos aqui, foi um veto (prob < threshold). A prob está salva.
-        return False
-
-    def get_bet_recommendation(
-        self, current_balance: float
-    ) -> Optional[BetRecommendation]:
-        if not self.is_active:
-            return None
-
-        bet_1 = max(1.0, current_balance * self.bet_size_percent)
-
-        return BetRecommendation(
-            strategy_name="ML High Confidence",
-            bet_1=bet_1,
-            target_1=2.0,  # Alvo fixo de 2.0x
-            bet_2=0,
-            target_2=0,
-            justification=(f"Confiança do modelo > {self.confidence_threshold:.0%}"),
-            confidence=self.confidence_threshold,
-            ready=True,
-        )
-
-    def process_result(self, explosion_value: float):
-        # Esta estratégia é de aposta única.
-        # Após processar o resultado, ela se desativa.
-        if self.is_active:
-            if explosion_value >= 2.0:
-                logger.info("MLHighConfidencePolicy: HIT")
-            else:
-                logger.warning("MLHighConfidencePolicy: MISS")
-
-            # Reseta para a próxima oportunidade
-            self.is_active = False
-
-    def evaluate_executed_bet(self, explosion_value: float, executed_bet: Dict) -> Dict:
-        """Avalia resultado de aposta executada (Transplantado)"""
-        # Nota: 'executed_bet' deve ser o dicionário da BetRecommendation
-        target_1 = executed_bet.get("target_1", 0)
-        hit_1 = explosion_value >= target_1 if target_1 > 0 else False
-
-        return {
-            "explosion_value": explosion_value,
-            "recommendation_hit": hit_1,
-            "target_1": target_1,
-            "bet_1": executed_bet.get("bet_1", 0),
-            "strategy": executed_bet.get("strategy", ""),
-            "phase": "N/A",  # Este campo não parecia ser usado
-        }
-
-
-class SizingPolicy(ABC):
-    @abstractmethod
-    def __init__(self, banca_inicial: float):
-        """
-        Construtor abstrato para garantir que todas as políticas
-        de dimensionamento aceitem a banca inicial.
-        """
-        # Nota: Não precisa ser "pass". Podemos até guardar.
-        self.banca_inicial_base = banca_inicial
-
-    @abstractmethod
-    def get_bet(self, dobra_atual: int, banca_atual: float) -> float:
-        """Calcula o valor da aposta."""
-        pass
-
-    @abstractmethod
-    def get_target(self, dobra_atual: int) -> float:
-        """Retorna o multiplicador alvo."""
-        pass
-
-
-class Martingale15(SizingPolicy):
-    def __init__(self, banca_inicial: float):
-        self.valores_fixos = self._definir_valores(banca_inicial)
-
-    def _definir_valores(self, banca_inicial: float):
-        multipliers = {1: 1, 2: 2, 3: 4, 4: 8}
-        return {
-            dobra: max(1.0, round((banca_inicial / 15) * mult, 2))
-            for dobra, mult in multipliers.items()
-        }
-
-    def get_bet(self, dobra_atual: int, banca_atual: float) -> float:
-        # A lógica de 'banca_atual' pode ser usada para preservar lucros, etc.
-        return self.valores_fixos.get(dobra_atual, self.valores_fixos[1])
-
-    def get_target(self, dobra_atual: int) -> float:
-        # O alvo está "hard-coded" nesta política específica
-        return 1.84
+# Mantém compatibilidade com imports antigos
+Martingale8LowPolicy = CommercialMartingalePolicy

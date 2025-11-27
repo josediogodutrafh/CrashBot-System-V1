@@ -36,82 +36,69 @@ class VisionSystem:
     """Sistema de visão que integra com estrutura existente - OTIMIZADO"""
 
     def __init__(self, config_path: str):
-        # --- 0. CONFIGURAÇÃO DO TESSERACT PORTÁTIL (NOVO) ---
-        # Define o caminho para o executável do Tesseract DENTRO da pasta do bot
-        # Tenta locais comuns (Dev e Exe)
-        tesseract_paths = [
-            os.path.join(BASE_DIR, "Tesseract-OCR", "tesseract.exe"),
-            os.path.join(BASE_DIR, "src", "Tesseract-OCR", "tesseract.exe"),
-            os.path.join(
-                BASE_DIR, "_internal", "Tesseract-OCR", "tesseract.exe"
-            ),  # Padrão PyInstaller
-        ]
-
-        tesseract_found = False
-        for path in tesseract_paths:
-            if os.path.exists(path):
-                # Aponta o pytesseract para este executável local
-                pytesseract.pytesseract.tesseract_cmd = path
-                # print(f"DEBUG: Tesseract portátil encontrado em: {path}")
-                tesseract_found = True
-                break
-
-        if not tesseract_found:
-            # Se não achar o portátil, tenta o do sistema (fallback)
-            self.logger.warning(
-                "Tesseract portátil não encontrado. Tentando versão do sistema..."
-            )
-
-        # --- 1. CONFIGURAÇÃO E CAMINHOS ---
-        self.config_path = config_path
-        self.config = self.load_config()
+        # --- 1. CRIA O LOGGER PRIMEIRO (CORREÇÃO CRÍTICA) ---
+        # Isso evita o erro 'object has no attribute logger'
         self.logger = logging.getLogger(__name__)
 
-        # --- LÓGICA HÍBRIDA DE CAMINHOS (A MÁGICA ACONTECE AQUI) ---
-        # Tenta encontrar a pasta de templates em locais comuns para Dev e Exe
+        # --- 2. ENCONTRA O TESSERACT MANUALMENTE (INFALÍVEL) ---
+        # Calcula o caminho voltando pastas: .../src/vision -> .../src -> .../Crash (Raiz)
+        vision_dir = os.path.dirname(os.path.abspath(__file__))
+        src_dir = os.path.dirname(vision_dir)
+        root_dir = os.path.dirname(src_dir) 
+
+        # Caminho exato onde a pasta Tesseract-OCR deve estar
+        tesseract_path = os.path.join(root_dir, "Tesseract-OCR", "tesseract.exe")
+        
+        # Debug no terminal para você conferir
+        print(f"🔎 VisionSystem procurando Tesseract em: {tesseract_path}")
+
+        if os.path.exists(tesseract_path):
+            pytesseract.pytesseract.tesseract_cmd = tesseract_path
+            self.logger.info("✅ Tesseract portátil encontrado e configurado.")
+        else:
+            self.logger.warning(f"❌ Tesseract NÃO encontrado em: {tesseract_path}")
+            self.logger.warning("Tentando usar variável de ambiente do sistema...")
+            # Tenta usar o do sistema se o portátil falhar
+            pytesseract.pytesseract.tesseract_cmd = 'tesseract'
+
+        # --- 3. CONFIGURAÇÃO E CAMINHOS (Código Original) ---
+        self.config_path = config_path
+        self.config = self.load_config()
+
+        # --- LÓGICA HÍBRIDA DE CAMINHOS PARA TEMPLATES ---
+        # Tenta encontrar a pasta de templates em locais comuns
         possible_paths = [
-            # Opção 1: Estrutura de Desenvolvimento (rodando da raiz)
-            os.path.join(BASE_DIR, "src", "vision", "templates", "template_saldo"),
-            # Opção 2: Estrutura Alternativa (rodando de dentro de src)
-            os.path.join(BASE_DIR, "vision", "templates", "template_saldo"),
-            # Opção 3: Estrutura de Distribuição (.exe / dist)
-            os.path.join(BASE_DIR, "templates", "template_saldo"),
+            os.path.join(vision_dir, "templates", "template_saldo"),
+            os.path.join(root_dir, "src", "vision", "templates", "template_saldo"),
+            os.path.join(root_dir, "templates", "template_saldo"),
         ]
 
-        # Seleciona o primeiro caminho que realmente existe fisicamente
+        # Seleciona o primeiro caminho que existe
         self.template_path = next(
             (p for p in possible_paths if os.path.exists(p)), possible_paths[0]
         )
 
-        # Log para sabermos qual caminho ele escolheu (útil para debug)
-        # print(f"DEBUG: Caminho de templates escolhido: {self.template_path}")
+        # --- 4. PRÉ-CARREGAMENTO DOS TEMPLATES ---
+        self.template_cache = self.load_templates(str(self.template_path))
+        
+        # AQUI TERMINA O SNIPPET (A próxima função é _load_multiplier_templates)
+        # O resto das inicializações (EasyOCR, etc) será chamado logo abaixo se você mantiver
+        
+        # ATENÇÃO: Certifique-se de manter a chamada para carregar os templates de multiplicador!
+        self.multiplier_templates = self._load_multiplier_templates()
 
-        # --- 2. PRÉ-CARREGAMENTO DOS TEMPLATES (OTIMIZAÇÃO) ---
-        self.template_cache = self.load_templates(
-            str(self.template_path)
-        )  # Carrega templates de saldo
-
-        self.multiplier_templates = (
-            self._load_multiplier_templates()
-        )  # Carrega templates do multiplicador
-
-        # --- 3. INICIALIZAÇÃO DO OCR DE FALLBACK ---
+        # --- 5. INICIALIZAÇÃO DO OCR DE FALLBACK ---
         self.easyocr_reader = None
         if EASYOCR_AVAILABLE:
             try:
-                # Use gpu=False se não tiver uma GPU NVIDIA configurada com CUDA
                 self.easyocr_reader = easyocr.Reader(["pt", "en"], gpu=False)
-                self.logger.info("EasyOCR inicializado como fallback (CPU).")
+                self.logger.info("EasyOCR inicializado.")
             except Exception as e:
                 self.logger.error(f"Erro ao inicializar EasyOCR: {e}")
                 self.easyocr_reader = None
 
-        # Histórico para contexto (compatível com código original)
         self.value_history = deque(maxlen=5)
         self.balance_corrections = self.load_balance_corrections()
-
-        # Logger
-        self.logger = logging.getLogger(__name__)
 
         print("✅ VisionSystem inicializado")
 
