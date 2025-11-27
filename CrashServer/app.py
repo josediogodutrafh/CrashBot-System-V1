@@ -1049,7 +1049,7 @@ def estatisticas():
         return jsonify({"erro": str(e)}), 500
 
 
-@app.route("/admin/reset_database", methods=["POST"])
+@app.route("/admin/reset_database", methods=["GET"])  # MUDAMOS PARA GET
 @require_admin_auth
 def reset_database():
     """
@@ -1063,7 +1063,7 @@ def reset_database():
             jsonify(
                 {
                     "erro": "Confirmação necessária",
-                    "instrucoes": "Adicione ?confirmar=sim para confirmar a operação",
+                    "instrucoes": "Adicione ?confirmar=sim na URL para confirmar.",
                 }
             ),
             400,
@@ -1072,15 +1072,16 @@ def reset_database():
     try:
         logger.warning("⚠️ RESET DO BANCO INICIADO!")
 
-        db.drop_all()
-        db.create_all()
+        db.drop_all()  # Apaga o velho (que estava dando erro)
+        db.create_all()  # Cria o novo (com colunas whatsapp, telegram, etc)
 
         logger.warning("✅ Banco resetado com sucesso")
 
         return jsonify(
             {
                 "status": "sucesso",
-                "mensagem": "Banco de dados resetado. Todas as tabelas foram recriadas.",
+                "mensagem": "Banco de dados resetado. Todas as tabelas foram recriadas com a nova estrutura.",
+                "tabelas_agora_no_banco": list(db.metadata.tables.keys()),
             }
         )
 
