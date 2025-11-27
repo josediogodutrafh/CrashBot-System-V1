@@ -924,41 +924,44 @@ def _processar_venda_aprovada(
 # =============================================================================
 # ROTAS ADMINISTRATIVAS (PROTEGIDAS)
 # =============================================================================
-
-
-@app.route("/admin/licencas", methods=["GET"])
-@require_admin_auth
-def listar_licencas():
+@app.route("/admin/reset_database", methods=["GET"])
+# @require_admin_auth  <--- COMENTAMOS ESSA LINHA PARA LIBERAR O ACESSO
+def reset_database():
     """
-    Lista todas as licenças com filtros opcionais.
-
-    Query params:
-        - ativa: true|false
-        - plano: experimental|semanal|mensal
-        - limit: número de resultados (padrão: 100)
+    ⚠️ PERIGOSO: Recria todas as tabelas do banco.
+    Requer confirmação via query param: ?confirmar=sim
     """
+    confirmacao = request.args.get("confirmar", "").lower()
+
+    if confirmacao != "sim":
+        return (
+            jsonify(
+                {
+                    "erro": "Confirmação necessária",
+                    "instrucoes": "Adicione ?confirmar=sim na URL para confirmar.",
+                }
+            ),
+            400,
+        )
+
     try:
-        # Filtros
-        query = Licenca.query
+        logger.warning("⚠️ RESET DO BANCO INICIADO!")
 
-        if ativa_filter := request.args.get("ativa"):
-            ativa_bool = ativa_filter.lower() == "true"
-            query = query.filter_by(ativa=ativa_bool)
+        db.drop_all()  # Apaga o velho
+        db.create_all()  # Cria o novo
 
-        if plano_filter := request.args.get("plano"):
-            query = query.filter_by(plano_tipo=plano_filter)
-
-        # Limite
-        limit = min(int(request.args.get("limit", 100)), 1000)
-
-        licencas = query.order_by(Licenca.created_at.desc()).limit(limit).all()
+        logger.warning("✅ Banco resetado com sucesso")
 
         return jsonify(
-            {"total": len(licencas), "licencas": [lic.to_dict() for lic in licencas]}
+            {
+                "status": "sucesso",
+                "mensagem": "Banco de dados resetado (MODO SEM SENHA). Tabelas recriadas.",
+                "tabelas_agora_no_banco": list(db.metadata.tables.keys()),
+            }
         )
 
     except Exception as e:
-        logger.error(f"❌ Erro ao listar licenças: {e}")
+        logger.error(f"❌ Erro ao resetar banco: {e}")
         return jsonify({"erro": str(e)}), 500
 
 
@@ -1049,52 +1052,9 @@ def estatisticas():
         return jsonify({"erro": str(e)}), 500
 
 
-@app.route("/admin/reset_database", methods=["GET"])  # MUDAMOS PARA GET
-@require_admin_auth
-def reset_database():
-    """
-    ⚠️ PERIGOSO: Recria todas as tabelas do banco.
-    Requer confirmação via query param: ?confirmar=sim
-    """
-    confirmacao = request.args.get("confirmar", "").lower()
-
-    if confirmacao != "sim":
-        return (
-            jsonify(
-                {
-                    "erro": "Confirmação necessária",
-                    "instrucoes": "Adicione ?confirmar=sim na URL para confirmar.",
-                }
-            ),
-            400,
-        )
-
-    try:
-        logger.warning("⚠️ RESET DO BANCO INICIADO!")
-
-        db.drop_all()  # Apaga o velho (que estava dando erro)
-        db.create_all()  # Cria o novo (com colunas whatsapp, telegram, etc)
-
-        logger.warning("✅ Banco resetado com sucesso")
-
-        return jsonify(
-            {
-                "status": "sucesso",
-                "mensagem": "Banco de dados resetado. Todas as tabelas foram recriadas com a nova estrutura.",
-                "tabelas_agora_no_banco": list(db.metadata.tables.keys()),
-            }
-        )
-
-    except Exception as e:
-        logger.error(f"❌ Erro ao resetar banco: {e}")
-        return jsonify({"erro": str(e)}), 500
-
-
 # =============================================================================
 # TRATAMENTO DE ERROS
 # =============================================================================
-
-
 @app.errorhandler(404)
 def not_found(error):
     """Handler para 404."""
