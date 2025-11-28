@@ -13,9 +13,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
-import numpy as np
-
 import notification_manager
+import numpy as np
 from learning_engine import REQUIRED_HISTORY_FOR_PREDICTION, LearningEngine
 
 # --- CONFIGURAÇÃO DO LOGGER ---
@@ -50,6 +49,7 @@ if not logger.handlers:
 
 class RiskMode(Enum):
     """Enum para os modos de risco comerciais."""
+
     CONSERVADOR = 1
     MODERADO = 2
     AGRESSIVO = 3
@@ -58,21 +58,21 @@ class RiskMode(Enum):
 # Configurações de cada modo de risco
 RISK_MODE_CONFIG = {
     RiskMode.CONSERVADOR: {
-        "banca_percent": 0.33,       # Usa 33% da banca real
-        "gatilho_opcoes": [8],       # Sempre 8 velas
-        "meta_min": 0.25,            # Meta entre 25% e 40%
+        "banca_percent": 0.33,  # Usa 33% da banca real
+        "gatilho_opcoes": [8],  # Sempre 8 velas
+        "meta_min": 0.25,  # Meta entre 25% e 40%
         "meta_max": 0.40,
     },
     RiskMode.MODERADO: {
-        "banca_percent": 0.50,       # Usa 50% da banca real
-        "gatilho_opcoes": [7, 8],    # Sorteia entre 7 ou 8
-        "meta_min": 0.30,            # Meta entre 30% e 45%
+        "banca_percent": 0.50,  # Usa 50% da banca real
+        "gatilho_opcoes": [7, 8],  # Sorteia entre 7 ou 8
+        "meta_min": 0.30,  # Meta entre 30% e 45%
         "meta_max": 0.45,
     },
     RiskMode.AGRESSIVO: {
-        "banca_percent": 1.00,       # Usa 100% da banca real
-        "gatilho_opcoes": [6, 7],    # Sorteia entre 6 ou 7
-        "meta_min": 0.35,            # Meta entre 35% e 55%
+        "banca_percent": 1.00,  # Usa 100% da banca real
+        "gatilho_opcoes": [6, 7],  # Sorteia entre 6 ou 7
+        "meta_min": 0.35,  # Meta entre 35% e 55%
         "meta_max": 0.55,
     },
 }
@@ -198,9 +198,7 @@ class CommercialMartingalePolicy(StrategyPolicy):
         self.dobra_atual = 1
         self.perdas_consecutivas = 0
         self.modo_continuo = False
-        logger.info(
-            f"ATIVANDO CommercialMartingalePolicy - Modo {self.risk_mode.name}"
-        )
+        logger.info(f"ATIVANDO CommercialMartingalePolicy - Modo {self.risk_mode.name}")
 
     def check_trigger(self, history: deque) -> bool:
         """Verifica o gatilho de velas baixas."""
@@ -328,9 +326,7 @@ class CommercialMartingalePolicy(StrategyPolicy):
         target = self.target_ativo
 
         if explosion_value < target:
-            logger.warning(
-                f"CommercialMartingalePolicy: PERDEU (< {target:.2f}x)"
-            )
+            logger.warning(f"CommercialMartingalePolicy: PERDEU (< {target:.2f}x)")
             self.perdas_consecutivas += 1
             if self.dobra_atual >= 4:
                 self._reset_cycle()
@@ -338,17 +334,13 @@ class CommercialMartingalePolicy(StrategyPolicy):
                 self.dobra_atual += 1
 
         elif target <= explosion_value <= 1.99:
-            logger.info(
-                "CommercialMartingalePolicy: GANHO (volta para dobra 2)"
-            )
+            logger.info("CommercialMartingalePolicy: GANHO (volta para dobra 2)")
             self.dobra_atual = 2
             self.perdas_consecutivas = 0
             self.modo_continuo = True
 
         else:  # Ganho >= 2.00
-            logger.info(
-                "CommercialMartingalePolicy: GANHO TOTAL (Ciclo concluído)"
-            )
+            logger.info("CommercialMartingalePolicy: GANHO TOTAL (Ciclo concluído)")
             self._reset_cycle()
 
     def _reset_cycle(self):
@@ -502,7 +494,7 @@ class StrategyEngine:
 
         # Calcula a banca operacional
         self.banca_operacional = banca_inicial * config["banca_percent"]
-        
+
         self.banca_inicial = banca_inicial
 
         # Sorteia a meta de lucro dentro do range do modo
@@ -526,9 +518,7 @@ class StrategyEngine:
 
         # Inicia as políticas
         self.policies = [
-            CommercialMartingalePolicy(
-                banca_inicial, risk_mode, self.learning_engine
-            ),
+            CommercialMartingalePolicy(banca_inicial, risk_mode, self.learning_engine),
             MLHighConfidencePolicy(banca_inicial, self.learning_engine),
         ]
 
@@ -641,9 +631,7 @@ class StrategyEngine:
 
     def esta_suspenso(self) -> bool:
         """Verifica se está no período de suspensão."""
-        if self.suspenso_ate is None:
-            return False
-        return time.time() < self.suspenso_ate
+        return self.suspenso_ate is not None and time.time() < self.suspenso_ate
 
     def get_tempo_restante_suspensao(self) -> int:
         """Retorna o tempo restante de suspensão em segundos."""
@@ -695,9 +683,7 @@ class StrategyEngine:
 
         if martingale_policy:
             if martingale_policy.is_active:
-                status_msg = (
-                    f"Martingale Ativo (Dobra {martingale_policy.dobra_atual})"
-                )
+                status_msg = f"Martingale Ativo (Dobra {martingale_policy.dobra_atual})"
                 martingale_active = True
                 dobra_atual = martingale_policy.dobra_atual
 
@@ -760,9 +746,7 @@ class StrategyEngine:
             )
         return stats_list
 
-    def evaluate_executed_bet(
-        self, explosion_value: float, executed_bet: Dict
-    ) -> Dict:
+    def evaluate_executed_bet(self, explosion_value: float, executed_bet: Dict) -> Dict:
         """Avalia resultado de aposta executada."""
         target_1 = executed_bet.get("target_1", 0)
         hit_1 = explosion_value >= target_1 if target_1 > 0 else False

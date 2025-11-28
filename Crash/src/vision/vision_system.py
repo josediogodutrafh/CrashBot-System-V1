@@ -44,11 +44,11 @@ class VisionSystem:
         # Calcula o caminho voltando pastas: .../src/vision -> .../src -> .../Crash (Raiz)
         vision_dir = os.path.dirname(os.path.abspath(__file__))
         src_dir = os.path.dirname(vision_dir)
-        root_dir = os.path.dirname(src_dir) 
+        root_dir = os.path.dirname(src_dir)
 
         # Caminho exato onde a pasta Tesseract-OCR deve estar
         tesseract_path = os.path.join(root_dir, "Tesseract-OCR", "tesseract.exe")
-        
+
         # Debug no terminal para você conferir
         print(f"🔎 VisionSystem procurando Tesseract em: {tesseract_path}")
 
@@ -59,7 +59,7 @@ class VisionSystem:
             self.logger.warning(f"❌ Tesseract NÃO encontrado em: {tesseract_path}")
             self.logger.warning("Tentando usar variável de ambiente do sistema...")
             # Tenta usar o do sistema se o portátil falhar
-            pytesseract.pytesseract.tesseract_cmd = 'tesseract'
+            pytesseract.pytesseract.tesseract_cmd = "tesseract"
 
         # --- 3. CONFIGURAÇÃO E CAMINHOS (Código Original) ---
         self.config_path = config_path
@@ -80,10 +80,10 @@ class VisionSystem:
 
         # --- 4. PRÉ-CARREGAMENTO DOS TEMPLATES ---
         self.template_cache = self.load_templates(str(self.template_path))
-        
+
         # AQUI TERMINA O SNIPPET (A próxima função é _load_multiplier_templates)
         # O resto das inicializações (EasyOCR, etc) será chamado logo abaixo se você mantiver
-        
+
         # ATENÇÃO: Certifique-se de manter a chamada para carregar os templates de multiplicador!
         self.multiplier_templates = self._load_multiplier_templates()
 

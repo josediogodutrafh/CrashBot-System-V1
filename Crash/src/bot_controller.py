@@ -36,17 +36,23 @@ from rich.table import Table
 from rich.text import Text
 
 # ==============================================================================
-# 3. CORREÇÃO DE CAMINHO (Para importar arquivos da pasta raiz)
+# 3. CORREÇÃO DE CAMINHO (Mantemos aqui, é necessário)
 # ==============================================================================
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 # ==============================================================================
 # 4. IMPORTS DO SEU PROJETO
 # ==============================================================================
+# Usamos # noqa: E402 no final de cada linha para silenciar o Flake8
 import notification_manager  # noqa: E402
 from config import BASE_DIR  # noqa: E402
+
+# AQUI ESTÁ A CORREÇÃO: Unifique o import do database em uma linha só
+from database_manager import RESULTADO_HIT  # noqa: E402
 from database_manager import RESULTADO_MISS  # noqa: E402
-from database_manager import RESULTADO_HIT, BetData, DatabaseManager, RoundData
+from database_manager import BetData  # noqa: E402
+from database_manager import DatabaseManager  # noqa: E402
+from database_manager import RoundData  # noqa: E402
 from learning_engine import LearningEngine  # noqa: E402
 from security import get_hwid  # noqa: E402
 from strategy_engine import RiskMode, StrategyEngine  # noqa: E402
@@ -201,9 +207,7 @@ class BotController:
 
     def _perguntar_configuracoes_sessao(self) -> RiskMode:
         """Coleta apenas o modo de risco. Banca será detectada automaticamente."""
-        self.console.print(
-            "\n[bold cyan]━━━ CONFIGURAÇÃO DA SESSÃO ━━━[/bold cyan]"
-        )
+        self.console.print("\n[bold cyan]━━━ CONFIGURAÇÃO DA SESSÃO ━━━[/bold cyan]")
 
         # Menu de Modo de Risco (Simplificado - sem detalhes técnicos)
         self.console.print("\n[bold yellow]🎯 ESCOLHA SEU MODO DE RISCO:[/bold yellow]")
@@ -216,9 +220,7 @@ class BotController:
             "  [yellow]2. MODERADO[/yellow] - Equilíbrio entre risco e retorno"
         )
         self.console.print("")
-        self.console.print(
-            "  [red]3. AGRESSIVO[/red] - Maior risco, maiores retornos"
-        )
+        self.console.print("  [red]3. AGRESSIVO[/red] - Maior risco, maiores retornos")
         self.console.print("")
 
         risk_mode = self._obter_escolha_valida(
@@ -505,9 +507,7 @@ class BotController:
         """Thread para capturar multiplicadores continuamente."""
         while self.running:
             try:
-                multiplier_area = self.screen_areas.get("multiplier")
-
-                if multiplier_area:
+                if multiplier_area := self.screen_areas.get("multiplier"):
                     multiplier = self.vision.get_multiplier(multiplier_area)
 
                     if multiplier and 1.0 <= multiplier <= 999.99:
@@ -641,9 +641,7 @@ class BotController:
                 self.strategy.banca_inicial is None
                 or self.strategy.meta_lucro_percentual is None
             ):
-                self.logger.error(
-                    "Falha ao suspender: Dados da estratégia são None."
-                )
+                self.logger.error("Falha ao suspender: Dados da estratégia são None.")
                 return True
 
             meta_valor_abs = self.strategy.banca_inicial * (
@@ -712,10 +710,7 @@ class BotController:
             hit_status = "[green]✅ HIT[/green]"
             msg_meta = ""
             try:
-                if (
-                    self.strategy.banca_inicial
-                    and self.strategy.meta_lucro_percentual
-                ):
+                if self.strategy.banca_inicial and self.strategy.meta_lucro_percentual:
                     meta_abs = self.strategy.banca_inicial * (
                         1 + self.strategy.meta_lucro_percentual
                     )
@@ -1078,20 +1073,13 @@ class BotController:
         with self.balance_lock:
             current_balance = self.current_balance or 0.0
 
-        countdown_text.append(
-            f"Saldo Atual: R$ {current_balance:.2f}\n", style="green"
-        )
+        countdown_text.append(f"Saldo Atual: R$ {current_balance:.2f}\n", style="green")
 
-        if (
-            self.strategy.banca_inicial
-            and self.strategy.meta_lucro_percentual
-        ):
+        if self.strategy.banca_inicial and self.strategy.meta_lucro_percentual:
             meta = self.strategy.banca_inicial * (
                 1 + self.strategy.meta_lucro_percentual
             )
-            countdown_text.append(
-                f"Meta Atingida: R$ {meta:.2f}\n", style="dim"
-            )
+            countdown_text.append(f"Meta Atingida: R$ {meta:.2f}\n", style="dim")
 
         layout["main"].update(
             Panel(
@@ -1103,7 +1091,9 @@ class BotController:
 
         # Footer
         footer_text = Text()
-        footer_text.append("O bot retomará automaticamente após o tempo.\n", style="dim")
+        footer_text.append(
+            "O bot retomará automaticamente após o tempo.\n", style="dim"
+        )
         footer_text.append("Pressione [Ctrl+C] para sair", style="bold yellow")
         layout["footer"].update(Panel(footer_text))
 
@@ -1659,13 +1649,11 @@ class BotController:
         with self.balance_lock:
             banca_detectada = self.initial_balance or 100.0
 
+        risk_mode_safe = self._pending_risk_mode or RiskMode.MODERADO
+
         self.strategy.iniciar_sessao(
             banca_inicial=banca_detectada,
-            risk_mode=self._pending_risk_mode,
-        )
-
-        self.console.print(
-            f"💰 Banca detectada: R$ {banca_detectada:.2f}", style="cyan"
+            risk_mode=risk_mode_safe,
         )
 
         self.running = True
@@ -1792,7 +1780,133 @@ class BotController:
             or f"User_Profile_{int(time.time())}"
         )
 
-        items_to_calibrate = [
+        self.console.print(
+            "\n[yellow]Deseja calibrar também a APOSTA 2 (Double Bet)?[/yellow]"
+        )
+        resp = self.console.input("Digite 's' para Sim ou Enter para pular: ").lower()
+        use_bet_2 = resp == "s"
+        # -------------------------
+
+        # Chamada limpa (Agora 'use_bet_2' existe!)
+        items_to_calibrate = self._get_items_to_calibrate(use_bet_2)
+
+        new_profile = {}
+
+        for area_key, click_key, friendly_name in items_to_calibrate:
+            item_data = self._calibrate_single_item(area_key, click_key, friendly_name)
+            new_profile |= item_data
+
+        if not use_bet_2:
+            self._clear_unused_bet2_fields(new_profile)
+
+        self.console.print("\n💾 Salvando configurações...", style="yellow")
+        if self._save_new_profile(profile_name, new_profile):
+            return profile_name, new_profile
+        return None, None
+
+    def _save_new_profile(self, profile_name: str, new_profile: Dict) -> bool:
+        """Salva o novo perfil no arquivo de configuração."""
+        self.console.print("\n💾 Salvando configurações...", style="yellow")
+        try:
+            # Chama o novo método que faz o trabalho pesado
+            self._persist_profile_data(profile_name, new_profile)
+
+            self.console.print(
+                f"✅ Perfil '{profile_name}' criado com sucesso!", style="bold green"
+            )
+            self.console.print("O bot usará este perfil agora.", style="cyan")
+            return True
+
+        except Exception as e:
+            self.console.print(f"❌ Erro ao salvar: {e}", style="bold red")
+            return False
+
+    def _persist_profile_data(self, profile_name: str, new_profile: Dict) -> None:
+        """
+        Carrega, atualiza e salva o arquivo de configuração no disco.
+        (Extraído de _save_new_profile)
+        """
+        current_config = self.load_config()
+        if "profiles" not in current_config:
+            current_config["profiles"] = {}
+
+        current_config["profiles"][profile_name] = new_profile
+
+        with open(self.config_path, "w") as f:
+            json.dump(current_config, f, indent=4)
+
+        # Atualiza a config em memória também
+        self.config = current_config
+
+    def _clear_unused_bet2_fields(self, profile: Dict[str, Any]) -> None:
+        """Define campos da aposta 2 como None no perfil."""
+        fields_to_clear = [
+            "bet_value_area_2",
+            "bet_value_click_2",
+            "target_area_2",
+            "target_click_2",
+            "bet_button_area_2",
+        ]
+        for field in fields_to_clear:
+            profile[field] = None
+
+    def _calibrate_single_item(
+        self, area_key: str, click_key: Optional[str], friendly_name: str
+    ) -> Dict[str, Any]:
+        """
+        Calibra um único item da tela.
+        (Extraído de run_calibration_wizard)
+        """
+        self.console.print(f"\n📍 Mapeando: [bold cyan]{friendly_name}[/bold cyan]")
+
+        # Captura Topo-Esquerdo
+        self.console.print(
+            "   1. Mouse no [green]CANTO SUPERIOR ESQUERDO[/green] da área."
+        )
+        self.console.input("      [Enter] para capturar...")
+        x1, y1 = pyautogui.position()
+        self.console.print(f"      -> Topo: ({x1}, {y1})", style="dim")
+
+        # Captura Base-Direita
+        self.console.print(
+            "   2. Mouse no [green]CANTO INFERIOR DIREITO[/green] da área."
+        )
+        self.console.input("      [Enter] para capturar...")
+        x2, y2 = pyautogui.position()
+        self.console.print(f"      -> Base: ({x2}, {y2})", style="dim")
+
+        # Cálculos
+        left = min(x1, x2)
+        top = min(y1, y2)
+        width = abs(x2 - x1)
+        height = abs(y2 - y1)
+
+        # Cria já com o valor (1 passo)
+        result = {
+            area_key: {
+                "x": left,
+                "y": top,
+                "width": width,
+                "height": height,
+            }
+        }
+
+        # Calcula ponto de clique se necessário
+        if click_key:
+            cx, cy = left + (width // 2), top + (height // 2)
+            result[click_key] = {"x": cx, "y": cy}
+            self.console.print(f"      -> Clique calculado: ({cx}, {cy})", style="dim")
+
+        self.console.print("✅ Salvo!", style="green")
+        time.sleep(0.3)
+
+        return result
+
+    def _get_items_to_calibrate(
+        self, use_bet_2: bool
+    ) -> list[tuple[str, Optional[str], str]]:
+        """Retorna a lista de itens para calibração."""
+        items = [
             (
                 "multiplier_area",
                 None,
@@ -1817,15 +1931,8 @@ class BotController:
             ("bet_button_area_1", None, "BOTÃO VERDE GRANDE (Apostar)"),
         ]
 
-        self.console.print(
-            "\n[yellow]Deseja calibrar também a APOSTA 2 (Double Bet)?[/yellow]"
-        )
-        resp = self.console.input("Digite 's' para Sim ou Enter para pular: ").lower()
-
-        use_bet_2 = resp == "s"
-
         if use_bet_2:
-            items_to_calibrate.extend(
+            items.extend(
                 [
                     ("bet_value_area_2", "bet_value_click_2", "CAMPO VALOR: Aposta 2"),
                     (
@@ -1837,79 +1944,7 @@ class BotController:
                 ]
             )
 
-        new_profile = {}
-
-        for area_key, click_key, friendly_name in items_to_calibrate:
-            self.console.print(f"\n📍 Mapeando: [bold cyan]{friendly_name}[/bold cyan]")
-
-            self.console.print(
-                "   1. Mouse no [green]CANTO SUPERIOR ESQUERDO[/green] da área."
-            )
-            self.console.input("      [Enter] para capturar...")
-            x1, y1 = pyautogui.position()
-            self.console.print(f"      -> Topo: ({x1}, {y1})", style="dim")
-
-            self.console.print(
-                "   2. Mouse no [green]CANTO INFERIOR DIREITO[/green] da área."
-            )
-            self.console.input("      [Enter] para capturar...")
-            x2, y2 = pyautogui.position()
-            self.console.print(f"      -> Base: ({x2}, {y2})", style="dim")
-
-            left = min(x1, x2)
-            top = min(y1, y2)
-            width = abs(x2 - x1)
-            height = abs(y2 - y1)
-
-            new_profile[area_key] = {
-                "x": left,
-                "y": top,
-                "width": width,
-                "height": height,
-            }
-
-            if click_key:
-                cx, cy = left + (width // 2), top + (height // 2)
-                new_profile[click_key] = {"x": cx, "y": cy}
-                self.console.print(
-                    f"      -> Clique calculado: ({cx}, {cy})", style="dim"
-                )
-
-            self.console.print("✅ Salvo!", style="green")
-            time.sleep(0.3)
-
-        if not use_bet_2:
-            for field in [
-                "bet_value_area_2",
-                "bet_value_click_2",
-                "target_area_2",
-                "target_click_2",
-                "bet_button_area_2",
-            ]:
-                new_profile[field] = None
-
-        self.console.print("\n💾 Salvando configurações...", style="yellow")
-        try:
-            current_config = self.load_config()
-            if "profiles" not in current_config:
-                current_config["profiles"] = {}
-
-            current_config["profiles"][profile_name] = new_profile
-
-            with open(self.config_path, "w") as f:
-                json.dump(current_config, f, indent=4)
-
-            self.console.print(
-                f"✅ Perfil '{profile_name}' criado com sucesso!", style="bold green"
-            )
-            self.console.print("O bot usará este perfil agora.", style="cyan")
-
-            self.config = current_config
-            return profile_name, new_profile
-
-        except Exception as e:
-            self.console.print(f"❌ Erro ao salvar: {e}", style="bold red")
-            return None, None
+        return items
 
 
 def main():
