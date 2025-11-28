@@ -354,74 +354,106 @@ class VisionSystem:
             return []
 
     def detect_balance_with_templates(self, gray_img: np.ndarray) -> Optional[float]:
-        """✅ OTIMIZADO: Template matching para saldo usando cache"""
+        """
+        ✅ TOTALMENTE CORRIGIDO: Detecta saldo usando template matching
+        Todas as otimizações do Sourcery aplicadas.
+        """
         try:
-            # ✅ OTIMIZAÇÃO: Usar templates do cache
+            # =================================================================
+            # ETAPA 1: PREPARAÇÃO E VALIDAÇÃO INICIAL
+            # =================================================================
+
             if not self.template_cache:
                 return self.fallback_ocr_balance(gray_img)
 
-            # Redimensionar para melhor matching
-            height, width = gray_img.shape
-            resized = cv2.resize(
-                gray_img, (width * 2, height * 2), interpolation=cv2.INTER_CUBIC
-            )
-            _, binary = cv2.threshold(resized, 128, 255, cv2.THRESH_BINARY)
-
-            # Template matching
+            h, w = gray_img.shape
             detections = []
-            threshold = 0.7
+
+            # =================================================================
+            # ETAPA 2: TEMPLATE MATCHING
+            # =================================================================
 
             for char, template in self.template_cache.items():
-                result = cv2.matchTemplate(binary, template, cv2.TM_CCOEFF_NORMED)
+                if template is None:
+                    continue
+
+                th, tw = template.shape
+                if th > h or tw > w:
+                    continue
+
+                result = cv2.matchTemplate(gray_img, template, cv2.TM_CCOEFF_NORMED)
+                threshold = 0.75
                 locations = np.where(result >= threshold)
 
-                for pt in zip(*locations[::-1]):
-                    confidence = result[pt[1], pt[0]]
-                    detections.append(
-                        {"char": char, "x": pt[0], "y": pt[1], "confidence": confidence}
-                    )
+                # ✅ CORRIGIDO Loop 1: extend ao invés de append em loop
+                detections.extend(
+                    {
+                        "char": char,
+                        "x": pt[0],
+                        "y": pt[1],
+                        "score": result[pt[1], pt[0]],
+                        "width": tw,
+                    }
+                    for pt in zip(*locations[::-1])
+                )
+
+            # =================================================================
+            # ETAPA 3: FILTRAR DETECÇÕES SOBREPOSTAS
+            # =================================================================
 
             if not detections:
                 return self.fallback_ocr_balance(gray_img)
 
-            # ✅ OTIMIZAÇÃO: Filtrar sobreposições mais eficiente
+            # ✅ CORRIGIDO Loop 2: Lógica simplificada com any()
             filtered_detections = []
-            for det in sorted(detections, key=lambda d: d["confidence"], reverse=True):
-                overlap = False
-                for filtered in filtered_detections:
-                    x_dist = abs(det["x"] - filtered["x"])
-                    y_dist = abs(det["y"] - filtered["y"])
-                    if x_dist < 15 and y_dist < 10:
-                        overlap = True
-                        break
+            detections.sort(key=lambda d: d["score"], reverse=True)
 
-                if not overlap:
+            for det in detections:
+                # Verifica se é duplicata usando any() inline
+                if not any(
+                    abs(det["x"] - ex["x"]) < 5 and abs(det["y"] - ex["y"]) < 3
+                    for ex in filtered_detections
+                ):
                     filtered_detections.append(det)
 
-            # Ordenar por posição X
-            filtered_detections.sort(key=lambda d: d["x"])
+            if not filtered_detections:
+                return self.fallback_ocr_balance(gray_img)
 
-            # Construir string
+            # =================================================================
+            # ETAPA 4: CONSTRUIR STRING DO SALDO
+            # =================================================================
+
+            filtered_detections.sort(key=lambda d: d["x"])
             balance_chars = [det["char"] for det in filtered_detections]
             balance_str = "".join(balance_chars)
 
             if not balance_str:
                 return self.fallback_ocr_balance(gray_img)
 
-            # Gerar candidatos e validar
+            # =================================================================
+            # ETAPA 5: GERAR E VALIDAR CANDIDATOS
+            # =================================================================
+
             candidates = self.generate_balance_candidates(balance_str)
 
+            # ✅ CORRIGIDO Loop 3: suppress + append otimizado
+            valid_values = []
             for candidate in candidates:
-                try:
+                with contextlib.suppress(ValueError):
                     value = float(candidate)
                     if 0.01 <= value <= 1000000:
-                        return value
-                except ValueError:
-                    continue
+                        valid_values.append(value)
 
-            return self.fallback_ocr_balance(gray_img)
+            # =================================================================
+            # ETAPA 6: RETORNAR MELHOR CANDIDATO OU FALLBACK
+            # =================================================================
 
-        except Exception:
+            return (
+                valid_values[0] if valid_values else self.fallback_ocr_balance(gray_img)
+            )
+
+        except Exception as e:
+            self.logger.error(f"Erro em detect_balance_with_templates: {e}")
             return self.fallback_ocr_balance(gray_img)
 
     def fallback_ocr_balance(self, gray_img: np.ndarray) -> Optional[float]:
@@ -489,8 +521,7 @@ class VisionSystem:
         return text
 
     def generate_balance_candidates(self, detected_str: str) -> List[str]:
-        # sourcery skip: use-contextlib-suppress
-        """✅ OTIMIZADO: Gera candidatos de saldo com mais variações"""
+        """✅ CORRIGIDO: Gera candidatos de saldo priorizando valor original quando faz sentido"""
         candidates = [detected_str]
 
         # Se não tem ponto, tentar inserir em posições típicas
@@ -525,11 +556,21 @@ class VisionSystem:
                     [f"{digits[:4]}.{digits[4:]}", f"{digits[:3]}.{digits[3:]}"]
                 )
 
-        # Se tem ponto, tentar mover posição
+        # ✅ CORREÇÃO: Se tem ponto, VALIDAR primeiro se faz sentido antes de gerar alternativas
         elif "." in detected_str:
             parts = detected_str.split(".")
             if len(parts) == 2:
                 left, right = parts
+
+                # ✅ NOVO: Se o valor original parece razoável (entre 0.01 e 10000),
+                # NÃO gerar candidatos alternativos
+                with contextlib.suppress(ValueError):
+                    original_value = float(detected_str)
+                    if 0.01 <= original_value <= 10000:
+                        # Valor original faz sentido, retornar só ele
+                        return [detected_str]
+
+                # Se chegou aqui, valor original é suspeito, gerar alternativas
                 all_digits = left + right
 
                 # Tentar diferentes posições do ponto
@@ -541,11 +582,9 @@ class VisionSystem:
         unique_candidates = []
         for candidate in candidates:
             if candidate not in unique_candidates and candidate:
-                try:
+                with contextlib.suppress(ValueError):
                     float(candidate)  # Validar se é um número válido
                     unique_candidates.append(candidate)
-                except ValueError:
-                    pass
 
         return unique_candidates
 

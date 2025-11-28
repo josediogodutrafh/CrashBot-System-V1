@@ -787,11 +787,11 @@ def _renderizar_aba_gerar_licenca(engine):
                 INSERT INTO licenca (
                     chave, cliente_nome, email_cliente, whatsapp,
                     telegram_chat_id, plano_tipo, payment_id,
-                    dias_validade, data_expiracao, ativa, created_at, hwid
+                    data_expiracao, ativa, created_at, hwid
                 ) VALUES (
                     :chave, :nome, :email, :whatsapp,
                     :telegram, :plano, :pid,
-                    :dias, :data_exp, :ativa, :created_at, :hwid
+                    :data_exp, :ativa, :created_at, :hwid
                 )
             """
             )
