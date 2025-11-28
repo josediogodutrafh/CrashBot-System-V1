@@ -309,14 +309,14 @@ st.markdown(
         text-align: center;
         margin-bottom: 10px;
     }
-    
+
     .hero-subtitle {
         text-align: center;
         font-size: 1.2rem;
         color: #AAA;
         margin-bottom: 30px;
     }
-    
+
     /* Botão de Suporte (WhatsApp) */
     .whatsapp-float {
         position: fixed;
@@ -376,7 +376,7 @@ st.markdown(
         color: #666;
         font-size: 1rem;
     }
-    
+
     /* Botão de Ação */
     div.stButton > button {
         background: linear-gradient(92deg, #00FFA3 0%, #0085FF 100%);
@@ -393,7 +393,7 @@ st.markdown(
         box-shadow: 0 0 15px rgba(0, 255, 163, 0.4);
         color: #000;
     }
-    
+
     /* Desabilitar botão */
     div.stButton > button:disabled {
         background: #333 !important;
@@ -412,7 +412,7 @@ st.markdown(
         margin-bottom: 8px;
         list-style-type: none;
     }
-    
+
     /* Badge "Mais Popular" */
     .badge-popular {
         background: linear-gradient(92deg, #00FFA3 0%, #0085FF 100%);
@@ -424,7 +424,7 @@ st.markdown(
         display: inline-block;
         margin-bottom: 10px;
     }
-    
+
     /* Container de checkout */
     .checkout-container {
         background: #111;
@@ -432,7 +432,7 @@ st.markdown(
         border-radius: 15px;
         border: 1px solid #333;
     }
-    
+
     /* Alert customizado */
     .custom-alert {
         padding: 15px;
@@ -709,10 +709,10 @@ with center:
                     st.markdown(
                         f"""
                         <a href="{checkout_url}" target="_blank" style="
-                            display:block; text-align:center; 
+                            display:block; text-align:center;
                             background: linear-gradient(92deg, #00FFA3 0%, #0085FF 100%);
-                            color: #000; padding: 20px; border-radius: 10px; 
-                            text-decoration: none; font-weight: bold; 
+                            color: #000; padding: 20px; border-radius: 10px;
+                            text-decoration: none; font-weight: bold;
                             font-size: 1.3rem; margin: 20px 0;
                             box-shadow: 0 4px 15px rgba(0, 255, 163, 0.3);">
                             💳 PAGAR AGORA VIA PIX/CARTÃO
@@ -768,9 +768,9 @@ with center:
                     st.markdown(
                         f"""
                         <a href="{whatsapp_link}" target="_blank" style="
-                            display:block; text-align:center; 
-                            background: #25d366; color: white; 
-                            padding: 15px; border-radius: 8px; 
+                            display:block; text-align:center;
+                            background: #25d366; color: white;
+                            padding: 15px; border-radius: 8px;
                             text-decoration: none; font-weight: bold;
                             margin-top: 20px;">
                             💬 FALAR COM SUPORTE
@@ -843,8 +843,8 @@ st.markdown("<br>", unsafe_allow_html=True)
 with st.expander("🤖 Como funciona o CrashBot?"):
     st.markdown(
         """
-        O CrashBot é um software que opera automaticamente em jogos de crash, 
-        utilizando inteligência artificial para identificar padrões e fazer apostas 
+        O CrashBot é um software que opera automaticamente em jogos de crash,
+        utilizando inteligência artificial para identificar padrões e fazer apostas
         estratégicas. Basta instalar, ativar com sua chave e deixar operar.
         """
     )
@@ -852,7 +852,7 @@ with st.expander("🤖 Como funciona o CrashBot?"):
 with st.expander("💳 Quais formas de pagamento são aceitas?"):
     st.markdown(
         """
-        Aceitamos PIX (instantâneo) e Cartão de Crédito através do Mercado Pago. 
+        Aceitamos PIX (instantâneo) e Cartão de Crédito através do Mercado Pago.
         O pagamento é 100% seguro e criptografado.
         """
     )
@@ -860,7 +860,7 @@ with st.expander("💳 Quais formas de pagamento são aceitas?"):
 with st.expander("📧 Quanto tempo leva para receber a chave?"):
     st.markdown(
         """
-        Após a confirmação do pagamento (geralmente instantâneo com PIX), 
+        Após a confirmação do pagamento (geralmente instantâneo com PIX),
         você recebe sua chave de acesso por email em até 5 minutos.
         """
     )
@@ -868,7 +868,7 @@ with st.expander("📧 Quanto tempo leva para receber a chave?"):
 with st.expander("🖥️ Em quantos computadores posso usar?"):
     st.markdown(
         """
-        Cada licença é vinculada a um único computador (HWID). Se precisar trocar 
+        Cada licença é vinculada a um único computador (HWID). Se precisar trocar
         de computador, entre em contato com o suporte para realizar a transferência.
         """
     )
@@ -876,7 +876,7 @@ with st.expander("🖥️ Em quantos computadores posso usar?"):
 with st.expander("🔄 Posso renovar meu plano?"):
     st.markdown(
         """
-        Sim! Quando sua licença estiver próxima do vencimento, você receberá um 
+        Sim! Quando sua licença estiver próxima do vencimento, você receberá um
         aviso e poderá renovar através desta mesma loja.
         """
     )
@@ -884,7 +884,7 @@ with st.expander("🔄 Posso renovar meu plano?"):
 with st.expander("💬 Como funciona o suporte?"):
     st.markdown(
         f"""
-        Nosso suporte está disponível via WhatsApp. Clique no botão flutuante verde 
+        Nosso suporte está disponível via WhatsApp. Clique no botão flutuante verde
         no canto inferior direito da tela ou acesse: {StoreConfig.WHATSAPP_SUPORTE}
         """
     )

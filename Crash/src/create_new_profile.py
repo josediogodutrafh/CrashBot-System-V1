@@ -6,10 +6,10 @@ Script para criar um novo perfil de monitor completo
 Calibra todas as áreas e salva no config.json
 """
 
-import pyautogui
-import time
 import json
 import os
+
+import pyautogui
 from colorama import Fore, init
 
 init(autoreset=True)
@@ -44,27 +44,28 @@ def save_config(config):
         return False
 
 
+def _capturar_canto(nome_canto: str, nome_area: str):
+    """
+    Função auxiliar para capturar a coordenada de um canto.
+    (Resolve o problema de código duplicado apontado pelo Sourcery)
+    """
+    print(
+        f"\nPosicione o mouse no {Fore.YELLOW}{nome_canto}{Fore.RESET} da área {nome_area}."
+    )
+    print("Quando estiver pronto, pressione Enter para capturar a coordenada...")
+    input()
+    pos = pyautogui.position()
+    print(f"{Fore.GREEN}✓ {nome_canto.capitalize()}: x={pos[0]}, y={pos[1]}")
+    return pos
+
+
 def calibrate_area(name):
     """Calibra uma área retangular pedindo as coordenadas dos cantos"""
     print(f"\n{Fore.CYAN}=== CALIBRANDO ÁREA: {name.upper()} ===")
 
-    print(
-        f"\nPosicione o mouse no {Fore.YELLOW}canto superior esquerdo{Fore.RESET} da área {name}."
-    )
-    print("Quando estiver pronto, pressione Enter para capturar a coordenada...")
-    input()
-    top_left = pyautogui.position()
-    print(f"{Fore.GREEN}✓ Canto superior esquerdo: x={top_left[0]}, y={top_left[1]}")
-
-    print(
-        f"\nPosicione o mouse no {Fore.YELLOW}canto inferior direito{Fore.RESET} da área {name}."
-    )
-    print("Quando estiver pronto, pressione Enter para capturar a coordenada...")
-    input()
-    bottom_right = pyautogui.position()
-    print(
-        f"{Fore.GREEN}✓ Canto inferior direito: x={bottom_right[0]}, y={bottom_right[1]}"
-    )
+    # Usa a função auxiliar para evitar duplicação
+    top_left = _capturar_canto("canto superior esquerdo", name)
+    bottom_right = _capturar_canto("canto inferior direito", name)
 
     # Calcular dimensões da área
     x = top_left[0]
@@ -102,172 +103,107 @@ def calibrate_point(name):
     return {"x": point[0], "y": point[1]}
 
 
-def main():
-    # Carregar configuração atual
-    config = load_config()
-    if not config:
-        print(
-            f"{Fore.RED}❌ Não foi possível carregar a configuração. Criando uma nova."
-        )
-        config = {
-            "jogadores": [],
-            "tempo_horas": 5,
-            "max_rodadas": 1800,
-            "meta_lucro_total": 155220,
-            "horario_inicio": "08:00",
-            "profiles": {},
-        }
-
-    print(f"{Fore.CYAN}{'='*60}")
-    print(f"{Fore.CYAN}   CRIAÇÃO DE NOVO PERFIL DE MONITOR")
-    print(f"{Fore.CYAN}{'='*60}")
-
-    # Solicitar nome do novo perfil
+def _get_valid_profile_name(existing_profiles: dict) -> str:
+    """Solicita e valida o nome do perfil."""
     while True:
-        profile_name = input(
-            "\nDigite o nome do novo perfil (ex: 'Monitor Pessoal'): "
-        ).strip()
-        if not profile_name:
-            print(f"{Fore.RED}❌ O nome do perfil não pode estar vazio.")
+        name = input("\nDigite o nome do novo perfil (ex: 'Monitor 1'): ").strip()
+        if not name:
+            print(f"{Fore.RED}❌ Nome inválido.")
             continue
 
-        if profile_name in config.get("profiles", {}):
-            overwrite = input(
-                f"{Fore.YELLOW}⚠️ Perfil '{profile_name}' já existe. Sobrescrever? (s/N): "
-            ).lower()
-            if overwrite != "s":
-                continue
+        if name in existing_profiles and input(...) != "s":
+            continue
+        return name
 
-        break
 
+def _print_instructions():
+    """Imprime instruções iniciais."""
     print(f"\n{Fore.CYAN}{'='*60}")
     print(f"{Fore.YELLOW}PREPARAÇÃO:")
-    print(
-        f"{Fore.WHITE}1. Certifique-se de que a página do jogo está aberta com zoom de 90%"
-    )
-    print(f"{Fore.WHITE}2. Maximize a janela do navegador")
-    print(
-        f"{Fore.WHITE}3. Posicione o jogo para que todos os elementos estejam visíveis"
-    )
+    print("1. Jogo aberto com zoom 90%")
+    print("2. Janela maximizada")
+    print("3. Todos elementos visíveis")
     print(f"{Fore.CYAN}{'='*60}")
+    input("\nPressione Enter para começar...")
 
-    input("\nPressione Enter para começar a calibração...")
 
-    # Calibrar áreas principais
-    print(f"\n{Fore.CYAN}{'='*60}")
-    print(f"{Fore.CYAN}   CALIBRAÇÃO DE ÁREAS PRINCIPAIS")
-    print(f"{Fore.CYAN}{'='*60}")
+def _perform_calibration_sequence() -> dict:
+    """Executa a sequência completa de calibração."""
+    profile = {}
 
-    # Área do multiplicador
-    multiplier_area = calibrate_area("multiplicador central")
-    if not multiplier_area:
+    # 1. Áreas Principais
+    print(f"\n{Fore.CYAN}>> ETAPA 1: ÁREAS PRINCIPAIS")
+    if not (mult := calibrate_area("multiplicador central")):
+        return {}
+    if not (bet := calibrate_area("botão 'Bet 8s'")):
+        return {}
+    if not (bal := calibrate_area("saldo")):
+        return {}
+
+    profile |= {"multiplier_area": mult, "bet_area": bet, "balance_area": bal}
+
+    # 2. Pontos de Clique
+    print(f"\n{Fore.CYAN}>> ETAPA 2: CLIQUES APOSTA 1")
+    profile["bet_value_click_1"] = calibrate_point("campo valor aposta 1")
+    profile["target_click_1"] = calibrate_point("campo alvo aposta 1")
+
+    print(f"\n{Fore.CYAN}>> ETAPA 3: CLIQUES APOSTA 2")
+    profile["bet_value_click_2"] = calibrate_point("campo valor aposta 2")
+    profile["target_click_2"] = calibrate_point("campo alvo aposta 2")
+
+    # 3. Avançado (Opcional)
+    print(f"\n{Fore.CYAN}>> ETAPA 4: AVANÇADO (OCR)")
+    if input("\nCalibrar áreas de OCR para campos? (s/N): ").lower() == "s":
+        profile["bet_value_area_1"] = calibrate_area("OCR valor 1")
+        profile["target_area_1"] = calibrate_area("OCR alvo 1")
+        profile["bet_button_area_1"] = calibrate_area("OCR botão 1")
+
+        profile["bet_value_area_2"] = calibrate_area("OCR valor 2")
+        profile["target_area_2"] = calibrate_area("OCR alvo 2")
+        profile["bet_button_area_2"] = calibrate_area("OCR botão 2")
+    else:
+        # Preenche com None para evitar erros de chave
+        for key in [
+            "bet_value_area_1",
+            "target_area_1",
+            "bet_button_area_1",
+            "bet_value_area_2",
+            "target_area_2",
+            "bet_button_area_2",
+        ]:
+            profile[key] = None
+
+    return profile
+
+
+def main():
+    """Função principal orquestradora."""
+    print(f"{Fore.CYAN}{'='*60}\n   CRIADOR DE PERFIL v2.0\n{'='*60}")
+
+    config = load_config() or {"profiles": {}}
+
+    # 1. Obter Nome
+    profile_name = _get_valid_profile_name(config.get("profiles", {}))
+
+    # 2. Instruções
+    _print_instructions()
+
+    # 3. Executar Calibração
+    new_profile_data = _perform_calibration_sequence()
+
+    if not new_profile_data:
+        print(f"\n{Fore.RED}❌ Calibração cancelada ou falhou.")
         return
 
-    # Área do "Bet 8s"
-    bet_area = calibrate_area("botão 'Bet 8s'")
-    if not bet_area:
-        return
-
-    # Área do saldo
-    balance_area = calibrate_area("saldo")
-    if not balance_area:
-        return
-
-    # Calibrar pontos de clique para apostas
-    print(f"\n{Fore.CYAN}{'='*60}")
-    print(f"{Fore.CYAN}   CALIBRAÇÃO DE PONTOS DE CLIQUE (APOSTA 1)")
-    print(f"{Fore.CYAN}{'='*60}")
-
-    bet_value_click_1 = calibrate_point("campo de valor da aposta 1")
-    target_click_1 = calibrate_point("campo de alvo (multiplicador) da aposta 1")
-
-    print(f"\n{Fore.CYAN}{'='*60}")
-    print(f"{Fore.CYAN}   CALIBRAÇÃO DE PONTOS DE CLIQUE (APOSTA 2)")
-    print(f"{Fore.CYAN}{'='*60}")
-
-    bet_value_click_2 = calibrate_point("campo de valor da aposta 2")
-    target_click_2 = calibrate_point("campo de alvo (multiplicador) da aposta 2")
-
-    # Opção para calibrar áreas avançadas
-    print(f"\n{Fore.CYAN}{'='*60}")
-    print(f"{Fore.CYAN}   CALIBRAÇÃO DE ÁREAS AVANÇADAS (OPCIONAL)")
-    print(f"{Fore.CYAN}{'='*60}")
-
-    calibrate_advanced = (
-        input(
-            "\nDeseja calibrar áreas avançadas para detecção de campos? (s/N): "
-        ).lower()
-        == "s"
-    )
-
-    bet_value_area_1 = None
-    target_area_1 = None
-    bet_value_area_2 = None
-    target_area_2 = None
-    bet_button_area_1 = None
-    bet_button_area_2 = None
-
-    if calibrate_advanced:
-        print(f"\n{Fore.YELLOW}Vamos calibrar as áreas dos campos de entrada e botões:")
-
-        # Áreas da aposta 1
-        bet_value_area_1 = calibrate_area("campo de valor da aposta 1")
-        target_area_1 = calibrate_area("campo de alvo (multiplicador) da aposta 1")
-        bet_button_area_1 = calibrate_area("botão de apostar 1")
-
-        # Áreas da aposta 2
-        bet_value_area_2 = calibrate_area("campo de valor da aposta 2")
-        target_area_2 = calibrate_area("campo de alvo (multiplicador) da aposta 2")
-        bet_button_area_2 = calibrate_area("botão de apostar 2")
-
-    # Criar o perfil
-    profile = {
-        "multiplier_area": multiplier_area,
-        "balance_area": balance_area,
-        "bet_area": bet_area,
-        "bet_value_click_1": bet_value_click_1,
-        "target_click_1": target_click_1,
-        "bet_value_click_2": bet_value_click_2,
-        "target_click_2": target_click_2,
-        "bet_value_area_1": bet_value_area_1,
-        "target_area_1": target_area_1,
-        "bet_value_area_2": bet_value_area_2,
-        "target_area_2": target_area_2,
-        "bet_button_area_1": bet_button_area_1,
-        "bet_button_area_2": bet_button_area_2,
-    }
-
-    # Adicionar perfil à configuração
+    # 4. Salvar
     if "profiles" not in config:
         config["profiles"] = {}
 
-    config["profiles"][profile_name] = profile
+    config["profiles"][profile_name] = new_profile_data
 
-    # Salvar configuração
     if save_config(config):
-        print(f"\n{Fore.GREEN}{'='*60}")
-        print(f"{Fore.GREEN}✅ PERFIL '{profile_name}' CRIADO COM SUCESSO!")
-        print(f"{Fore.GREEN}{'='*60}")
-        print(f"\n{Fore.YELLOW}Áreas calibradas:")
-        print(f"   Multiplicador: {multiplier_area}")
-        print(f"   Saldo: {balance_area}")
-        print(f"   Bet: {bet_area}")
-        print(f"\n{Fore.YELLOW}Pontos de clique:")
-        print(f"   Valor aposta 1: {bet_value_click_1}")
-        print(f"   Alvo aposta 1: {target_click_1}")
-        print(f"   Valor aposta 2: {bet_value_click_2}")
-        print(f"   Alvo aposta 2: {target_click_2}")
-
-        if calibrate_advanced:
-            print(f"\n{Fore.YELLOW}Áreas avançadas:")
-            print(f"   Área valor aposta 1: {bet_value_area_1}")
-            print(f"   Área alvo aposta 1: {target_area_1}")
-            print(f"   Área valor aposta 2: {bet_value_area_2}")
-            print(f"   Área alvo aposta 2: {target_area_2}")
-            print(f"   Área botão aposta 1: {bet_button_area_1}")
-            print(f"   Área botão aposta 2: {bet_button_area_2}")
-    else:
-        print(f"\n{Fore.RED}❌ Falha ao salvar o perfil.")
+        print(f"\n{Fore.GREEN}✅ PERFIL '{profile_name}' CRIADO COM SUCESSO!")
+        print(f"{Fore.YELLOW}Reinicie o bot para usar este perfil.")
 
 
 if __name__ == "__main__":

@@ -40,6 +40,7 @@ from rich.text import Text
 # ==============================================================================
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+
 # ==============================================================================
 # 4. IMPORTS DO SEU PROJETO
 # ==============================================================================
@@ -331,25 +332,81 @@ class BotController:
             except ValueError:
                 self.console.print("Digite um número válido.", style="red")
 
+    def _parse_tempo_horas(self, raw: Any, default: int = 8) -> int:
+        """Normaliza valores vindos de self.config.get('tempo_horas')."""
+        if isinstance(raw, int):
+            return raw
+
+        if isinstance(raw, float):
+            return int(raw)
+
+        if isinstance(raw, str):
+            try:
+                return int(float(raw.strip()))
+            except (TypeError, ValueError):
+                return default
+
+        # Dict - busca em chaves conhecidas recursivamente
+        if isinstance(raw, dict):
+            for key in ("value", "hours", "tempo", "tempo_horas"):
+                if key in raw:
+                    return self._parse_tempo_horas(raw[key], default)
+
+        # Qualquer outro tipo - retorna default
+        return default
+
     def setup_screen_areas(self):
-        """Configura áreas da tela baseado no perfil selecionado."""
+        """Configura áreas da tela baseado no perfil selecionado. Se for a 1ª vez, força a criação."""
+
+        # 1. Se config estiver vazia (1ª vez ou erro de leitura), inicializa como dicionário vazio
         if not self.config:
-            self.console.print("❌ Config não carregado!", style="red")
-            return ""
+            self.config = {"profiles": {}}
 
         profiles = self.config.get("profiles", {})
+
+        # 2. Se não existem perfis salvos, FORÇA o assistente de calibração
         if not profiles:
-            self.console.print("❌ Nenhum perfil encontrado no config!", style="red")
-            return ""
+            self.console.print(
+                "\n[yellow]⚠️ Nenhum perfil encontrado. Iniciando assistente de configuração...[/yellow]"
+            )
+            time.sleep(2)
 
-        profile_name, profile_data = self.select_profile()
+            # Chama o calibrador (que já existe no seu código)
+            name, data = self.run_calibration_wizard()
 
+            if name and data:
+                # Recarrega o config do disco para garantir que pegamos o que foi salvo corretamente
+                self.config = self.load_config()
+                # Define as variáveis para continuar o fluxo com o novo perfil
+                profile_name = name
+                profile_data = data
+            else:
+                self.console.print(
+                    "❌ Configuração cancelada. O bot não pode rodar sem perfil.",
+                    style="red",
+                )
+                # Retorna string vazia para indicar falha, o chamador deve tratar isso
+                return ""
+        else:
+            # Se já tem perfil, deixa o usuário escolher normalmente
+            result = self.select_profile()
+            if not result:
+                return ""
+            profile_name, profile_data = result
+
+        # 3. Carrega o restante das configurações gerais (ou usa padrões)
         self.players = self.config.get("jogadores", [])
-        self.max_time = self.config.get("tempo_horas", 8) * 3600
-        self.max_rounds = self.config.get("max_rodadas", 1000)
-        self.target_profit = self.config.get("meta_lucro_total", 1000)
-        self.start_hour = self.config.get("horario_inicio", 9)
 
+        # CORREÇÃO AQUI: Usa a função auxiliar para garantir que é um inteiro
+        raw_tempo = self.config.get("tempo_horas", 8)
+        tempo_horas = self._parse_tempo_horas(raw_tempo, 8)
+        self.max_time = tempo_horas * 3600
+
+        self.max_rounds = int(self.config.get("max_rodadas", 1000))  # type: ignore
+        self.target_profit = float(self.config.get("meta_lucro_total", 1000))  # type: ignore
+        self.start_hour = int(self.config.get("horario_inicio", 9))  # type: ignore
+
+        # 4. Mapeia as áreas do perfil escolhido para o objeto self.screen_areas
         self.screen_areas = {
             "balance": profile_data.get("balance_area"),
             "multiplier": profile_data.get("multiplier_area"),
@@ -366,29 +423,28 @@ class BotController:
             "target_click_2": profile_data.get("target_click_2"),
         }
 
-        self.console.print(f"✅ Perfil '{profile_name}' carregado", style="green")
+        self.console.print(
+            f"✅ Perfil '{profile_name}' carregado com sucesso!", style="green"
+        )
 
+        # 5. Validação de áreas críticas para avisar o usuário se algo faltou
         critical_areas = ["balance", "multiplier", "bet_detection"]
         if missing_areas := [
             area for area in critical_areas if not self.screen_areas.get(area)
         ]:
             self.console.print(
-                f"⚠️ Áreas não configuradas: {missing_areas}", style="yellow"
+                f"⚠️ Áreas críticas não configuradas: {missing_areas}", style="yellow"
             )
 
+        # 6. Verifica se pode apostar (se as áreas de aposta estão configuradas)
         bet_areas = ["bet_value_1", "target_1", "bet_button_1"]
-        configured_bet_areas = sum(
-            bool(self.screen_areas.get(area)) for area in bet_areas
-        )
-        self.console.print(
-            f"📍 Áreas de aposta configuradas: {configured_bet_areas}/{len(bet_areas)}",
-            style="cyan",
-        )
-        if configured_bet_areas == len(bet_areas):
+        configured_bet = sum(bool(self.screen_areas.get(area)) for area in bet_areas)
+
+        if configured_bet == len(bet_areas):
             self.console.print("✅ Apostas automáticas: HABILITADAS", style="green")
         else:
             self.console.print(
-                "⚠️ Apostas automáticas: LIMITADAS (algumas áreas não calibradas)",
+                "⚠️ Apostas automáticas: DESATIVADAS (Calibração incompleta)",
                 style="yellow",
             )
 
@@ -1552,33 +1608,63 @@ class BotController:
         self._set_initial_balance(balance_to_set)
 
     def _get_license_key(self) -> Optional[str]:
-        """Lê a chave do arquivo local."""
-        filename = "license_key.txt"
+        """
+        Gerencia o login do usuário.
+        1. Tenta ler licença salva.
+        2. Se não tiver, exibe tela de login e pede a chave.
+        3. Salva a nova chave para o futuro.
+        """
+        # Garante que o arquivo fique ao lado do .exe ou script
+        filename = os.path.join(BASE_DIR, "license_key.txt")
 
-        if not os.path.exists(filename):
+        # 1. TENTATIVA DE LOGIN AUTOMÁTICO
+        if os.path.exists(filename):
+            try:
+                with open(filename, "r") as f:
+                    content = f.read().strip()
+                    if content and len(content) > 10:  # Validação básica
+                        return content
+            except Exception as e:
+                self.logger.error(f"Erro ao ler arquivo de licença: {e}")
+
+        # 2. TELA DE LOGIN (PRIMEIRO ACESSO)
+        # Se chegou aqui, é porque não tem chave salva.
+        self.console.clear()
+
+        login_panel = Panel(
+            Text.assemble(
+                ("🔐 SISTEMA DE AUTENTICAÇÃO\n\n", "bold white"),
+                ("Este software requer uma licença ativa.\n", "dim white"),
+                ("Digite ou cole sua chave abaixo para liberar o acesso.", "yellow"),
+            ),
+            title="🔒 CrashBot Security",
+            border_style="cyan",
+            padding=(1, 5),
+        )
+        self.console.print(login_panel)
+        self.console.print()
+
+        # Input interativo
+        key_input = self.console.input(
+            "[bold green]🔑 CHAVE DE LICENÇA: [/bold green]"
+        ).strip()
+
+        if key_input:
+            # 3. SALVAR CREDENCIAIS
             try:
                 with open(filename, "w") as f:
-                    f.write("COLE_SUA_CHAVE_AQUI")
+                    f.write(key_input)
 
-                self.console.print(
-                    f"⚠️ Arquivo de licença criado: [bold yellow]{filename}[/bold yellow]",
-                    style="yellow",
-                )
-                self.console.print(
-                    "👉 Por favor, cole sua chave nesse arquivo e reinicie o bot.",
-                    style="yellow",
-                )
+                self.console.print()
+                self.console.print("✅ Licença salva com sucesso!", style="green")
+                time.sleep(1.5)  # Dá um tempinho pro usuário ler
+                return key_input
             except Exception as e:
-                self.logger.error(f"Falha ao criar arquivo de licença: {e}")
-
-            return None
-
-        try:
-            with open(filename, "r") as f:
-                key = f.read().strip()
-                return key if key and "COLE_SUA_CHAVE_AQUI" not in key else None
-        except Exception as e:
-            self.logger.error(f"Erro ao ler chave de licença: {e}")
+                self.console.print(
+                    f"❌ Erro ao salvar licença no disco: {e}", style="red"
+                )
+                return None
+        else:
             return None
 
     def _validate_license(self) -> bool:

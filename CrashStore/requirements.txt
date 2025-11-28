@@ -1,0 +1,21 @@
+# CrashBot Admin Center V2.0 - Dependências
+
+# Framework Web
+streamlit>=1.29.0
+
+# Processamento de Dados
+pandas>=2.0.0
+
+# Banco de Dados
+sqlalchemy>=2.0.0
+psycopg2-binary>=2.9.9
+
+# Opcional: Para análises adicionais
+numpy>=1.24.0
+plotly>=5.18.0  # Para gráficos interativos avançados
+openpyxl>=3.1.0  # Para exportação Excel
+
+# Desenvolvimento (opcional)
+pytest>=7.4.0
+black>=23.0.0
+flake8>=6.1.0

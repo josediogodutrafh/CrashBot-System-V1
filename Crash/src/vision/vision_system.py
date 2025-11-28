@@ -12,6 +12,7 @@ import contextlib
 import json
 import logging
 import os
+import sys
 from collections import deque
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -33,122 +34,113 @@ except ImportError:
 
 
 class VisionSystem:
-    """Sistema de visão que integra com estrutura existente - OTIMIZADO"""
+    """Sistema de visão otimizado para PyInstaller (--onefile)."""
 
     def __init__(self, config_path: str):
-        # --- 1. CRIA O LOGGER PRIMEIRO (CORREÇÃO CRÍTICA) ---
-        # Isso evita o erro 'object has no attribute logger'
         self.logger = logging.getLogger(__name__)
 
-        # --- 2. ENCONTRA O TESSERACT MANUALMENTE (INFALÍVEL) ---
-        # Calcula o caminho voltando pastas: .../src/vision -> .../src -> .../Crash (Raiz)
-        vision_dir = os.path.dirname(os.path.abspath(__file__))
-        src_dir = os.path.dirname(vision_dir)
-        root_dir = os.path.dirname(src_dir)
+        # --- 1. RESOLUÇÃO DE CAMINHOS (DEV vs EXE) ---
+        # Esta função mágica encontra o arquivo onde quer que ele esteja (Pasta Temp ou Disco)
+        self.tesseract_cmd_path = self._get_resource_path(
+            os.path.join("Tesseract-OCR", "tesseract.exe")
+        )
 
-        # Caminho exato onde a pasta Tesseract-OCR deve estar
-        tesseract_path = os.path.join(root_dir, "Tesseract-OCR", "tesseract.exe")
+        print(f"🔎 VisionSystem: Tesseract path calculado: {self.tesseract_cmd_path}")
 
-        # Debug no terminal para você conferir
-        print(f"🔎 VisionSystem procurando Tesseract em: {tesseract_path}")
-
-        if os.path.exists(tesseract_path):
-            pytesseract.pytesseract.tesseract_cmd = tesseract_path
-            self.logger.info("✅ Tesseract portátil encontrado e configurado.")
+        # Configura o Tesseract
+        if os.path.exists(self.tesseract_cmd_path):
+            pytesseract.pytesseract.tesseract_cmd = self.tesseract_cmd_path
+            self.logger.info("✅ Tesseract interno encontrado e configurado.")
         else:
-            self.logger.warning(f"❌ Tesseract NÃO encontrado em: {tesseract_path}")
-            self.logger.warning("Tentando usar variável de ambiente do sistema...")
-            # Tenta usar o do sistema se o portátil falhar
+            self.logger.warning(
+                f"❌ Tesseract não encontrado no pacote: {self.tesseract_cmd_path}"
+            )
+            # Fallback para variável de ambiente
             pytesseract.pytesseract.tesseract_cmd = "tesseract"
 
-        # --- 3. CONFIGURAÇÃO E CAMINHOS (Código Original) ---
+        # --- 2. CONFIGURAÇÃO ---
         self.config_path = config_path
         self.config = self.load_config()
 
-        # --- LÓGICA HÍBRIDA DE CAMINHOS PARA TEMPLATES ---
-        # Tenta encontrar a pasta de templates em locais comuns
-        possible_paths = [
-            os.path.join(vision_dir, "templates", "template_saldo"),
-            os.path.join(root_dir, "src", "vision", "templates", "template_saldo"),
-            os.path.join(root_dir, "templates", "template_saldo"),
-        ]
-
-        # Seleciona o primeiro caminho que existe
-        self.template_path = next(
-            (p for p in possible_paths if os.path.exists(p)), possible_paths[0]
+        # --- 3. TEMPLATES (Busca dentro do pacote também) ---
+        # Nota: Ajuste o caminho "src/vision/templates" conforme sua estrutura de add-data
+        template_base = self._get_resource_path(
+            os.path.join("src", "vision", "templates", "template_saldo")
         )
 
-        # --- 4. PRÉ-CARREGAMENTO DOS TEMPLATES ---
+        self.template_path = template_base
         self.template_cache = self.load_templates(str(self.template_path))
 
-        # AQUI TERMINA O SNIPPET (A próxima função é _load_multiplier_templates)
-        # O resto das inicializações (EasyOCR, etc) será chamado logo abaixo se você mantiver
-
-        # ATENÇÃO: Certifique-se de manter a chamada para carregar os templates de multiplicador!
+        # Carrega multiplicadores
         self.multiplier_templates = self._load_multiplier_templates()
 
-        # --- 5. INICIALIZAÇÃO DO OCR DE FALLBACK ---
+        # --- 4. EASYOCR ---
         self.easyocr_reader = None
         if EASYOCR_AVAILABLE:
             try:
+                # EasyOCR precisa de modelos na pasta do usuário, ele é mais chato de empacotar
+                # Por padrão ele baixa para ~/.EasyOCR. Vamos manter padrão.
                 self.easyocr_reader = easyocr.Reader(["pt", "en"], gpu=False)
                 self.logger.info("EasyOCR inicializado.")
             except Exception as e:
-                self.logger.error(f"Erro ao inicializar EasyOCR: {e}")
-                self.easyocr_reader = None
+                self.logger.error(f"Erro EasyOCR: {e}")
 
         self.value_history = deque(maxlen=5)
         self.balance_corrections = self.load_balance_corrections()
+        print("✅ VisionSystem inicializado (Modo OneFile)")
 
-        print("✅ VisionSystem inicializado")
+    def _get_resource_path(self, relative_path: str) -> str:
+        """
+        Retorna o caminho absoluto do recurso.
+        Funciona tanto em desenvolvimento quanto dentro do .exe.
+        """
+        # Verifica se está congelado (exe) e se tem o atributo mágico
+        if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+            # Usa getattr para enganar o Pylance e evitar o erro sublinhado
+            base_path = getattr(sys, "_MEIPASS")
+            return os.path.join(base_path, relative_path)
+
+        # Rodando como script: busca na pasta do projeto
+        # .. = src/vision -> .. = src -> .. = Crash (Raiz)
+        base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+        return os.path.join(base_path, relative_path)
 
     def _load_multiplier_templates(self) -> dict:
-        """Carrega os templates de dígitos do multiplicador uma única vez."""
+        """Carrega templates do multiplicador usando o path inteligente."""
         templates = {}
-
-        # --- LÓGICA HÍBRIDA PARA MULTIPLICADOR ---
-        possible_paths = [
-            # Opção 1: Estrutura de Desenvolvimento
-            os.path.join(BASE_DIR, "src", "vision", "templates", "templates_debug"),
-            # Opção 2: Estrutura Alternativa
-            os.path.join(BASE_DIR, "vision", "templates", "templates_debug"),
-            # Opção 3: Estrutura de Distribuição (.exe)
-            os.path.join(BASE_DIR, "templates", "templates_debug"),
-        ]
-
-        # Seleciona o caminho correto
-        template_dir_path = next(
-            (p for p in possible_paths if os.path.exists(p)), possible_paths[0]
-        )
-        template_dir = Path(template_dir_path)
+        # Caminho relativo a partir da raiz do projeto
+        rel_path = os.path.join("src", "vision", "templates", "templates_debug")
+        template_dir = Path(self._get_resource_path(rel_path))
 
         if not template_dir.is_dir():
             self.logger.error(
-                f"Diretório de templates de multiplicador não encontrado em nenhum local: {template_dir}"
+                f"Templates Multiplicador não encontrados em: {template_dir}"
             )
             return {}
 
-        # Carrega os dígitos de 0 a 9
+        # Carrega 0-9 e ponto
         for d in range(10):
             path = template_dir / f"{d}.png"
             if path.exists():
                 templates[str(d)] = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
 
-        # Carrega o ponto
         ponto_path = template_dir / "ponto.png"
         if ponto_path.exists():
             templates["."] = cv2.imread(str(ponto_path), cv2.IMREAD_GRAYSCALE)
 
-        self.logger.info(f"{len(templates)} templates de multiplicador carregados.")
         return templates
 
     def load_config(self) -> Dict:
-        """Carrega config.json existente"""
+        """Carrega config.json existente de forma segura."""
         try:
-            with open(self.config_path, "r") as f:
-                return json.load(f)
-        except Exception as e:
-            print(f"❌ Erro ao carregar {self.config_path}: {e}")
+            # Verifica se arquivo existe ANTES de tentar abrir
+            if os.path.exists(self.config_path):
+                with open(self.config_path, "r") as f:
+                    return json.load(f)
+            # Se não existe, retorna vazio silenciosamente (o bot_controller vai criar depois)
+            return {}
+        except Exception:
+            # Erro silenciado para não poluir o terminal na primeira execução
             return {}
 
     def load_balance_corrections(self) -> Dict:

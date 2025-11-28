@@ -452,7 +452,7 @@ def renderizar_visao_macro(df_logs: pd.DataFrame, df_licencas: pd.DataFrame):
 
         # Agrupa por hora e soma o lucro
         df_chart = df_logs.copy()
-        chart_data = df_chart.set_index("timestamp").resample("H")["lucro"].sum()
+        chart_data = df_chart.set_index("timestamp").resample("h")["lucro"].sum()
 
         st.area_chart(chart_data, color="#00FFA3")
     else:
