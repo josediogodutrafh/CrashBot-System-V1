@@ -1,8 +1,8 @@
-﻿"use client";
+﻿'use client';
 
-import { useEffect, useState } from "react";
+import { useEffect, useState } from 'react';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 interface Licenca {
   id: number;
@@ -22,17 +22,29 @@ interface Licenca {
 export default function AdminLicencas() {
   const [licencas, setLicencas] = useState<Licenca[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<"all" | "active" | "expired">("all");
-  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState<'all' | 'active' | 'expired'>('all');
+  const [message, setMessage] = useState<{
+    type: 'success' | 'error';
+    text: string;
+  } | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [showModal, setShowModal] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [formData, setFormData] = useState({
+    cliente_nome: '',
+    email_cliente: '',
+    whatsapp: '',
+    plano_tipo: 'mensal',
+    dias_validade: 30,
+  });
 
   useEffect(() => {
     fetchLicencas();
   }, []);
 
   const fetchLicencas = async () => {
-    const token = localStorage.getItem("token");
+    const token = localStorage.getItem('token');
     if (!token) return;
 
     try {
@@ -45,42 +57,93 @@ export default function AdminLicencas() {
         setLicencas(data);
       }
     } catch (error) {
-      console.error("Erro ao buscar licencas:", error);
+      console.error('Erro ao buscar licencas:', error);
     } finally {
       setLoading(false);
     }
   };
 
   const handleToggleAtiva = async (licenca: Licenca) => {
-    const token = localStorage.getItem("token");
+    const token = localStorage.getItem('token');
     try {
-      const response = await fetch(`${API_URL}/api/v1/licencas/${licenca.id}/toggle`, {
-        method: "PATCH",
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await fetch(
+        `${API_URL}/api/v1/licencas/${licenca.id}/toggle`,
+        {
+          method: 'PATCH',
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
       if (response.ok) {
         fetchLicencas();
-        setMessage({ type: "success", text: `Licenca ${licenca.ativa ? "desativada" : "ativada"} com sucesso` });
+        setMessage({
+          type: 'success',
+          text: `Licenca ${
+            licenca.ativa ? 'desativada' : 'ativada'
+          } com sucesso`,
+        });
       }
     } catch (error) {
-      setMessage({ type: "error", text: "Erro ao atualizar licenca" });
+      setMessage({ type: 'error', text: 'Erro ao atualizar licenca' });
     }
   };
 
   const handleResetHWID = async (licenca: Licenca) => {
     if (!confirm(`Resetar HWID da licenca ${licenca.chave}?`)) return;
-    const token = localStorage.getItem("token");
+    const token = localStorage.getItem('token');
     try {
-      const response = await fetch(`${API_URL}/api/v1/licencas/${licenca.id}/reset-hwid`, {
-        method: "PATCH",
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await fetch(
+        `${API_URL}/api/v1/licencas/${licenca.id}/reset-hwid`,
+        {
+          method: 'PATCH',
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
       if (response.ok) {
         fetchLicencas();
-        setMessage({ type: "success", text: "HWID resetado com sucesso" });
+        setMessage({ type: 'success', text: 'HWID resetado com sucesso' });
       }
     } catch (error) {
-      setMessage({ type: "error", text: "Erro ao resetar HWID" });
+      setMessage({ type: 'error', text: 'Erro ao resetar HWID' });
+    }
+  };
+
+  const handleCriarLicenca = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    const token = localStorage.getItem('token');
+
+    try {
+      const response = await fetch(`${API_URL}/api/v1/licencas`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(formData),
+      });
+
+      if (response.ok) {
+        setShowModal(false);
+        setFormData({
+          cliente_nome: '',
+          email_cliente: '',
+          whatsapp: '',
+          plano_tipo: 'mensal',
+          dias_validade: 30,
+        });
+        fetchLicencas();
+        setMessage({ type: 'success', text: 'Licenca criada com sucesso!' });
+      } else {
+        const error = await response.json();
+        setMessage({
+          type: 'error',
+          text: error.detail || 'Erro ao criar licenca',
+        });
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Erro ao criar licenca' });
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -91,18 +154,24 @@ export default function AdminLicencas() {
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString("pt-BR", {
-      day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit",
+    return new Date(dateString).toLocaleDateString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
     });
   };
 
   const filteredLicencas = licencas.filter((l) => {
-    const matchSearch = l.cliente_nome?.toLowerCase().includes(search.toLowerCase()) ||
+    const matchSearch =
+      l.cliente_nome?.toLowerCase().includes(search.toLowerCase()) ||
       l.email_cliente?.toLowerCase().includes(search.toLowerCase()) ||
       l.chave.toLowerCase().includes(search.toLowerCase());
-    const matchFilter = filter === "all" ||
-      (filter === "active" && l.ativa && !l.esta_expirada) ||
-      (filter === "expired" && l.esta_expirada);
+    const matchFilter =
+      filter === 'all' ||
+      (filter === 'active' && l.ativa && !l.esta_expirada) ||
+      (filter === 'expired' && l.esta_expirada);
     return matchSearch && matchFilter;
   });
 
@@ -119,20 +188,57 @@ export default function AdminLicencas() {
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-3xl font-bold text-white mb-2">Licencas</h1>
-          <p className="text-gray-400">Gerenciar todas as licencas do sistema</p>
+          <p className="text-gray-400">
+            Gerenciar todas as licencas do sistema
+          </p>
         </div>
+        <button
+          onClick={() => setShowModal(true)}
+          className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl transition-colors"
+        >
+          <svg
+            className="w-5 h-5"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M12 4v16m8-8H4"
+            />
+          </svg>
+          Nova Licenca
+        </button>
       </div>
 
       {message && (
-        <div className={`mb-6 p-4 rounded-xl border ${message.type === "success" ? "bg-green-500/10 border-green-500/30 text-green-400" : "bg-red-500/10 border-red-500/30 text-red-400"}`}>
+        <div
+          className={`mb-6 p-4 rounded-xl border ${
+            message.type === 'success'
+              ? 'bg-green-500/10 border-green-500/30 text-green-400'
+              : 'bg-red-500/10 border-red-500/30 text-red-400'
+          }`}
+        >
           {message.text}
         </div>
       )}
 
       <div className="flex flex-col md:flex-row gap-4 mb-6">
         <div className="flex-1 relative">
-          <svg className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          <svg
+            className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+            />
           </svg>
           <input
             type="text"
@@ -143,11 +249,19 @@ export default function AdminLicencas() {
           />
         </div>
         <div className="flex gap-2">
-          {[{ value: "all", label: "Todas" }, { value: "active", label: "Ativas" }, { value: "expired", label: "Expiradas" }].map((option) => (
+          {[
+            { value: 'all', label: 'Todas' },
+            { value: 'active', label: 'Ativas' },
+            { value: 'expired', label: 'Expiradas' },
+          ].map((option) => (
             <button
               key={option.value}
               onClick={() => setFilter(option.value as typeof filter)}
-              className={`px-4 py-3 rounded-xl font-medium transition-all ${filter === option.value ? "bg-purple-600 text-white" : "bg-[#12121a] text-gray-400 border border-purple-900/30 hover:border-purple-500/50"}`}
+              className={`px-4 py-3 rounded-xl font-medium transition-all ${
+                filter === option.value
+                  ? 'bg-purple-600 text-white'
+                  : 'bg-[#12121a] text-gray-400 border border-purple-900/30 hover:border-purple-500/50'
+              }`}
             >
               {option.label}
             </button>
@@ -160,77 +274,176 @@ export default function AdminLicencas() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-purple-900/30">
-                <th className="text-left p-4 text-gray-400 font-medium">Cliente</th>
-                <th className="text-left p-4 text-gray-400 font-medium">Chave</th>
-                <th className="text-left p-4 text-gray-400 font-medium">Plano</th>
-                <th className="text-left p-4 text-gray-400 font-medium">Status</th>
-                <th className="text-left p-4 text-gray-400 font-medium">Expira em</th>
-                <th className="text-left p-4 text-gray-400 font-medium">HWID</th>
-                <th className="text-right p-4 text-gray-400 font-medium">Acoes</th>
+                <th className="text-left p-4 text-gray-400 font-medium">
+                  Cliente
+                </th>
+                <th className="text-left p-4 text-gray-400 font-medium">
+                  Chave
+                </th>
+                <th className="text-left p-4 text-gray-400 font-medium">
+                  Plano
+                </th>
+                <th className="text-left p-4 text-gray-400 font-medium">
+                  Status
+                </th>
+                <th className="text-left p-4 text-gray-400 font-medium">
+                  Expira em
+                </th>
+                <th className="text-left p-4 text-gray-400 font-medium">
+                  HWID
+                </th>
+                <th className="text-right p-4 text-gray-400 font-medium">
+                  Acoes
+                </th>
               </tr>
             </thead>
             <tbody>
               {filteredLicencas.map((licenca) => (
-                <tr key={licenca.id} className="border-b border-purple-900/20 hover:bg-white/5 transition-colors">
+                <tr
+                  key={licenca.id}
+                  className="border-b border-purple-900/20 hover:bg-white/5 transition-colors"
+                >
                   <td className="p-4">
                     <div>
-                      <p className="text-white font-medium">{licenca.cliente_nome}</p>
-                      <p className="text-sm text-gray-500">{licenca.email_cliente}</p>
+                      <p className="text-white font-medium">
+                        {licenca.cliente_nome}
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        {licenca.email_cliente}
+                      </p>
                     </div>
                   </td>
                   <td className="p-4">
                     <div className="flex items-center gap-2">
-                      <code className="text-purple-400 font-mono text-sm">{licenca.chave}</code>
-                      <button onClick={() => copyToClipboard(licenca.chave)} className="text-gray-500 hover:text-purple-400 transition-colors" title="Copiar chave">
+                      <code className="text-purple-400 font-mono text-sm">
+                        {licenca.chave}
+                      </code>
+                      <button
+                        onClick={() => copyToClipboard(licenca.chave)}
+                        className="text-gray-500 hover:text-purple-400 transition-colors"
+                        title="Copiar chave"
+                      >
                         {copiedKey === licenca.chave ? (
-                          <svg className="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          <svg
+                            className="w-4 h-4 text-green-400"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M5 13l4 4L19 7"
+                            />
                           </svg>
                         ) : (
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                          <svg
+                            className="w-4 h-4"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                            />
                           </svg>
                         )}
                       </button>
                     </div>
                   </td>
                   <td className="p-4">
-                    <span className="px-2 py-1 bg-purple-500/20 text-purple-400 rounded-full text-xs font-medium">{licenca.plano_tipo}</span>
+                    <span className="px-2 py-1 bg-purple-500/20 text-purple-400 rounded-full text-xs font-medium">
+                      {licenca.plano_tipo}
+                    </span>
                   </td>
                   <td className="p-4">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${licenca.esta_expirada ? "bg-red-500/20 text-red-400" : licenca.ativa ? "bg-green-500/20 text-green-400" : "bg-gray-500/20 text-gray-400"}`}>
-                      {licenca.esta_expirada ? "Expirada" : licenca.ativa ? "Ativa" : "Desativada"}
+                    <span
+                      className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        licenca.esta_expirada
+                          ? 'bg-red-500/20 text-red-400'
+                          : licenca.ativa
+                          ? 'bg-green-500/20 text-green-400'
+                          : 'bg-gray-500/20 text-gray-400'
+                      }`}
+                    >
+                      {licenca.esta_expirada
+                        ? 'Expirada'
+                        : licenca.ativa
+                        ? 'Ativa'
+                        : 'Desativada'}
                     </span>
                   </td>
                   <td className="p-4">
                     <div>
-                      <p className="text-white">{formatDate(licenca.data_expiracao)}</p>
-                      <p className={`text-sm ${licenca.dias_restantes <= 7 ? "text-red-400" : "text-gray-500"}`}>
-                        {licenca.dias_restantes > 0 ? `${licenca.dias_restantes} dias` : "Expirado"}
+                      <p className="text-white">
+                        {formatDate(licenca.data_expiracao)}
+                      </p>
+                      <p
+                        className={`text-sm ${
+                          licenca.dias_restantes <= 7
+                            ? 'text-red-400'
+                            : 'text-gray-500'
+                        }`}
+                      >
+                        {licenca.dias_restantes > 0
+                          ? `${licenca.dias_restantes} dias`
+                          : 'Expirado'}
                       </p>
                     </div>
                   </td>
                   <td className="p-4">
                     {licenca.hwid ? (
-                      <code className="text-xs text-gray-500 font-mono">{licenca.hwid.substring(0, 12)}...</code>
+                      <code className="text-xs text-gray-500 font-mono">
+                        {licenca.hwid.substring(0, 12)}...
+                      </code>
                     ) : (
-                      <span className="text-gray-600 text-sm">Nao vinculado</span>
+                      <span className="text-gray-600 text-sm">
+                        Nao vinculado
+                      </span>
                     )}
                   </td>
                   <td className="p-4">
                     <div className="flex items-center justify-end gap-2">
                       <button
                         onClick={() => handleToggleAtiva(licenca)}
-                        className={`p-2 rounded-lg transition-colors ${licenca.ativa ? "text-red-400 hover:bg-red-500/10" : "text-green-400 hover:bg-green-500/10"}`}
-                        title={licenca.ativa ? "Desativar" : "Ativar"}
+                        className={`p-2 rounded-lg transition-colors ${
+                          licenca.ativa
+                            ? 'text-red-400 hover:bg-red-500/10'
+                            : 'text-green-400 hover:bg-green-500/10'
+                        }`}
+                        title={licenca.ativa ? 'Desativar' : 'Ativar'}
                       >
                         {licenca.ativa ? (
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                          <svg
+                            className="w-5 h-5"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"
+                            />
                           </svg>
                         ) : (
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          <svg
+                            className="w-5 h-5"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                            />
                           </svg>
                         )}
                       </button>
@@ -240,8 +453,18 @@ export default function AdminLicencas() {
                           className="p-2 text-yellow-400 hover:bg-yellow-500/10 rounded-lg transition-colors"
                           title="Resetar HWID"
                         >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                          <svg
+                            className="w-5 h-5"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                            />
                           </svg>
                         </button>
                       )}
@@ -258,6 +481,119 @@ export default function AdminLicencas() {
           </div>
         )}
       </div>
+      {showModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-[#12121a] rounded-2xl border border-purple-900/30 w-full max-w-lg">
+            <div className="p-6 border-b border-purple-900/30 flex items-center justify-between">
+              <h2 className="text-xl font-bold text-white">Nova Licenca</h2>
+              <button
+                onClick={() => setShowModal(false)}
+                className="text-gray-400 hover:text-white"
+              >
+                X
+              </button>
+            </div>
+            <form onSubmit={handleCriarLicenca} className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm text-gray-400 mb-2">
+                  Nome do Cliente *
+                </label>
+                <input
+                  type="text"
+                  value={formData.cliente_nome}
+                  onChange={(e) =>
+                    setFormData({ ...formData, cliente_nome: e.target.value })
+                  }
+                  required
+                  className="w-full px-4 py-3 bg-[#0a0a0f] border border-purple-900/30 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-purple-500/50"
+                  placeholder="Nome completo"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-400 mb-2">
+                  Email *
+                </label>
+                <input
+                  type="email"
+                  value={formData.email_cliente}
+                  onChange={(e) =>
+                    setFormData({ ...formData, email_cliente: e.target.value })
+                  }
+                  required
+                  className="w-full px-4 py-3 bg-[#0a0a0f] border border-purple-900/30 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-purple-500/50"
+                  placeholder="email@exemplo.com"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-400 mb-2">
+                  WhatsApp
+                </label>
+                <input
+                  type="text"
+                  value={formData.whatsapp}
+                  onChange={(e) =>
+                    setFormData({ ...formData, whatsapp: e.target.value })
+                  }
+                  className="w-full px-4 py-3 bg-[#0a0a0f] border border-purple-900/30 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-purple-500/50"
+                  placeholder="11999999999"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm text-gray-400 mb-2">
+                    Plano
+                  </label>
+                  <select
+                    value={formData.plano_tipo}
+                    onChange={(e) =>
+                      setFormData({ ...formData, plano_tipo: e.target.value })
+                    }
+                    className="w-full px-4 py-3 bg-[#0a0a0f] border border-purple-900/30 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
+                  >
+                    <option value="semanal">Semanal</option>
+                    <option value="mensal">Mensal</option>
+                    <option value="trimestral">Trimestral</option>
+                    <option value="vitalicio">Vitalicio</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-2">
+                    Dias de Validade
+                  </label>
+                  <input
+                    type="number"
+                    value={formData.dias_validade}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        dias_validade: parseInt(e.target.value),
+                      })
+                    }
+                    min="1"
+                    className="w-full px-4 py-3 bg-[#0a0a0f] border border-purple-900/30 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
+                  />
+                </div>
+              </div>
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowModal(false)}
+                  className="flex-1 px-4 py-3 text-gray-400 hover:text-white border border-purple-900/30 rounded-xl transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="flex-1 px-4 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-xl transition-colors disabled:opacity-50"
+                >
+                  {saving ? 'Criando...' : 'Criar Licenca'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

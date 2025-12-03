@@ -3,7 +3,9 @@ Router: Licenças
 Endpoints para validação de licenças e telemetria do bot.
 """
 
-from datetime import datetime, timezone
+import uuid
+from datetime import datetime, timedelta, timezone
+from typing import Optional
 
 from app.database import get_db
 from app.dependencies import get_current_admin
@@ -15,6 +17,7 @@ from app.schemas.licenca import (
     ValidarLicencaResponse,
 )
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -33,15 +36,6 @@ async def validar_licenca(
 ):
     """
     Valida uma licença.
-
-    Verifica:
-    - Se a licença existe
-    - Se está ativa
-    - Se não expirou
-    - Se o HWID está correto (ou atribui pela primeira vez)
-
-    Returns:
-        ValidarLicencaResponse: Resultado da validação
     """
     # Buscar licença por chave
     result = await db.execute(select(Licenca).where(Licenca.chave == payload.chave))
@@ -54,12 +48,14 @@ async def validar_licenca(
             detail="Licença não encontrada",
         )
 
-    # Licença desativada
-    if not licenca.ativa:
+    # CORREÇÃO 1: Cast explícito para bool para satisfazer o Pylance (opcional se rodar ok)
+    # Mas o erro principal aqui era a falta de 'dias_restantes'
+    if not bool(licenca.ativa):
         return ValidarLicencaResponse(
             sucesso=False,
             mensagem="Licença desativada",
             ativa=False,
+            dias_restantes=0,  # <--- ADICIONADO: Campo obrigatório que faltava
         )
 
     # Licença expirada
@@ -68,13 +64,14 @@ async def validar_licenca(
             sucesso=False,
             mensagem="Licença expirada",
             dias_restantes=0,
-            ativa=licenca.ativa,
+            ativa=bool(licenca.ativa),  # Cast para garantir bool
         )
 
     # Verificar HWID
     if licenca.hwid:
         # HWID já registrado - verificar se é o mesmo
-        if licenca.hwid != payload.hwid:
+        # Comparação direta de strings
+        if str(licenca.hwid) != payload.hwid:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="HWID não autorizado. Licença já vinculada a outro computador.",
@@ -89,7 +86,7 @@ async def validar_licenca(
         sucesso=True,
         mensagem="Licença válida",
         dias_restantes=licenca.dias_restantes,
-        ativa=licenca.ativa,
+        ativa=bool(licenca.ativa),
     )
 
 
@@ -136,6 +133,56 @@ async def receber_telemetria(
 
 
 # ============================================================================
+# SCHEMA: Criar Licenca
+# ============================================================================
+
+
+class CriarLicencaRequest(BaseModel):
+    cliente_nome: str
+    email_cliente: str
+    whatsapp: Optional[str] = None
+    plano_tipo: str = "mensal"
+    dias_validade: int = 30
+
+
+# ============================================================================
+# ENDPOINT: CRIAR LICENCA (Admin)
+# ============================================================================
+
+
+@router.post("/licencas", status_code=status.HTTP_201_CREATED)
+async def criar_licenca(
+    payload: CriarLicencaRequest,
+    db: AsyncSession = Depends(get_db),
+    current_admin: Usuario = Depends(get_current_admin),
+):
+    """
+    Cria uma nova licenca manualmente (admin).
+    """
+    # Gerar chave unica
+    chave = f"KEY-{uuid.uuid4().hex[:8].upper()}-{uuid.uuid4().hex[:4].upper()}-"
+
+    # Calcular data de expiracao
+    data_expiracao = datetime.now(timezone.utc) + timedelta(days=payload.dias_validade)
+
+    nova_licenca = Licenca(
+        chave=chave,
+        cliente_nome=payload.cliente_nome,
+        email_cliente=payload.email_cliente,
+        whatsapp=payload.whatsapp or "Nao informado",
+        plano_tipo=payload.plano_tipo,
+        ativa=True,
+        data_expiracao=data_expiracao,
+    )
+
+    db.add(nova_licenca)
+    await db.commit()
+    await db.refresh(nova_licenca)
+
+    return nova_licenca.to_dict()
+
+
+# ============================================================================
 # ENDPOINT: LISTAR LICENÇAS (Admin)
 # ============================================================================
 
@@ -164,6 +211,7 @@ async def listar_licencas(
     licencas = result.scalars().all()
 
     return [licenca.to_dict() for licenca in licencas]
+
 
 # ============================================================================
 # ENDPOINT: TOGGLE ATIVAR/DESATIVAR LICENCA (Admin)

@@ -63,6 +63,7 @@ from vision.vision_system import VisionSystem  # noqa: E402
 # 5. CONSTANTES GLOBAIS
 # ==============================================================================
 API_URL = "https://crash-api-jose.onrender.com"
+BOT_VERSION = "2.0.0"
 
 
 class TableType(Enum):
@@ -270,17 +271,25 @@ class BotController:
             )
             return {}
 
-    def _send_telemetry(self, tipo: str, dados: str = "", lucro: float = 0.0):
+    def _send_telemetry(
+        self, tipo: str, dados: Optional[Union[dict, str]] = None, lucro: float = 0.0
+    ):
         """Envia dados de telemetria para o servidor (não-bloqueante)."""
-        if not self.running and not self.db_manager.session_id:
+
+        # Proteção para não enviar se não tiver sessão (evita erro de NoneType)
+        if not hasattr(self, "db_manager") or not self.db_manager.session_id:
             return
 
-        endpoint = f"{API_URL}/telemetria/log"
+        endpoint = f"{API_URL}/api/v1/telemetria/log"
+
+        # Garante que 'dados' seja serializável (se for None, vira dict vazio)
+        dados_envio = dados if dados is not None else {}
+
         payload = {
             "hwid": get_hwid(),
             "sessao_id": self.db_manager.session_id,
             "tipo": tipo,
-            "dados": dados,
+            "dados": dados_envio,
             "lucro": lucro,
         }
 
@@ -1667,6 +1676,109 @@ class BotController:
         else:
             return None
 
+    def _prompt_update(self, download_url: str, obrigatoria: bool) -> bool:
+        """
+        Helper: Exibe mensagem de atualização e gerencia a interação do usuário.
+        Retorna False se o bot deve parar (atualização obrigatória ou usuário aceitou sair).
+        Retorna True se o bot pode continuar (usuário recusou atualização opcional).
+        """
+        should_open_browser = False
+
+        if obrigatoria:
+            self.console.print("[bold red]⚠️ ATUALIZAÇÃO OBRIGATÓRIA![/bold red]")
+            self.console.print("[red]O bot não pode continuar sem atualizar.[/red]")
+            self.console.input(
+                "\n[yellow]Pressione Enter para abrir o link de download...[/yellow]"
+            )
+            should_open_browser = True
+        else:
+            resposta = self.console.input(
+                "[yellow]Deseja continuar mesmo assim? (S/N): [/yellow]"
+            )
+            if resposta.lower() != "s":
+                should_open_browser = True
+
+        if should_open_browser:
+            import webbrowser
+
+            webbrowser.open(download_url)
+            return False
+
+        return True
+
+    def _check_for_updates(self) -> bool:
+        """Verifica se há atualizações disponíveis."""
+        try:
+            self.console.print("🔍 Verificando atualizações...", style="cyan")
+
+            response = requests.get(f"{API_URL}/api/v1/bot/versao", timeout=10)
+
+            if response.status_code == 200:
+                data = response.json()
+                versao_servidor = data.get("versao", "0.0.0")
+
+                # Verificação de versão
+                if self._comparar_versoes(versao_servidor, BOT_VERSION):
+                    # AQUI ESTÁ A CORREÇÃO: Chamamos o método novo e passamos os dados
+                    return self._handle_update_found(
+                        versao_servidor,
+                        data.get("download_url", ""),
+                        data.get("changelog", ""),
+                        data.get("obrigatoria", False),
+                    )
+                else:
+                    self.console.print(
+                        f"[green]✅ Bot atualizado! Versão: v{BOT_VERSION}[/green]"
+                    )
+
+            elif response.status_code == 404:
+                self.console.print(
+                    "[yellow]⚠️ Nenhuma versão registrada no servidor[/yellow]"
+                )
+
+            return True
+
+        except requests.exceptions.RequestException as e:
+            self.console.print(
+                f"[yellow]⚠️ Não foi possível verificar atualizações: {e}[/yellow]"
+            )
+            return True
+        except Exception as e:
+            self.logger.error(f"Erro ao verificar atualizações: {e}")
+            return True
+
+    def _handle_update_found(
+        self, versao_servidor: str, download_url: str, changelog: str, obrigatoria: bool
+    ) -> bool:
+        """Exibe o banner de atualização e solicita confirmação."""
+        self.console.print(f"\n[bold yellow]{'='*50}[/bold yellow]")
+        self.console.print(
+            f"[bold green]🎉 NOVA VERSÃO DISPONÍVEL: v{versao_servidor}[/bold green]"
+        )
+        self.console.print(f"[white]Sua versão atual: v{BOT_VERSION}[/white]")
+
+        if changelog:
+            self.console.print("\n[cyan]Novidades:[/cyan]")
+            self.console.print(f"[white]{changelog}[/white]")
+
+        self.console.print(f"\n[bold blue]Download: {download_url}[/bold blue]")
+        self.console.print(f"[bold yellow]{'='*50}[/bold yellow]\n")
+
+        return self._prompt_update(download_url, obrigatoria)
+
+    def _parse_version(self, version: str) -> list[int]:
+        """Helper: Converte string de versão 'x.y.z' para lista de inteiros [x, y, z]."""
+        # Removemos caracteres não numéricos extras se houver e fazemos split
+        return [int(x) for x in version.split(".")]
+
+    def _comparar_versoes(self, versao_nova: str, versao_atual: str) -> bool:
+        """Compara duas versões. Retorna True se versao_nova > versao_atual."""
+        try:
+            # CORREÇÃO SOURCERY: Usamos o helper para evitar duplicação de código
+            return self._parse_version(versao_nova) > self._parse_version(versao_atual)
+        except ValueError:
+            return False
+
     def _validate_license(self) -> bool:
         """
         Gera o HWID e verifica a licença no servidor na nuvem.
@@ -1718,6 +1830,14 @@ class BotController:
         """Executa a lógica principal."""
         self.console.print("🚀 Iniciando Bot Controller...", style="cyan")
 
+        if not self._check_for_updates():
+            self.console.print(
+                "\n[bold yellow]Bot encerrado para atualização.[/bold yellow]",
+                style="yellow",
+            )
+            time.sleep(2)
+            return
+
         if not self._validate_license():
             self.console.print(
                 "\n[bold red]SISTEMA DESLIGADO POR FALHA NA LICENÇA.[/bold red]",
@@ -1743,6 +1863,16 @@ class BotController:
         )
 
         self.running = True
+        self._send_telemetry(
+            tipo="sessao_inicio",
+            dados={
+                "modo_risco": (
+                    self.selected_risk_mode.name if self.selected_risk_mode else "N/A"
+                ),
+                "banca_inicial": self.initial_balance or 0.0,
+            },
+            lucro=0.0,
+        )
         self._start_threads()
 
         self.live_display = Live(
@@ -1802,6 +1932,28 @@ class BotController:
         try:
             with self.balance_lock:
                 final_balance = self.current_balance
+
+                # CORREÇÃO: Garantir que ambos os valores sejam float (0.0 se for None)
+                saldo_final_seguro = final_balance or 0.0
+                saldo_inicial_seguro = self.initial_balance or 0.0
+
+                lucro_sessao = saldo_final_seguro - saldo_inicial_seguro
+
+            # Enviar telemetria de fim de sessão
+            self._send_telemetry(
+                tipo="sessao_fim",
+                dados={
+                    "modo_risco": (
+                        self.selected_risk_mode.name
+                        if self.selected_risk_mode
+                        else "N/A"
+                    ),
+                    "banca_inicial": saldo_inicial_seguro,
+                    "banca_final": saldo_final_seguro,
+                    "total_rodadas": self.round_count,
+                },
+                lucro=lucro_sessao,
+            )
             self.db_manager.close_session(final_balance)
             self.console.print("✅ Sessão do database fechada", style="green")
         except Exception as e:
