@@ -1,38 +1,38 @@
-"use client";
+'use client';
 
-import { useState } from "react";
-import Link from "next/link";
-import { useParams } from "next/navigation";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import Link from 'next/link';
+import { useParams } from 'next/navigation';
+import { useState } from 'react';
 
 // Dados dos planos
 const planos = {
   experimental: {
-    nome: "Experimental",
-    preco: 29.90,
+    nome: 'Experimental',
+    preco: 29.9,
     dias: 3,
-    descricao: "Ideal para testar o bot",
+    descricao: 'Ideal para testar o bot',
   },
   semanal: {
-    nome: "Semanal",
-    preco: 149.90,
+    nome: 'Semanal',
+    preco: 149.9,
     dias: 7,
-    descricao: "Melhor custo-benefício",
+    descricao: 'Melhor custo-benefício',
     popular: true,
   },
   mensal: {
-    nome: "Mensal",
-    preco: 499.90,
+    nome: 'Mensal',
+    preco: 499.9,
     dias: 30,
-    descricao: "Para profissionais",
+    descricao: 'Para profissionais',
   },
 };
 
 // URL da API
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 export default function CheckoutPage() {
   const params = useParams();
@@ -40,19 +40,21 @@ export default function CheckoutPage() {
   const plano = planos[planoId as keyof typeof planos];
 
   const [formData, setFormData] = useState({
-    nome: "",
-    email: "",
-    whatsapp: "",
+    nome: '',
+    email: '',
+    whatsapp: '',
   });
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState('');
 
   // Se plano não existir
   if (!plano) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center">
         <Card className="bg-slate-800/50 border-slate-700 p-8 text-center">
-          <CardTitle className="text-white mb-4">Plano não encontrado</CardTitle>
+          <CardTitle className="text-white mb-4">
+            Plano não encontrado
+          </CardTitle>
           <Link href="/#planos">
             <Button className="bg-purple-600 hover:bg-purple-700">
               Ver Planos Disponíveis
@@ -66,14 +68,14 @@ export default function CheckoutPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setError("");
+    setError('');
 
     try {
       // Chamar API para criar pagamento
       const response = await fetch(`${API_URL}/api/v1/pagamento/criar`, {
-        method: "POST",
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           plano: planoId,
@@ -85,17 +87,18 @@ export default function CheckoutPage() {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.detail || "Erro ao criar pagamento");
+        throw new Error(errorData.detail || 'Erro ao criar pagamento');
       }
 
       const data = await response.json();
 
       // Redirecionar para o Mercado Pago
       window.location.href = data.init_point;
-
     } catch (err) {
-      console.error("Erro:", err);
-      setError(err instanceof Error ? err.message : "Erro ao processar pagamento");
+      console.error('Erro:', err);
+      setError(
+        err instanceof Error ? err.message : 'Erro ao processar pagamento'
+      );
       setLoading(false);
     }
   };
@@ -109,7 +112,10 @@ export default function CheckoutPage() {
             🤖 CrashBot
           </Link>
           <Link href="/#planos">
-            <Button variant="ghost" className="text-white hover:text-purple-300">
+            <Button
+              variant="ghost"
+              className="text-white hover:text-purple-300"
+            >
               ← Voltar aos Planos
             </Button>
           </Link>
@@ -129,8 +135,10 @@ export default function CheckoutPage() {
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-white">Resumo do Pedido</CardTitle>
-                  {plano.popular && (
-                    <Badge className="bg-purple-600 text-white">Mais Popular</Badge>
+                  {'popular' in plano && plano.popular && (
+                    <Badge className="bg-purple-600 text-white">
+                      Mais Popular
+                    </Badge>
                   )}
                 </div>
               </CardHeader>
@@ -141,15 +149,17 @@ export default function CheckoutPage() {
                 </div>
                 <div className="flex justify-between text-slate-300">
                   <span>Duração</span>
-                  <span className="font-semibold text-white">{plano.dias} dias</span>
+                  <span className="font-semibold text-white">
+                    {plano.dias} dias
+                  </span>
                 </div>
                 <div className="flex justify-between text-slate-300">
                   <span>Descrição</span>
                   <span className="text-white">{plano.descricao}</span>
                 </div>
-                
+
                 <hr className="border-slate-700" />
-                
+
                 <div className="flex justify-between items-center">
                   <span className="text-slate-300">Total</span>
                   <span className="text-3xl font-bold text-purple-400">
@@ -187,21 +197,23 @@ export default function CheckoutPage() {
                       placeholder="Seu nome"
                       required
                       value={formData.nome}
-                      onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, nome: e.target.value })
+                      }
                       className="bg-slate-900 border-slate-700 text-white placeholder:text-slate-500"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-slate-300 mb-2">
-                      E-mail
-                    </label>
+                    <label className="block text-slate-300 mb-2">E-mail</label>
                     <Input
                       type="email"
                       placeholder="seu@email.com"
                       required
                       value={formData.email}
-                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, email: e.target.value })
+                      }
                       className="bg-slate-900 border-slate-700 text-white placeholder:text-slate-500"
                     />
                     <p className="text-xs text-slate-500 mt-1">
@@ -218,7 +230,9 @@ export default function CheckoutPage() {
                       placeholder="(11) 99999-9999"
                       required
                       value={formData.whatsapp}
-                      onChange={(e) => setFormData({ ...formData, whatsapp: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, whatsapp: e.target.value })
+                      }
                       className="bg-slate-900 border-slate-700 text-white placeholder:text-slate-500"
                     />
                     <p className="text-xs text-slate-500 mt-1">
@@ -235,9 +249,24 @@ export default function CheckoutPage() {
                   >
                     {loading ? (
                       <span className="flex items-center gap-2">
-                        <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                        <svg
+                          className="animate-spin h-5 w-5"
+                          viewBox="0 0 24 24"
+                        >
+                          <circle
+                            className="opacity-25"
+                            cx="12"
+                            cy="12"
+                            r="10"
+                            stroke="currentColor"
+                            strokeWidth="4"
+                            fill="none"
+                          />
+                          <path
+                            className="opacity-75"
+                            fill="currentColor"
+                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                          />
                         </svg>
                         Redirecionando para pagamento...
                       </span>
@@ -247,7 +276,8 @@ export default function CheckoutPage() {
                   </Button>
 
                   <p className="text-xs text-slate-500 text-center mt-4">
-                    Ao continuar, você concorda com nossos Termos de Uso e Política de Privacidade.
+                    Ao continuar, você concorda com nossos Termos de Uso e
+                    Política de Privacidade.
                   </p>
                 </form>
               </CardContent>
@@ -258,17 +288,27 @@ export default function CheckoutPage() {
           <div className="mt-12 grid md:grid-cols-3 gap-6">
             <div className="text-center">
               <div className="text-3xl mb-2">🔒</div>
-              <h3 className="text-white font-semibold mb-1">Pagamento Seguro</h3>
-              <p className="text-slate-400 text-sm">Processado pelo Mercado Pago</p>
+              <h3 className="text-white font-semibold mb-1">
+                Pagamento Seguro
+              </h3>
+              <p className="text-slate-400 text-sm">
+                Processado pelo Mercado Pago
+              </p>
             </div>
             <div className="text-center">
               <div className="text-3xl mb-2">⚡</div>
-              <h3 className="text-white font-semibold mb-1">Entrega Imediata</h3>
-              <p className="text-slate-400 text-sm">Licença enviada por e-mail</p>
+              <h3 className="text-white font-semibold mb-1">
+                Entrega Imediata
+              </h3>
+              <p className="text-slate-400 text-sm">
+                Licença enviada por e-mail
+              </p>
             </div>
             <div className="text-center">
               <div className="text-3xl mb-2">💬</div>
-              <h3 className="text-white font-semibold mb-1">Suporte Dedicado</h3>
+              <h3 className="text-white font-semibold mb-1">
+                Suporte Dedicado
+              </h3>
               <p className="text-slate-400 text-sm">Via WhatsApp 24/7</p>
             </div>
           </div>
