@@ -8,6 +8,7 @@ API moderna para gestão do CrashBot.
 from app.routers.auth import router as auth_router
 from app.routers.licencas import router as licencas_router
 from app.routers.pagamento import router as pagamento_router
+from app.routers.versao import router as versao_router
 from app.routers.websocket import router as websocket_router
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -50,6 +51,7 @@ app.include_router(licencas_router)
 app.include_router(auth_router)
 app.include_router(websocket_router)
 app.include_router(pagamento_router)
+app.include_router(versao_router)
 
 # ============================================================================
 # ROTAS BÁSICAS
