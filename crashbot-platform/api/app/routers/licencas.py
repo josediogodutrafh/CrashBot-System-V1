@@ -1,0 +1,257 @@
+"""
+Router: Licenças
+Endpoints para validação de licenças e telemetria do bot.
+"""
+
+from datetime import datetime, timezone
+
+from app.database import get_db
+from app.dependencies import get_current_admin
+from app.models import Licenca, LogBot, Usuario
+from app.schemas.licenca import (
+    TelemetriaRequest,
+    TelemetriaResponse,
+    ValidarLicencaRequest,
+    ValidarLicencaResponse,
+)
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+router = APIRouter(prefix="/api/v1", tags=["licencas"])
+
+
+# ============================================================================
+# ENDPOINT: VALIDAR LICENÇA
+# ============================================================================
+
+
+@router.post("/validar", response_model=ValidarLicencaResponse)
+async def validar_licenca(
+    payload: ValidarLicencaRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Valida uma licença.
+
+    Verifica:
+    - Se a licença existe
+    - Se está ativa
+    - Se não expirou
+    - Se o HWID está correto (ou atribui pela primeira vez)
+
+    Returns:
+        ValidarLicencaResponse: Resultado da validação
+    """
+    # Buscar licença por chave
+    result = await db.execute(select(Licenca).where(Licenca.chave == payload.chave))
+    licenca = result.scalar_one_or_none()
+
+    # Licença não encontrada
+    if not licenca:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Licença não encontrada",
+        )
+
+    # Licença desativada
+    if not licenca.ativa:
+        return ValidarLicencaResponse(
+            sucesso=False,
+            mensagem="Licença desativada",
+            ativa=False,
+        )
+
+    # Licença expirada
+    if licenca.esta_expirada:
+        return ValidarLicencaResponse(
+            sucesso=False,
+            mensagem="Licença expirada",
+            dias_restantes=0,
+            ativa=licenca.ativa,
+        )
+
+    # Verificar HWID
+    if licenca.hwid:
+        # HWID já registrado - verificar se é o mesmo
+        if licenca.hwid != payload.hwid:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="HWID não autorizado. Licença já vinculada a outro computador.",
+            )
+    else:
+        # Primeira vez usando - registrar HWID
+        licenca.hwid = payload.hwid
+        await db.commit()
+
+    # Tudo OK!
+    return ValidarLicencaResponse(
+        sucesso=True,
+        mensagem="Licença válida",
+        dias_restantes=licenca.dias_restantes,
+        ativa=licenca.ativa,
+    )
+
+
+# ============================================================================
+# ENDPOINT: RECEBER TELEMETRIA
+# ============================================================================
+
+
+@router.post("/telemetria/log", response_model=TelemetriaResponse)
+async def receber_telemetria(
+    payload: TelemetriaRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Recebe telemetria do bot.
+
+    Salva logs de:
+    - Apostas realizadas
+    - Vitórias/derrotas
+    - Erros
+    - Outras informações
+
+    Returns:
+        TelemetriaResponse: Confirmação do recebimento
+    """
+    # Criar novo log
+    novo_log = LogBot(
+        sessao_id=payload.sessao_id,
+        hwid=payload.hwid,
+        tipo=payload.tipo,
+        dados=payload.dados,
+        lucro=payload.lucro,
+        timestamp=datetime.now(timezone.utc),
+    )
+
+    db.add(novo_log)
+    await db.commit()
+    await db.refresh(novo_log)
+
+    return TelemetriaResponse(
+        status="ok",
+        id=novo_log.id,
+    )
+
+
+# ============================================================================
+# ENDPOINT: LISTAR LICENÇAS (Admin)
+# ============================================================================
+
+
+@router.get("/licencas")
+async def listar_licencas(
+    skip: int = 0,
+    limit: int = 100,
+    db: AsyncSession = Depends(get_db),
+    current_admin: Usuario = Depends(get_current_admin),
+):
+    """
+    Lista todas as licenças (endpoint admin - requer autenticação).
+
+    Args:
+        skip: Número de registros para pular (paginação)
+        limit: Número máximo de registros a retornar
+        current_admin: Admin autenticado (necessário para acessar)
+
+    Returns:
+        list: Lista de licenças
+    """
+    result = await db.execute(
+        select(Licenca).offset(skip).limit(limit).order_by(Licenca.id.desc())
+    )
+    licencas = result.scalars().all()
+
+    return [licenca.to_dict() for licenca in licencas]
+
+# ============================================================================
+# ENDPOINT: TOGGLE ATIVAR/DESATIVAR LICENCA (Admin)
+# ============================================================================
+
+
+@router.patch("/licencas/{licenca_id}/toggle")
+async def toggle_licenca(
+    licenca_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_admin: Usuario = Depends(get_current_admin),
+):
+    """
+    Ativa ou desativa uma licenca.
+    """
+    result = await db.execute(select(Licenca).where(Licenca.id == licenca_id))
+    licenca = result.scalar_one_or_none()
+
+    if not licenca:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Licenca nao encontrada",
+        )
+
+    licenca.ativa = not licenca.ativa
+    await db.commit()
+
+    return {"success": True, "ativa": licenca.ativa}
+
+
+# ============================================================================
+# ENDPOINT: RESET HWID (Admin)
+# ============================================================================
+
+
+@router.patch("/licencas/{licenca_id}/reset-hwid")
+async def reset_hwid(
+    licenca_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_admin: Usuario = Depends(get_current_admin),
+):
+    """
+    Reseta o HWID de uma licenca para permitir uso em outro computador.
+    """
+    result = await db.execute(select(Licenca).where(Licenca.id == licenca_id))
+    licenca = result.scalar_one_or_none()
+
+    if not licenca:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Licenca nao encontrada",
+        )
+
+    licenca.hwid = None
+    await db.commit()
+
+    return {"success": True, "message": "HWID resetado com sucesso"}
+
+
+# ============================================================================
+# ENDPOINT: LISTAR LOGS TELEMETRIA (Admin)
+# ============================================================================
+
+
+@router.get("/telemetria/logs")
+async def listar_logs(
+    skip: int = 0,
+    limit: int = 100,
+    db: AsyncSession = Depends(get_db),
+    current_admin: Usuario = Depends(get_current_admin),
+):
+    """
+    Lista todos os logs de telemetria (admin).
+    """
+    result = await db.execute(
+        select(LogBot).offset(skip).limit(limit).order_by(LogBot.id.desc())
+    )
+    logs = result.scalars().all()
+
+    return [
+        {
+            "id": log.id,
+            "sessao_id": log.sessao_id,
+            "hwid": log.hwid,
+            "tipo": log.tipo,
+            "dados": log.dados,
+            "lucro": log.lucro,
+            "timestamp": log.timestamp.isoformat() if log.timestamp else None,
+        }
+        for log in logs
+    ]

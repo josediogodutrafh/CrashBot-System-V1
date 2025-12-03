@@ -749,8 +749,12 @@ class StrategyEngine:
     def evaluate_executed_bet(self, explosion_value: float, executed_bet: Dict) -> Dict:
         """Avalia resultado de aposta executada."""
         target_1 = executed_bet.get("target_1", 0)
+        bet_1 = executed_bet.get("bet_1", 0)
         hit_1 = explosion_value >= target_1 if target_1 > 0 else False
         strategy_name = executed_bet.get("strategy", "Desconhecida")
+
+        # ✅ CALCULAR O LUCRO/PREJUÍZO (Versão Otimizada)
+        profit_loss = (bet_1 * target_1) - bet_1 if hit_1 else -bet_1
 
         # Atualiza estatísticas
         policy_name = (
@@ -775,13 +779,17 @@ class StrategyEngine:
             else:
                 policy_stats["total_misses"] += 1
 
+            # ✅ ATUALIZAR ESTATÍSTICAS DE LUCRO
+            policy_stats["total_profit_loss"] += profit_loss
+
         return {
             "explosion_value": explosion_value,
             "recommendation_hit": hit_1,
             "target_1": target_1,
-            "bet_1": executed_bet.get("bet_1", 0),
+            "bet_1": bet_1,
             "strategy": strategy_name,
             "phase": "N/A",
+            "profit_loss": profit_loss,  # ✅ ADICIONAR ESTE CAMPO!
         }
 
 
