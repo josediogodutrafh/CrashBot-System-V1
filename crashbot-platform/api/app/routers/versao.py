@@ -3,7 +3,7 @@ Router: Versão do Bot
 Endpoints para auto-update do bot.
 """
 
-from typing import Optional
+from typing import Optional, cast
 
 from app.database import get_db
 from app.dependencies import get_current_admin
@@ -48,11 +48,11 @@ async def get_versao_atual(db: AsyncSession = Depends(get_db)):
     """
     result = await db.execute(
         select(VersaoBot)
-        .where(VersaoBot.ativa == True)
+        .where(VersaoBot.ativa.is_(True))
         .order_by(desc(VersaoBot.created_at))
         .limit(1)
     )
-    versao = result.scalar_one_or_none()
+    versao: Optional[VersaoBot] = result.scalar_one_or_none()
 
     if not versao:
         raise HTTPException(
@@ -60,11 +60,13 @@ async def get_versao_atual(db: AsyncSession = Depends(get_db)):
             detail="Nenhuma versao disponivel",
         )
 
+    changelog_val = str(versao.changelog) if versao.changelog is not None else None
+
     return VersaoResponse(
-        versao=versao.versao,
-        download_url=versao.download_url,
-        changelog=versao.changelog,
-        obrigatoria=versao.obrigatoria,
+        versao=str(versao.versao),
+        download_url=str(versao.download_url),
+        changelog=changelog_val,
+        obrigatoria=bool(versao.obrigatoria),
     )
 
 
@@ -134,7 +136,8 @@ async def toggle_versao(
 ):
     """Ativa/desativa uma versão (admin)."""
     result = await db.execute(select(VersaoBot).where(VersaoBot.id == versao_id))
-    versao = result.scalar_one_or_none()
+    # Dica de tipo para o Pylance entender que é uma instância ou None
+    versao: Optional[VersaoBot] = result.scalar_one_or_none()
 
     if not versao:
         raise HTTPException(
@@ -142,7 +145,15 @@ async def toggle_versao(
             detail="Versao nao encontrada",
         )
 
-    versao.ativa = not versao.ativa
+    # CORREÇÃO: Cast para bool para evitar erro de 'Column' no 'not'
+    # O Pylance se confunde com colunas booleanas em modelos antigos do SQLAlchemy
+    status_atual = bool(versao.ativa)
+
+    # Atribuição direta. O type checker pode reclamar da atribuição a Column,
+    # mas em runtime isso funciona perfeitamente no SQLAlchemy.
+    # Adicionamos type: ignore para silenciar o erro específico de atribuição estática
+    versao.ativa = not status_atual  # type: ignore
+
     await db.commit()
 
     return {"success": True, "ativa": versao.ativa}
