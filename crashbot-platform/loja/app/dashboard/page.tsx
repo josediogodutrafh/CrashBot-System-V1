@@ -45,7 +45,7 @@ export default function DashboardPage() {
   const fetchLicencas = useCallback(
     async (token: string) => {
       try {
-        const response = await fetch(`${API_URL}/api/v1/licencas`, {
+        const response = await fetch(`${API_URL}/api/v1/minhas-licencas`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },
