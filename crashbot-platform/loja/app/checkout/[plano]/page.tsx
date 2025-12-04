@@ -44,6 +44,7 @@ export default function CheckoutPage() {
     email: '',
     whatsapp: '',
   });
+  const [aceitouTermos, setAceitouTermos] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -244,7 +245,7 @@ export default function CheckoutPage() {
 
                   <Button
                     type="submit"
-                    disabled={loading}
+                    disabled={loading || !aceitouTermos}
                     className="w-full bg-purple-600 hover:bg-purple-700 text-white py-6 text-lg"
                   >
                     {loading ? (
@@ -275,10 +276,34 @@ export default function CheckoutPage() {
                     )}
                   </Button>
 
-                  <p className="text-xs text-slate-500 text-center mt-4">
-                    Ao continuar, você concorda com nossos Termos de Uso e
-                    Política de Privacidade.
-                  </p>
+                  <div className="flex items-start gap-3 mt-4">
+                    <input
+                      type="checkbox"
+                      id="termos"
+                      checked={aceitouTermos}
+                      onChange={(e) => setAceitouTermos(e.target.checked)}
+                      className="mt-1 h-4 w-4 rounded border-slate-600 bg-slate-900 text-purple-600 focus:ring-purple-500"
+                      required
+                    />
+                    <label htmlFor="termos" className="text-sm text-slate-400">
+                      Li e aceito a{' '}
+                      <Link
+                        href="/privacidade"
+                        target="_blank"
+                        className="text-purple-400 hover:underline"
+                      >
+                        Política de Privacidade
+                      </Link>{' '}
+                      e os{' '}
+                      <Link
+                        href="/termos"
+                        target="_blank"
+                        className="text-purple-400 hover:underline"
+                      >
+                        Termos de Uso
+                      </Link>
+                    </label>
+                  </div>
                 </form>
               </CardContent>
             </Card>

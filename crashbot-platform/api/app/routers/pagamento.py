@@ -4,15 +4,21 @@ Endpoints para integração com Mercado Pago.
 """
 
 import os
+import secrets
+import string
 import uuid
 from datetime import datetime, timedelta, timezone
+from typing import Optional  # <--- ADICIONADO
 
 import mercadopago
-from app.config import settings
+
+# from app.config import settings  <-- Removido se não estiver usando
 from app.database import get_db
-from app.models import Licenca
+from app.models import Licenca, Usuario
+from app.services.email_service import enviar_email, template_licenca_criada
 from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from passlib.context import CryptContext
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -83,15 +89,26 @@ def gerar_chave_licenca() -> str:
     return f"CB-{uuid.uuid4().hex[:8].upper()}-{uuid.uuid4().hex[:4].upper()}"
 
 
+# Contexto para hash de senha
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+
+def gerar_senha_temporaria(tamanho: int = 10) -> str:
+    """Gera uma senha temporária segura."""
+    caracteres = string.ascii_letters + string.digits
+    return "".join(secrets.choice(caracteres) for _ in range(tamanho))
+
+
 def get_mp_sdk():
     """Retorna instância do SDK do Mercado Pago."""
-    access_token = os.getenv("MERCADOPAGO_ACCESS_TOKEN")
-    if not access_token:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Mercado Pago não configurado",
-        )
-    return mercadopago.SDK(access_token)
+    # Uso de walrus operator (:=) para simplificar
+    if access_token := os.getenv("MERCADOPAGO_ACCESS_TOKEN"):
+        return mercadopago.SDK(access_token)
+
+    raise HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail="Mercado Pago não configurado",
+    )
 
 
 # ============================================================================
@@ -148,12 +165,12 @@ async def criar_pagamento(
             "email": dados.email,
         },
         "external_reference": external_reference,
-        # "back_urls": {
-        #     "success": f"{base_url}/api/v1/pagamento/sucesso",
-        #     "failure": f"{base_url}/api/v1/pagamento/falha",
-        #     "pending": f"{base_url}/api/v1/pagamento/pendente",
-        # },
-        # "auto_return": "approved",  # Descomentar em produção com URLs públicas
+        "back_urls": {
+            "success": "https://crashbot-loja.vercel.app/pagamento/sucesso",
+            "failure": "https://crashbot-loja.vercel.app/pagamento/falha",
+            "pending": "https://crashbot-loja.vercel.app/pagamento/pendente",
+        },
+        "auto_return": "approved",
         "notification_url": f"{base_url}/api/v1/pagamento/webhook",
         "metadata": {
             "plano": dados.plano,
@@ -281,10 +298,63 @@ async def webhook_mercadopago(
 
     print(f"✅ Licença criada: {chave} para {email}")
 
-    # TODO: Enviar email com a licença
-    # TODO: Enviar mensagem WhatsApp
+    # ========================================================================
+    # CRIAR CONTA DO CLIENTE (se não existir)
+    # ========================================================================
+    senha_temporaria = None
 
-    return {"status": "ok", "licenca": chave}
+    # Verificar se já existe usuário com este email
+    result_user = await db.execute(select(Usuario).where(Usuario.email == email))
+    usuario_existente = result_user.scalar_one_or_none()
+
+    if not usuario_existente:
+        # Gerar senha temporária
+        senha_temporaria = gerar_senha_temporaria()
+        senha_hash = pwd_context.hash(senha_temporaria)
+
+        # Criar novo usuário (cliente, não admin)
+        novo_usuario = Usuario(
+            email=email,
+            senha_hash=senha_hash,
+            nome=nome,
+            is_admin=False,
+            is_active=True,
+        )
+
+        db.add(novo_usuario)
+        await db.commit()
+        print(f"✅ Usuário criado: {email}")
+    else:
+        print(f"ℹ️ Usuário já existe: {email}")
+        senha_temporaria = "(sua senha atual)"
+
+    # ========================================================================
+    # ENVIAR EMAIL COM LICENÇA
+    # ========================================================================
+    try:
+        html_email = template_licenca_criada(
+            nome=nome or "Cliente",
+            email=email,
+            senha=senha_temporaria,
+            chave_licenca=chave,
+            plano=plano,
+            dias=int(dias),
+        )
+
+        await enviar_email(
+            para=email,
+            assunto="🎉 Sua licença CrashBot está pronta!",
+            html=html_email,
+        )
+    except Exception as e:
+        print(f"⚠️ Erro ao enviar email: {e}")
+        # Não falha o webhook se o email falhar
+
+    return {
+        "status": "ok",
+        "licenca": chave,
+        "usuario_criado": usuario_existente is None,
+    }
 
 
 # ============================================================================
@@ -295,15 +365,16 @@ async def webhook_mercadopago(
 @router.get("/sucesso")
 async def pagamento_sucesso(
     request: Request,
-    collection_id: str = None,
-    collection_status: str = None,
-    external_reference: str = None,
-    payment_type: str = None,
-    merchant_order_id: str = None,
-    preference_id: str = None,
-    site_id: str = None,
-    processing_mode: str = None,
-    merchant_account_id: str = None,
+    # CORREÇÃO: Usamos Optional[str] para permitir None
+    collection_id: Optional[str] = None,
+    collection_status: Optional[str] = None,
+    external_reference: Optional[str] = None,
+    payment_type: Optional[str] = None,
+    merchant_order_id: Optional[str] = None,
+    preference_id: Optional[str] = None,
+    site_id: Optional[str] = None,
+    processing_mode: Optional[str] = None,
+    merchant_account_id: Optional[str] = None,
 ):
     """Página de retorno para pagamento aprovado."""
     # Redirecionar para página de sucesso na loja

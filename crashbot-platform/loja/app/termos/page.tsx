@@ -172,10 +172,10 @@ export default function TermosDeUso() {
             <p>Dúvidas sobre estes termos podem ser enviadas para:</p>
             <ul className="list-disc list-inside mt-2 space-y-1 ml-4">
               <li>
-                <strong>E-mail:</strong> contato@crashbot.com
+                <strong>E-mail:</strong> contato.tucunare.bot@gmail.com
               </li>
               <li>
-                <strong>WhatsApp:</strong> (XX) XXXXX-XXXX
+                <strong>WhatsApp:</strong> (65) 99272-7497
               </li>
             </ul>
           </section>
