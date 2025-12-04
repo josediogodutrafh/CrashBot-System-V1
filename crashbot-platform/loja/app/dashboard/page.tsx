@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useState } from 'react'; // Importar useCallback
+import { useCallback, useEffect, useState } from 'react';
 
 // URL da API
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -35,8 +35,13 @@ export default function DashboardPage() {
   const [licencas, setLicencas] = useState<Licenca[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [showAlterarSenha, setShowAlterarSenha] = useState(false);
+  const [senhaAtual, setSenhaAtual] = useState('');
+  const [novaSenha, setNovaSenha] = useState('');
+  const [confirmarSenha, setConfirmarSenha] = useState('');
+  const [senhaLoading, setSenhaLoading] = useState(false);
+  const [senhaMsg, setSenhaMsg] = useState({ tipo: '', texto: '' });
 
-  // CORREÇÃO 1: Usar useCallback para memoizar a função
   const fetchLicencas = useCallback(
     async (token: string) => {
       try {
@@ -67,10 +72,9 @@ export default function DashboardPage() {
       }
     },
     [router]
-  ); // Dependência do useCallback
+  );
 
   useEffect(() => {
-    // Delay para garantir que localStorage foi persistido após navegação
     const timer = setTimeout(() => {
       const token = localStorage.getItem('token');
       const userData = localStorage.getItem('user');
@@ -87,8 +91,64 @@ export default function DashboardPage() {
     }, 100);
 
     return () => clearTimeout(timer);
-    // CORREÇÃO 2: Adicionar fetchLicencas às dependências (agora é seguro)
   }, [router, fetchLicencas]);
+
+  const handleAlterarSenha = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSenhaMsg({ tipo: '', texto: '' });
+
+    if (novaSenha !== confirmarSenha) {
+      setSenhaMsg({ tipo: 'erro', texto: 'As senhas não coincidem' });
+      return;
+    }
+
+    if (novaSenha.length < 6) {
+      setSenhaMsg({
+        tipo: 'erro',
+        texto: 'A nova senha deve ter pelo menos 6 caracteres',
+      });
+      return;
+    }
+
+    setSenhaLoading(true);
+    const token = localStorage.getItem('token');
+
+    try {
+      const response = await fetch(
+        `${API_URL}/api/v1/auth/change-password?senha_atual=${encodeURIComponent(
+          senhaAtual
+        )}&nova_senha=${encodeURIComponent(novaSenha)}`,
+        {
+          method: 'PUT',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.detail || 'Erro ao alterar senha');
+      }
+
+      setSenhaMsg({ tipo: 'sucesso', texto: 'Senha alterada com sucesso!' });
+      setSenhaAtual('');
+      setNovaSenha('');
+      setConfirmarSenha('');
+
+      setTimeout(() => {
+        setShowAlterarSenha(false);
+        setSenhaMsg({ tipo: '', texto: '' });
+      }, 2000);
+    } catch (err) {
+      setSenhaMsg({
+        tipo: 'erro',
+        texto: err instanceof Error ? err.message : 'Erro ao alterar senha',
+      });
+    } finally {
+      setSenhaLoading(false);
+    }
+  };
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -100,7 +160,6 @@ export default function DashboardPage() {
     const hoje = new Date();
     const expiracao = new Date(dataExpiracao);
     const diffTime = expiracao.getTime() - hoje.getTime();
-    // CORREÇÃO 3: Inline variable (Sourcery)
     return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   };
 
@@ -392,6 +451,107 @@ export default function DashboardPage() {
           </Card>
         </div>
       </main>
+
+      {/* Modal Alterar Senha */}
+      {showAlterarSenha && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <Card className="bg-slate-800 border-slate-700 w-full max-w-md">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-white">🔐 Alterar Senha</CardTitle>
+                <button
+                  onClick={() => {
+                    setShowAlterarSenha(false);
+                    setSenhaMsg({ tipo: '', texto: '' });
+                    setSenhaAtual('');
+                    setNovaSenha('');
+                    setConfirmarSenha('');
+                  }}
+                  className="text-slate-400 hover:text-white"
+                >
+                  ✕
+                </button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleAlterarSenha} className="space-y-4">
+                {senhaMsg.texto && (
+                  <div
+                    className={`p-3 rounded-lg text-sm ${
+                      senhaMsg.tipo === 'erro'
+                        ? 'bg-red-500/20 border border-red-500 text-red-300'
+                        : 'bg-green-500/20 border border-green-500 text-green-300'
+                    }`}
+                  >
+                    {senhaMsg.texto}
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-slate-300 mb-2 text-sm">
+                    Senha Atual
+                  </label>
+                  <input
+                    type="password"
+                    value={senhaAtual}
+                    onChange={(e) => setSenhaAtual(e.target.value)}
+                    required
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 mb-2 text-sm">
+                    Nova Senha
+                  </label>
+                  <input
+                    type="password"
+                    value={novaSenha}
+                    onChange={(e) => setNovaSenha(e.target.value)}
+                    required
+                    minLength={6}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 mb-2 text-sm">
+                    Confirmar Nova Senha
+                  </label>
+                  <input
+                    type="password"
+                    value={confirmarSenha}
+                    onChange={(e) => setConfirmarSenha(e.target.value)}
+                    required
+                    minLength={6}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+
+                <div className="flex gap-3 pt-4">
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      setShowAlterarSenha(false);
+                      setSenhaMsg({ tipo: '', texto: '' });
+                    }}
+                    className="flex-1 bg-slate-700 hover:bg-slate-600"
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    type="submit"
+                    disabled={senhaLoading}
+                    className="flex-1 bg-purple-600 hover:bg-purple-700"
+                  >
+                    {senhaLoading ? 'Alterando...' : 'Alterar Senha'}
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Footer */}
       <footer className="border-t border-slate-800 py-6 mt-10">

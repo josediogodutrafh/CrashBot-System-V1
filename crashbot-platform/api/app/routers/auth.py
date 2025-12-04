@@ -5,6 +5,9 @@ Endpoints para login, registro e gerenciamento de usuários.
 
 from datetime import datetime, timezone
 
+# Adicionado cast e Optional para tipagem correta
+from typing import List
+
 from app.database import get_db
 from app.dependencies import get_current_admin, get_current_user
 from app.models import Usuario
@@ -52,25 +55,31 @@ async def login(
         )
 
     # Verificar senha
-    if not verify_password(credentials.password, user.senha_hash):
+    # CORREÇÃO PYLANCE: Cast para garantir que senha_hash é string
+    senha_hash_str = str(user.senha_hash)
+    if not verify_password(credentials.password, senha_hash_str):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Email ou senha incorretos",
         )
 
     # Verificar se usuário está ativo
-    if not user.is_active:
+    # CORREÇÃO PYLANCE: Comparação explícita com False
+    if user.is_active is False:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Usuário desativado",
         )
 
     # Atualizar last_login
-    user.last_login = datetime.now(timezone.utc)
+    # CORREÇÃO PYLANCE: type ignore para atribuição em Column
+    user.last_login = datetime.now(timezone.utc)  # type: ignore
     await db.commit()
 
     # Criar token JWT
-    access_token = create_access_token(data={"sub": str(user.id), "email": user.email})
+    access_token = create_access_token(
+        data={"sub": str(user.id), "email": str(user.email)}
+    )
 
     return LoginResponse(
         access_token=access_token,
@@ -100,11 +109,9 @@ async def register(
     Returns:
         UsuarioResponse: Dados do usuário criado
     """
-    # Verificar se email já existe
+    # Verificar se email já existe (CORREÇÃO SOURCERY: Walrus Operator)
     result = await db.execute(select(Usuario).where(Usuario.email == user_data.email))
-    existing_user = result.scalar_one_or_none()
-
-    if existing_user:
+    if result.scalar_one_or_none():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email já cadastrado",
@@ -151,11 +158,58 @@ async def get_me(
 
 
 # ============================================================================
+# ENDPOINT: ALTERAR SENHA
+# ============================================================================
+
+
+@router.put("/change-password")
+async def change_password(
+    senha_atual: str,
+    nova_senha: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+):
+    """
+    Altera a senha do usuário autenticado.
+
+    Args:
+        senha_atual: Senha atual
+        nova_senha: Nova senha
+        current_user: Usuário autenticado
+
+    Returns:
+        dict: Mensagem de sucesso
+    """
+    # Verificar senha atual
+    # CORREÇÃO PYLANCE: Cast explícito para str
+    current_hash = str(current_user.senha_hash)
+    if not verify_password(senha_atual, current_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Senha atual incorreta",
+        )
+
+    # Validar nova senha
+    if len(nova_senha) < 6:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A nova senha deve ter pelo menos 6 caracteres",
+        )
+
+    # Atualizar senha
+    # CORREÇÃO PYLANCE: type ignore para atribuição
+    current_user.senha_hash = get_password_hash(nova_senha)  # type: ignore
+    await db.commit()
+
+    return {"message": "Senha alterada com sucesso"}
+
+
+# ============================================================================
 # ENDPOINT: LISTAR USUÁRIOS (apenas admin)
 # ============================================================================
 
 
-@router.get("/users", response_model=list[UsuarioResponse])
+@router.get("/users", response_model=List[UsuarioResponse])
 async def list_users(
     db: AsyncSession = Depends(get_db),
     current_admin: Usuario = Depends(get_current_admin),
@@ -170,6 +224,5 @@ async def list_users(
         list[UsuarioResponse]: Lista de usuários
     """
     result = await db.execute(select(Usuario).order_by(Usuario.id.desc()))
-    users = result.scalars().all()
-
-    return users
+    # CORREÇÃO SOURCERY: Retorno direto (inline variable)
+    return result.scalars().all()
