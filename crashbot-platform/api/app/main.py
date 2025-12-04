@@ -10,9 +10,9 @@ from app.routers.licencas import router as licencas_router
 from app.routers.pagamento import router as pagamento_router
 from app.routers.versao import router as versao_router
 from app.routers.websocket import router as websocket_router
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 
 # ============================================================================
 # CONFIGURAÇÃO DA APP
@@ -99,6 +99,23 @@ async def api_status():
             "authentication": "JWT",
         },
     }
+
+
+# ============================================================================
+# ROTAS DE COMPATIBILIDADE (para bots antigos)
+# ============================================================================
+
+
+@app.post("/telemetria/log")
+async def telemetria_compat(request: Request):
+    """Redireciona para nova rota de telemetria."""
+    return RedirectResponse(url="/api/v1/telemetria/log", status_code=307)
+
+
+@app.post("/validar")
+async def validar_compat(request: Request):
+    """Redireciona para nova rota de validação."""
+    return RedirectResponse(url="/api/v1/validar", status_code=307)
 
 
 # ============================================================================
