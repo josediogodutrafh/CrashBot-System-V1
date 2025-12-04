@@ -86,7 +86,15 @@ export default function DashboardPage() {
         return;
       }
 
-      setUser(JSON.parse(userData));
+      const user = JSON.parse(userData);
+
+      // Se for admin, redireciona para o painel admin
+      if (user.is_admin) {
+        router.push('/admin');
+        return;
+      }
+
+      setUser(user);
       fetchLicencas(token);
     }, 100);
 
