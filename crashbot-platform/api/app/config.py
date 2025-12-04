@@ -4,6 +4,7 @@ Usa Pydantic Settings para validação e carregamento de .env
 """
 
 from functools import lru_cache
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -63,7 +64,7 @@ class Settings(BaseSettings):
     # ========================================================================
     EMAIL_PROVIDER: str = "resend"  # resend | sendgrid | smtp
     RESEND_API_KEY: str = ""
-    EMAIL_FROM: str = "CrashBot <contato@crashbot.com>"
+    EMAIL_FROM: str = "TucunaréBot <contato@tucunarebot.com.br>"
 
     # ========================================================================
     # TELEGRAM
