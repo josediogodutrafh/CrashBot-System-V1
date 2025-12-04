@@ -29,6 +29,12 @@ interface Licenca {
   created_at: string;
 }
 
+interface Versao {
+  versao: string;
+  download_url: string;
+  changelog: string | null;
+  obrigatoria: boolean;
+}
 export default function DashboardPage() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
@@ -41,6 +47,18 @@ export default function DashboardPage() {
   const [confirmarSenha, setConfirmarSenha] = useState('');
   const [senhaLoading, setSenhaLoading] = useState(false);
   const [senhaMsg, setSenhaMsg] = useState({ tipo: '', texto: '' });
+  const [versaoBot, setVersaoBot] = useState<Versao | null>(null);
+  const fetchVersao = useCallback(async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/v1/bot/versao`);
+      if (response.ok) {
+        const data = await response.json();
+        setVersaoBot(data);
+      }
+    } catch (err) {
+      console.error('Erro ao buscar versão:', err);
+    }
+  }, []);
 
   const fetchLicencas = useCallback(
     async (token: string) => {
@@ -79,8 +97,6 @@ export default function DashboardPage() {
       const token = localStorage.getItem('token');
       const userData = localStorage.getItem('user');
 
-      console.log('Dashboard - Token:', token ? 'existe' : 'null');
-
       if (!token || !userData) {
         router.push('/login');
         return;
@@ -88,7 +104,6 @@ export default function DashboardPage() {
 
       const user = JSON.parse(userData);
 
-      // Se for admin, redireciona para o painel admin
       if (user.is_admin) {
         router.push('/admin');
         return;
@@ -96,10 +111,11 @@ export default function DashboardPage() {
 
       setUser(user);
       fetchLicencas(token);
+      fetchVersao(); // <-- ADICIONE ESTA LINHA
     }, 100);
 
     return () => clearTimeout(timer);
-  }, [router, fetchLicencas]);
+  }, [router, fetchLicencas, fetchVersao]); // <-- ADICIONE fetchVersao aqui também
 
   const handleAlterarSenha = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -432,9 +448,21 @@ export default function DashboardPage() {
               <p className="text-slate-400 mb-4">
                 Baixe a versão mais recente do CrashBot para Windows.
               </p>
-              <Button className="w-full bg-slate-700 hover:bg-slate-600">
-                Baixar CrashBot v2.0
-              </Button>
+              <a
+                href={versaoBot?.download_url || '#'}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block"
+              >
+                <Button
+                  className="w-full bg-slate-700 hover:bg-slate-600"
+                  disabled={!versaoBot}
+                >
+                  {versaoBot
+                    ? `Baixar CrashBot v${versaoBot.versao}`
+                    : 'Carregando...'}
+                </Button>
+              </a>
             </CardContent>
           </Card>
 
