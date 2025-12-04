@@ -226,3 +226,50 @@ async def list_users(
     result = await db.execute(select(Usuario).order_by(Usuario.id.desc()))
     # CORREÇÃO SOURCERY: Retorno direto (inline variable)
     return result.scalars().all()
+
+
+# ============================================================================
+# ENDPOINT: RESET SENHA (Admin)
+# ============================================================================
+
+
+@router.put("/reset-password/{user_id}")
+async def reset_password(
+    user_id: int,
+    nova_senha: str,
+    db: AsyncSession = Depends(get_db),
+    current_admin: Usuario = Depends(get_current_admin),
+):
+    """
+    Reseta a senha de um usuário (apenas admin).
+
+    Args:
+        user_id: ID do usuário
+        nova_senha: Nova senha
+        current_admin: Admin autenticado
+
+    Returns:
+        dict: Mensagem de sucesso
+    """
+    # Buscar usuário
+    result = await db.execute(select(Usuario).where(Usuario.id == user_id))
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuário não encontrado",
+        )
+
+    # Validar nova senha
+    if len(nova_senha) < 6:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A nova senha deve ter pelo menos 6 caracteres",
+        )
+
+    # Atualizar senha
+    user.senha_hash = get_password_hash(nova_senha)  # type: ignore
+    await db.commit()
+
+    return {"message": f"Senha do usuário {user.email} resetada com sucesso"}
