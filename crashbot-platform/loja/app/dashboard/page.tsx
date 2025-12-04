@@ -413,7 +413,7 @@ export default function DashboardPage() {
         </Card>
 
         {/* Seção de Ajuda */}
-        <div className="mt-10 grid md:grid-cols-2 gap-6">
+        <div className="mt-10 grid md:grid-cols-3 gap-6">
           <Card className="bg-slate-800/50 border-slate-700">
             <CardHeader>
               <CardTitle className="text-white text-lg">
@@ -439,7 +439,7 @@ export default function DashboardPage() {
                 Precisa de ajuda? Entre em contato pelo WhatsApp.
               </p>
               <a
-                href="https://wa.me/5565999430057"
+                href="https://wa.me/5565992727497"
                 target="_blank"
                 rel="noopener noreferrer"
               >
@@ -447,6 +447,25 @@ export default function DashboardPage() {
                   Abrir WhatsApp
                 </Button>
               </a>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-slate-800/50 border-slate-700">
+            <CardHeader>
+              <CardTitle className="text-white text-lg">
+                ⚙️ Minha Conta
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-slate-400 mb-4">
+                Gerencie suas configurações de conta.
+              </p>
+              <Button
+                onClick={() => setShowAlterarSenha(true)}
+                className="w-full bg-slate-700 hover:bg-slate-600"
+              >
+                Alterar Senha
+              </Button>
             </CardContent>
           </Card>
         </div>
