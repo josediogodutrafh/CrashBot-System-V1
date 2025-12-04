@@ -38,6 +38,8 @@ app.add_middleware(
         "http://localhost:8501",  # Streamlit (temporário)
         "https://crashbot-loja.vercel.app",  # Vercel production
         "https://crashbot-loja-git-main-crash-bot.vercel.app",  # Vercel preview
+        "https://tucunarebot.com.br",  # Domínio principal
+        "https://www.tucunarebot.com.br",  # Domínio com www
     ],
     allow_credentials=True,
     allow_methods=["*"],
