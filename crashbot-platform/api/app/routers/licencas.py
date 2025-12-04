@@ -3,7 +3,7 @@ Router: Licenças
 Endpoints para validação de licenças e telemetria do bot.
 """
 
-import uuid
+import random
 from datetime import datetime, timedelta, timezone
 from typing import Optional, cast
 
@@ -153,6 +153,7 @@ async def listar_licencas(
 class CriarLicencaRequest(BaseModel):
     cliente_nome: str
     email_cliente: str
+    cpf: Optional[str] = None
     whatsapp: Optional[str] = None
     plano_tipo: str = "mensal"
     dias_validade: int = 30
@@ -171,7 +172,9 @@ async def criar_licenca(
 ):
     """Cria uma nova licenca manualmente (admin)."""
     # Gerar chave unica
-    chave = f"KEY-{uuid.uuid4().hex[:8].upper()}-{uuid.uuid4().hex[:4].upper()}-"
+    # Gerar chave no formato XXXX-XXXX-XXXX-XXXX (sem caracteres ambíguos)
+    caracteres = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"  # Sem O, 0, I, 1, L
+    chave = "-".join("".join(random.choices(caracteres, k=4)) for _ in range(4))
 
     # Calcular data de expiracao
     data_expiracao = datetime.now(timezone.utc) + timedelta(days=payload.dias_validade)
@@ -180,6 +183,7 @@ async def criar_licenca(
         chave=chave,
         cliente_nome=payload.cliente_nome,
         email_cliente=payload.email_cliente,
+        cpf=payload.cpf,
         whatsapp=payload.whatsapp or "Nao informado",
         plano_tipo=payload.plano_tipo,
         ativa=True,

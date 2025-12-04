@@ -24,6 +24,7 @@ class Licenca(Base):
     chave = Column(String(50), unique=True, nullable=False, index=True)
     hwid = Column(String(100), nullable=True, index=True)
     ativa = Column(Boolean, default=True, nullable=False)
+    cpf = Column(String(14), nullable=True)  # Formato: 000.000.000-00
 
     # Datas
     created_at = Column(
@@ -108,6 +109,7 @@ class Licenca(Base):
             "cliente_nome": self.cliente_nome,
             "email_cliente": self.email_cliente,
             "whatsapp": self.whatsapp,
+            "cpf": self.cpf,
             "telegram_chat_id": self.telegram_chat_id,
             "plano_tipo": self.plano_tipo,
             "payment_id": self.payment_id,

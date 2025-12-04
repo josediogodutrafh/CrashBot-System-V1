@@ -34,6 +34,7 @@ export default function AdminLicencas() {
   const [formData, setFormData] = useState({
     cliente_nome: '',
     email_cliente: '',
+    cpf: '',
     whatsapp: '',
     plano_tipo: 'mensal',
     dias_validade: 30,
@@ -127,6 +128,7 @@ export default function AdminLicencas() {
         setFormData({
           cliente_nome: '',
           email_cliente: '',
+          cpf: '',
           whatsapp: '',
           plano_tipo: 'mensal',
           dias_validade: 30,
@@ -522,6 +524,18 @@ export default function AdminLicencas() {
                   required
                   className="w-full px-4 py-3 bg-[#0a0a0f] border border-purple-900/30 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-purple-500/50"
                   placeholder="email@exemplo.com"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-400 mb-2">CPF</label>
+                <input
+                  type="text"
+                  value={formData.cpf}
+                  onChange={(e) =>
+                    setFormData({ ...formData, cpf: e.target.value })
+                  }
+                  className="w-full px-4 py-3 bg-[#0a0a0f] border border-purple-900/30 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-purple-500/50"
+                  placeholder="000.000.000-00"
                 />
               </div>
               <div>
