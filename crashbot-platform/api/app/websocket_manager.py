@@ -3,13 +3,14 @@ WebSocket Manager - Gerenciamento de conexões WebSocket
 """
 
 from typing import Dict, List
+
 from fastapi import WebSocket
 
 
 class ConnectionManager:
     """
     Gerencia conexões WebSocket.
-    
+
     Permite criar "rooms" (salas) para diferentes usuários/grupos
     e fazer broadcast de mensagens para conexões específicas.
     """
@@ -28,12 +29,14 @@ class ConnectionManager:
             room: Nome da room (ex: "admin", "user_123")
         """
         await websocket.accept()
-        
+
         if room not in self.active_connections:
             self.active_connections[room] = []
-        
+
         self.active_connections[room].append(websocket)
-        print(f"✅ Nova conexão na room '{room}'. Total: {len(self.active_connections[room])}")
+        print(
+            f"✅ Nova conexão na room '{room}'. Total: {len(self.active_connections[room])}"
+        )
 
     def disconnect(self, websocket: WebSocket, room: str):
         """
@@ -46,8 +49,10 @@ class ConnectionManager:
         if room in self.active_connections:
             if websocket in self.active_connections[room]:
                 self.active_connections[room].remove(websocket)
-                print(f"❌ Conexão removida da room '{room}'. Restantes: {len(self.active_connections[room])}")
-                
+                print(
+                    f"❌ Conexão removida da room '{room}'. Restantes: {len(self.active_connections[room])}"
+                )
+
                 # Remover room se vazia
                 if len(self.active_connections[room]) == 0:
                     del self.active_connections[room]
