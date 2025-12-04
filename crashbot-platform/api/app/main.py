@@ -36,12 +36,15 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:3000",  # Next.js dev
         "http://localhost:8501",  # Streamlit (temporário)
-        "https://*.vercel.app",  # Vercel preview/production
+        "https://crashbot-loja.vercel.app",  # Vercel production
+        "https://crashbot-loja-git-main-crash-bot.vercel.app",  # Vercel preview
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ============================================================================
 
 # ============================================================================
 # ROUTERS
