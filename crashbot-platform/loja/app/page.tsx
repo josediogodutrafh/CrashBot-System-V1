@@ -1,6 +1,7 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import Image from 'next/image';
 import Link from 'next/link';
 
 export default function Home() {
@@ -122,7 +123,7 @@ export default function Home() {
                 <p className="text-purple-300 text-lg mb-6">
                   A melhor plataforma de apostas do Brasil
                 </p>
-                
+
                 <ul className="space-y-3 text-slate-300 mb-8">
                   <li className="flex items-center gap-2">
                     <span className="text-green-400">✓</span>
@@ -147,11 +148,14 @@ export default function Home() {
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  <Button size="lg" className="bg-green-600 hover:bg-green-700 text-white px-8 py-6 text-lg w-full md:w-auto">
+                  <Button
+                    size="lg"
+                    className="bg-green-600 hover:bg-green-700 text-white px-8 py-6 text-lg w-full md:w-auto"
+                  >
                     🚀 Criar Conta na Brabet
                   </Button>
                 </a>
-                
+
                 <p className="text-xs text-slate-500 mt-4">
                   * Use nosso link para garantir compatibilidade com o bot
                 </p>
@@ -160,10 +164,12 @@ export default function Home() {
               {/* Lado Direito - QR Code */}
               <div className="text-center">
                 <div className="bg-white p-4 rounded-xl inline-block mb-4">
-                  <img
+                  <Image
                     src="/qrcode-brabet.png"
                     alt="QR Code Brabet"
-                    className="w-48 h-48 object-contain"
+                    width={192} // 48 * 4 (Tailwind w-48 é 12rem = 192px)
+                    height={192}
+                    className="object-contain" // w-48 h-48 não são necessários aqui se width/height forem definidos, mas pode manter para responsividade
                   />
                 </div>
                 <p className="text-slate-400 text-sm">
@@ -179,7 +185,8 @@ export default function Home() {
 
         <div className="text-center mt-8">
           <Badge className="bg-yellow-500/20 text-yellow-300 border-yellow-500/50 text-sm px-4 py-2">
-            ⚠️ IMPORTANTE: O bot só funciona com contas criadas através do nosso link
+            ⚠️ IMPORTANTE: O bot só funciona com contas criadas através do nosso
+            link
           </Badge>
         </div>
       </section>
@@ -358,8 +365,9 @@ export default function Home() {
               </CardTitle>
             </CardHeader>
             <CardContent className="text-slate-300">
-              O bot foi desenvolvido especificamente para a Brabet. Contas criadas
-              pelo nosso link garantem total compatibilidade e suporte técnico.
+              O bot foi desenvolvido especificamente para a Brabet. Contas
+              criadas pelo nosso link garantem total compatibilidade e suporte
+              técnico.
             </CardContent>
           </Card>
 
@@ -398,6 +406,20 @@ export default function Home() {
             Jogue com responsabilidade. Este produto é destinado apenas para
             maiores de 18 anos.
           </p>
+          <div className="mt-4 flex justify-center gap-6 text-sm">
+            <Link
+              href="/privacidade"
+              className="hover:text-purple-400 transition-colors"
+            >
+              Política de Privacidade
+            </Link>
+            <Link
+              href="/termos"
+              className="hover:text-purple-400 transition-colors"
+            >
+              Termos de Uso
+            </Link>
+          </div>
         </div>
       </footer>
     </div>
