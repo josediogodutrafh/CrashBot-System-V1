@@ -102,7 +102,7 @@ def gerar_senha_temporaria(tamanho: int = 10) -> str:
 def get_mp_sdk():
     """Retorna instância do SDK do Mercado Pago."""
     # Uso de walrus operator (:=) para simplificar
-    if access_token := os.getenv("MERCADOPAGO_ACCESS_TOKEN"):
+    if access_token := os.getenv("MP_ACCESS_TOKEN"):
         return mercadopago.SDK(access_token)
 
     raise HTTPException(
