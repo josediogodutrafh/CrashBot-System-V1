@@ -43,7 +43,7 @@ async def enviar_email(
                     "Content-Type": "application/json",
                 },
                 json={
-                    "from": settings.EMAIL_FROM,
+                    "from": "TucunareBot <contato@tucunarebot.com.br>",
                     "to": [para],
                     "subject": assunto,
                     "html": html,
