@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react'; // Importar useCallback
 
 // URL da API
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -36,34 +36,38 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const fetchLicencas = async (token: string) => {
-    try {
-      const response = await fetch(`${API_URL}/api/v1/licencas`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+  // CORREÇÃO 1: Usar useCallback para memoizar a função
+  const fetchLicencas = useCallback(
+    async (token: string) => {
+      try {
+        const response = await fetch(`${API_URL}/api/v1/licencas`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
 
-      if (response.status === 401) {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        router.push('/login');
-        return;
+        if (response.status === 401) {
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          router.push('/login');
+          return;
+        }
+
+        if (!response.ok) {
+          throw new Error('Erro ao buscar licenças');
+        }
+
+        const data = await response.json();
+        setLicencas(data);
+      } catch (err) {
+        console.error('Erro:', err);
+        setError('Erro ao carregar licenças');
+      } finally {
+        setLoading(false);
       }
-
-      if (!response.ok) {
-        throw new Error('Erro ao buscar licenças');
-      }
-
-      const data = await response.json();
-      setLicencas(data);
-    } catch (err) {
-      console.error('Erro:', err);
-      setError('Erro ao carregar licenças');
-    } finally {
-      setLoading(false);
-    }
-  };
+    },
+    [router]
+  ); // Dependência do useCallback
 
   useEffect(() => {
     // Delay para garantir que localStorage foi persistido após navegação
@@ -83,7 +87,8 @@ export default function DashboardPage() {
     }, 100);
 
     return () => clearTimeout(timer);
-  }, [router]);
+    // CORREÇÃO 2: Adicionar fetchLicencas às dependências (agora é seguro)
+  }, [router, fetchLicencas]);
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -95,8 +100,8 @@ export default function DashboardPage() {
     const hoje = new Date();
     const expiracao = new Date(dataExpiracao);
     const diffTime = expiracao.getTime() - hoje.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays;
+    // CORREÇÃO 3: Inline variable (Sourcery)
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   };
 
   const formatarData = (data: string) => {

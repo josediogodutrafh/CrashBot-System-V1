@@ -5,7 +5,7 @@ Endpoints para validação de licenças e telemetria do bot.
 
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Optional, cast
 
 from app.database import get_db
 from app.dependencies import get_current_admin
@@ -48,44 +48,45 @@ async def validar_licenca(
             detail="Licença não encontrada",
         )
 
-    # CORREÇÃO 1: Cast explícito para bool para satisfazer o Pylance (opcional se rodar ok)
-    # Mas o erro principal aqui era a falta de 'dias_restantes'
-    if not bool(licenca.ativa):
+    # Licença desativada
+    if licenca.ativa is False:
         return ValidarLicencaResponse(
             sucesso=False,
             mensagem="Licença desativada",
             ativa=False,
-            dias_restantes=0,  # <--- ADICIONADO: Campo obrigatório que faltava
+            dias_restantes=0,
         )
 
     # Licença expirada
-    if licenca.esta_expirada:
+    if bool(licenca.esta_expirada):
         return ValidarLicencaResponse(
             sucesso=False,
             mensagem="Licença expirada",
             dias_restantes=0,
-            ativa=bool(licenca.ativa),  # Cast para garantir bool
+            ativa=bool(licenca.ativa),
         )
 
-    # Verificar HWID
-    if licenca.hwid:
-        # HWID já registrado - verificar se é o mesmo
-        # Comparação direta de strings
-        if str(licenca.hwid) != payload.hwid:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="HWID não autorizado. Licença já vinculada a outro computador.",
-            )
-    else:
+    # Verificar HWID (CORREÇÃO DEFINITIVA)
+    current_hwid = licenca.hwid
+
+    if current_hwid is None:
         # Primeira vez usando - registrar HWID
-        licenca.hwid = payload.hwid
+        # type: ignore -> Silencia erro de atribuir str em Column[str]
+        licenca.hwid = payload.hwid  # type: ignore
         await db.commit()
+    elif str(current_hwid) != payload.hwid:
+        # HWID já registrado e diferente
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="HWID não autorizado. Licença já vinculada a outro computador.",
+        )
 
     # Tudo OK!
     return ValidarLicencaResponse(
         sucesso=True,
         mensagem="Licença válida",
-        dias_restantes=licenca.dias_restantes,
+        # type: ignore -> Silencia erro se dias_restantes for None (Pydantic valida em runtime)
+        dias_restantes=licenca.dias_restantes,  # type: ignore
         ativa=bool(licenca.ativa),
     )
 
@@ -102,15 +103,6 @@ async def receber_telemetria(
 ):
     """
     Recebe telemetria do bot.
-
-    Salva logs de:
-    - Apostas realizadas
-    - Vitórias/derrotas
-    - Erros
-    - Outras informações
-
-    Returns:
-        TelemetriaResponse: Confirmação do recebimento
     """
     # Criar novo log
     novo_log = LogBot(
@@ -128,8 +120,29 @@ async def receber_telemetria(
 
     return TelemetriaResponse(
         status="ok",
-        id=novo_log.id,
+        id=int(novo_log.id),  # type: ignore - Cast explícito para int
     )
+
+
+# ============================================================================
+# ENDPOINT: LISTAR LICENÇAS (Admin)
+# ============================================================================
+
+
+@router.get("/licencas")
+async def listar_licencas(
+    skip: int = 0,
+    limit: int = 100,
+    db: AsyncSession = Depends(get_db),
+    current_admin: Usuario = Depends(get_current_admin),
+):
+    """Lista todas as licenças (endpoint admin)."""
+    result = await db.execute(
+        select(Licenca).offset(skip).limit(limit).order_by(Licenca.id.desc())
+    )
+    licencas = result.scalars().all()
+
+    return [licenca.to_dict() for licenca in licencas]
 
 
 # ============================================================================
@@ -156,9 +169,7 @@ async def criar_licenca(
     db: AsyncSession = Depends(get_db),
     current_admin: Usuario = Depends(get_current_admin),
 ):
-    """
-    Cria uma nova licenca manualmente (admin).
-    """
+    """Cria uma nova licenca manualmente (admin)."""
     # Gerar chave unica
     chave = f"KEY-{uuid.uuid4().hex[:8].upper()}-{uuid.uuid4().hex[:4].upper()}-"
 
@@ -183,37 +194,6 @@ async def criar_licenca(
 
 
 # ============================================================================
-# ENDPOINT: LISTAR LICENÇAS (Admin)
-# ============================================================================
-
-
-@router.get("/licencas")
-async def listar_licencas(
-    skip: int = 0,
-    limit: int = 100,
-    db: AsyncSession = Depends(get_db),
-    current_admin: Usuario = Depends(get_current_admin),
-):
-    """
-    Lista todas as licenças (endpoint admin - requer autenticação).
-
-    Args:
-        skip: Número de registros para pular (paginação)
-        limit: Número máximo de registros a retornar
-        current_admin: Admin autenticado (necessário para acessar)
-
-    Returns:
-        list: Lista de licenças
-    """
-    result = await db.execute(
-        select(Licenca).offset(skip).limit(limit).order_by(Licenca.id.desc())
-    )
-    licencas = result.scalars().all()
-
-    return [licenca.to_dict() for licenca in licencas]
-
-
-# ============================================================================
 # ENDPOINT: TOGGLE ATIVAR/DESATIVAR LICENCA (Admin)
 # ============================================================================
 
@@ -224,9 +204,7 @@ async def toggle_licenca(
     db: AsyncSession = Depends(get_db),
     current_admin: Usuario = Depends(get_current_admin),
 ):
-    """
-    Ativa ou desativa uma licenca.
-    """
+    """Ativa ou desativa uma licenca."""
     result = await db.execute(select(Licenca).where(Licenca.id == licenca_id))
     licenca = result.scalar_one_or_none()
 
@@ -236,7 +214,11 @@ async def toggle_licenca(
             detail="Licenca nao encontrada",
         )
 
-    licenca.ativa = not licenca.ativa
+    # CORREÇÃO: Cast para bool para evitar erro de tipo na inversão
+    status_atual = bool(licenca.ativa)
+    # type: ignore -> Silencia erro de atribuir bool em Column[bool]
+    licenca.ativa = not status_atual  # type: ignore
+
     await db.commit()
 
     return {"success": True, "ativa": licenca.ativa}
@@ -253,9 +235,7 @@ async def reset_hwid(
     db: AsyncSession = Depends(get_db),
     current_admin: Usuario = Depends(get_current_admin),
 ):
-    """
-    Reseta o HWID de uma licenca para permitir uso em outro computador.
-    """
+    """Reseta o HWID de uma licenca."""
     result = await db.execute(select(Licenca).where(Licenca.id == licenca_id))
     licenca = result.scalar_one_or_none()
 
@@ -265,7 +245,8 @@ async def reset_hwid(
             detail="Licenca nao encontrada",
         )
 
-    licenca.hwid = None
+    # type: ignore -> Silencia erro de atribuir None em Column[str]
+    licenca.hwid = None  # type: ignore
     await db.commit()
 
     return {"success": True, "message": "HWID resetado com sucesso"}
@@ -283,9 +264,7 @@ async def listar_logs(
     db: AsyncSession = Depends(get_db),
     current_admin: Usuario = Depends(get_current_admin),
 ):
-    """
-    Lista todos os logs de telemetria (admin).
-    """
+    """Lista todos os logs de telemetria (admin)."""
     result = await db.execute(
         select(LogBot).offset(skip).limit(limit).order_by(LogBot.id.desc())
     )
@@ -299,7 +278,12 @@ async def listar_logs(
             "tipo": log.tipo,
             "dados": log.dados,
             "lucro": log.lucro,
-            "timestamp": log.timestamp.isoformat() if log.timestamp else None,
+            # CORREÇÃO: Cast seguro e verificação de None para o timestamp
+            "timestamp": (
+                cast(datetime, log.timestamp).isoformat()
+                if log.timestamp is not None
+                else None
+            ),
         }
         for log in logs
     ]
