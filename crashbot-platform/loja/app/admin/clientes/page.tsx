@@ -17,6 +17,14 @@ interface Licenca {
   created_at: string;
 }
 
+interface Usuario {
+  id: number;
+  email: string;
+  nome: string;
+  is_admin: boolean;
+  is_active: boolean;
+}
+
 interface Cliente {
   email: string;
   nome: string;
@@ -24,17 +32,42 @@ interface Cliente {
   licencas: Licenca[];
   totalLicencas: number;
   licencasAtivas: number;
+  userId?: number;
 }
 
 export default function AdminClientes() {
   const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [selectedCliente, setSelectedCliente] = useState<Cliente | null>(null);
+  const [showResetSenha, setShowResetSenha] = useState(false);
+  const [novaSenha, setNovaSenha] = useState('');
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetMsg, setResetMsg] = useState({ tipo: '', texto: '' });
 
   useEffect(() => {
     fetchClientes();
+    fetchUsuarios();
   }, []);
+
+  const fetchUsuarios = async () => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
+    try {
+      const response = await fetch(`${API_URL}/api/v1/auth/users`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (response.ok) {
+        const data: Usuario[] = await response.json();
+        setUsuarios(data);
+      }
+    } catch (error) {
+      console.error('Erro ao buscar usuários:', error);
+    }
+  };
 
   const fetchClientes = async () => {
     const token = localStorage.getItem('token');
@@ -79,6 +112,63 @@ export default function AdminClientes() {
       console.error('Erro ao buscar clientes:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleResetSenha = async () => {
+    if (!selectedCliente || !novaSenha) return;
+
+    const usuario = usuarios.find((u) => u.email === selectedCliente.email);
+    if (!usuario) {
+      setResetMsg({ tipo: 'erro', texto: 'Usuário não encontrado no sistema' });
+      return;
+    }
+
+    if (novaSenha.length < 6) {
+      setResetMsg({
+        tipo: 'erro',
+        texto: 'A senha deve ter pelo menos 6 caracteres',
+      });
+      return;
+    }
+
+    setResetLoading(true);
+    setResetMsg({ tipo: '', texto: '' });
+
+    const token = localStorage.getItem('token');
+
+    try {
+      const response = await fetch(
+        `${API_URL}/api/v1/auth/reset-password/${
+          usuario.id
+        }?nova_senha=${encodeURIComponent(novaSenha)}`,
+        {
+          method: 'PUT',
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
+      if (response.ok) {
+        setResetMsg({
+          tipo: 'sucesso',
+          texto: `Senha resetada para: ${novaSenha}`,
+        });
+        setNovaSenha('');
+        setTimeout(() => {
+          setShowResetSenha(false);
+          setResetMsg({ tipo: '', texto: '' });
+        }, 3000);
+      } else {
+        const data = await response.json();
+        throw new Error(data.detail || 'Erro ao resetar senha');
+      }
+    } catch (error) {
+      setResetMsg({
+        tipo: 'erro',
+        texto: error instanceof Error ? error.message : 'Erro ao resetar senha',
+      });
+    } finally {
+      setResetLoading(false);
     }
   };
 
@@ -293,10 +383,102 @@ export default function AdminClientes() {
                   </a>
                 )}
               <button
+                onClick={() => {
+                  setShowResetSenha(true);
+                  setNovaSenha('');
+                  setResetMsg({ tipo: '', texto: '' });
+                }}
+                className="flex items-center gap-2 px-4 py-2 bg-yellow-600/20 text-yellow-400 border border-yellow-500/30 rounded-xl hover:bg-yellow-600/30 transition-colors"
+              >
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"
+                  />
+                </svg>
+                Resetar Senha
+              </button>
+              <button
                 onClick={() => setSelectedCliente(null)}
                 className="flex-1 px-4 py-2 text-gray-400 hover:text-white border border-purple-900/30 rounded-xl transition-colors"
               >
                 Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Resetar Senha */}
+      {showResetSenha && selectedCliente && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
+          <div className="bg-[#12121a] rounded-2xl border border-purple-900/30 w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-white">🔑 Resetar Senha</h3>
+              <button
+                onClick={() => {
+                  setShowResetSenha(false);
+                  setResetMsg({ tipo: '', texto: '' });
+                }}
+                className="text-gray-400 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-gray-400 mb-4">
+              Resetar senha de:{' '}
+              <span className="text-white">{selectedCliente.email}</span>
+            </p>
+
+            {resetMsg.texto && (
+              <div
+                className={`p-3 rounded-lg mb-4 text-sm ${
+                  resetMsg.tipo === 'erro'
+                    ? 'bg-red-500/20 border border-red-500 text-red-300'
+                    : 'bg-green-500/20 border border-green-500 text-green-300'
+                }`}
+              >
+                {resetMsg.texto}
+              </div>
+            )}
+
+            <div className="mb-6">
+              <label className="block text-gray-300 mb-2 text-sm">
+                Nova Senha
+              </label>
+              <input
+                type="text"
+                value={novaSenha}
+                onChange={(e) => setNovaSenha(e.target.value)}
+                placeholder="Digite a nova senha (mín. 6 caracteres)"
+                className="w-full bg-[#0a0a0f] border border-purple-900/30 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-purple-500/50"
+              />
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowResetSenha(false);
+                  setResetMsg({ tipo: '', texto: '' });
+                }}
+                className="flex-1 px-4 py-3 text-gray-400 hover:text-white border border-purple-900/30 rounded-xl transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleResetSenha}
+                disabled={resetLoading || novaSenha.length < 6}
+                className="flex-1 px-4 py-3 bg-yellow-600 hover:bg-yellow-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-xl transition-colors"
+              >
+                {resetLoading ? 'Resetando...' : 'Resetar Senha'}
               </button>
             </div>
           </div>

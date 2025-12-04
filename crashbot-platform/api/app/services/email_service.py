@@ -216,7 +216,7 @@ def template_licenca_criada(
                 </div>
             </div>
 
-            <a href="https://crashbot-loja.vercel.app/login" class="button">
+            <a href="https://tucunarebot.com.br/login" class="button">
                 Acessar Meu Painel
             </a>
 
