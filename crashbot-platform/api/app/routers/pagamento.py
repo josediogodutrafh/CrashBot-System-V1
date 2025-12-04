@@ -85,8 +85,10 @@ PLANOS = {
 
 
 def gerar_chave_licenca() -> str:
-    """Gera uma chave de licença única."""
-    return f"CB-{uuid.uuid4().hex[:8].upper()}-{uuid.uuid4().hex[:4].upper()}"
+    """Gera uma chave de licença única no formato XXXX-XXXX-XXXX-XXXX."""
+    caracteres = string.ascii_uppercase + string.digits
+    partes = ["".join(secrets.choice(caracteres) for _ in range(4)) for _ in range(4)]
+    return "-".join(partes)
 
 
 # Contexto para hash de senha

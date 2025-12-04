@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional, cast
 
 from app.database import get_db
-from app.dependencies import get_current_admin
+from app.dependencies import get_current_admin, get_current_user
 from app.models import Licenca, LogBot, Usuario
 from app.schemas.licenca import (
     TelemetriaRequest,
@@ -291,3 +291,25 @@ async def listar_logs(
         }
         for log in logs
     ]
+
+
+# ============================================================================
+# ENDPOINT: MINHAS LICENÇAS (Cliente)
+# ============================================================================
+
+
+@router.get("/minhas-licencas")
+async def minhas_licencas(
+    db: AsyncSession = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+):
+    """Lista as licenças do usuário logado (por email)."""
+    # Buscar licenças pelo email do usuário
+    result = await db.execute(
+        select(Licenca)
+        .where(Licenca.email_cliente == current_user.email)
+        .order_by(Licenca.id.desc())
+    )
+    licencas = result.scalars().all()
+
+    return [licenca.to_dict() for licenca in licencas]
