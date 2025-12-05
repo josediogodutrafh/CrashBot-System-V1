@@ -112,7 +112,7 @@ export default function AdminLayout({
     },
     {
       name: 'Telemetria',
-      href: '/admin/logs',
+      href: '/admin/telemetria',
       icon: (
         <svg
           className="w-5 h-5"
