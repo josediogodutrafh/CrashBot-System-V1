@@ -302,15 +302,18 @@ async def _get_historico_diario(db, hwid: str, data_inicio: Optional[datetime]):
     filters = _get_base_filters(data_inicio, hwid)
     filters.append(LogBot.tipo == "Round")
 
+    dia_truncado = func.date_trunc("day", LogBot.timestamp)
     historico_query = (
         select(
-            func.date_trunc("day", LogBot.timestamp).label("dia"),
+            dia_truncado.label("dia"),
             func.sum(LogBot.lucro).label("lucro"),
             func.count(LogBot.id).label("rounds"),
         )
-        .where(and_(*filters))
-        .group_by(func.date_trunc("day", LogBot.timestamp))
-        .order_by(func.date_trunc("day", LogBot.timestamp))
+        .where(LogBot.timestamp >= data_inicio)
+        .where(LogBot.hwid == licenca.hwid)
+        .where(LogBot.tipo == "Round")
+        .group_by(dia_truncado)
+        .order_by(dia_truncado)
     )
     historico_result = await db.execute(historico_query)
     return [
