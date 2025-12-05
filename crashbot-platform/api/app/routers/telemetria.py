@@ -98,14 +98,15 @@ async def dashboard_telemetria(
 
     # 3. Atividade por hora (últimas 24h)
     hora_corte = agora - timedelta(hours=24)
+    hora_truncada = func.date_trunc("hour", LogBot.timestamp)
     atividade_query = (
         select(
-            func.date_trunc("hour", LogBot.timestamp).label("hora"),
+            hora_truncada.label("hora"),
             func.count(LogBot.id).label("quantidade"),
         )
         .where(LogBot.timestamp >= hora_corte)
-        .group_by(func.date_trunc("hour", LogBot.timestamp))
-        .order_by(func.date_trunc("hour", LogBot.timestamp))
+        .group_by(hora_truncada)
+        .order_by(hora_truncada)
     )
     atividade_result = await db.execute(atividade_query)
     atividade_por_hora = [
