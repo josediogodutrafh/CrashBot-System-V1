@@ -310,7 +310,7 @@ async def _get_historico_diario(db, hwid: str, data_inicio: Optional[datetime]):
             func.count(LogBot.id).label("rounds"),
         )
         .where(LogBot.timestamp >= data_inicio)
-        .where(LogBot.hwid == licenca.hwid)
+        .where(LogBot.hwid == hwid)
         .where(LogBot.tipo == "Round")
         .group_by(dia_truncado)
         .order_by(dia_truncado)
