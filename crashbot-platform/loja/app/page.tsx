@@ -36,6 +36,14 @@ export default function Home() {
                 Como Funciona
               </Button>
             </Link>
+            <Link href="/manual">
+              <Button
+                variant="ghost"
+                className="text-white hover:text-purple-300"
+              >
+                📚 Manual
+              </Button>
+            </Link>
             <Link href="/login">
               <Button
                 variant="outline"
@@ -76,12 +84,12 @@ export default function Home() {
               Ver Planos
             </Button>
           </Link>
-          <Link href="#como-funciona">
+          <Link href="/manual">
             <Button
               size="lg"
               className="bg-white text-purple-700 hover:bg-purple-100 px-8 py-6 text-lg font-semibold"
             >
-              Como Funciona
+              📚 Ver Manual
             </Button>
           </Link>
         </div>
@@ -167,9 +175,9 @@ export default function Home() {
                   <Image
                     src="/qrcode-brabet.png"
                     alt="QR Code Brabet"
-                    width={192} // 48 * 4 (Tailwind w-48 é 12rem = 192px)
+                    width={192}
                     height={192}
-                    className="object-contain" // w-48 h-48 não são necessários aqui se width/height forem definidos, mas pode manter para responsividade
+                    className="object-contain"
                   />
                 </div>
                 <p className="text-slate-400 text-sm">
@@ -236,6 +244,19 @@ export default function Home() {
               Acompanhe seus resultados em tempo real.
             </CardContent>
           </Card>
+        </div>
+
+        {/* Link para Manual */}
+        <div className="text-center mt-12">
+          <Link href="/manual">
+            <Button
+              size="lg"
+              variant="outline"
+              className="border-purple-500 text-purple-300 hover:bg-purple-500 hover:text-white"
+            >
+              📚 Ver Manual Completo
+            </Button>
+          </Link>
         </div>
       </section>
 
@@ -396,6 +417,18 @@ export default function Home() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Link para FAQ completo */}
+        <div className="text-center mt-10">
+          <Link href="/manual#faq">
+            <Button
+              variant="link"
+              className="text-purple-400 hover:text-purple-300"
+            >
+              Ver todas as perguntas no Manual →
+            </Button>
+          </Link>
+        </div>
       </section>
 
       {/* Footer */}
@@ -407,6 +440,12 @@ export default function Home() {
             maiores de 18 anos.
           </p>
           <div className="mt-4 flex justify-center gap-6 text-sm">
+            <Link
+              href="/manual"
+              className="hover:text-purple-400 transition-colors"
+            >
+              📚 Manual
+            </Link>
             <Link
               href="/privacidade"
               className="hover:text-purple-400 transition-colors"
