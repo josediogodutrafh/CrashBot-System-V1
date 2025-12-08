@@ -16,6 +16,11 @@ import mercadopago
 from app.database import get_db
 from app.models import Licenca, Usuario
 from app.services.email_service import enviar_email, template_licenca_criada
+from app.services.promocao_service import (
+    obter_preco_plano,
+    verificar_elegibilidade_primeira_adesao,
+    verificar_elegibilidade_trial,
+)
 from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from passlib.context import CryptContext
@@ -37,10 +42,12 @@ router = APIRouter(prefix="/api/v1/pagamento", tags=["pagamento"])
 class CriarPagamentoRequest(BaseModel):
     """Request para criar pagamento."""
 
-    plano: str  # experimental, semanal, mensal
+    plano: str  # trial, semanal, quinzenal, mensal
     nome: str
     email: EmailStr
     whatsapp: str
+    cpf: str  # Formato: 000.000.000-00
+    hwid: Optional[str] = None  # Hardware ID (opcional no momento da compra)
 
 
 class CriarPagamentoResponse(BaseModel):
@@ -58,21 +65,30 @@ class CriarPagamentoResponse(BaseModel):
 
 
 PLANOS = {
-    "experimental": {
-        "nome": "Experimental",
-        "preco": 29.90,
-        "dias": 3,
-        "descricao": "Plano Experimental - 3 dias de acesso",
+    "trial": {
+        "nome": "Trial",
+        "preco": 0.00,
+        "dias": 7,
+        "descricao": "Período de teste gratuito - 7 dias",
     },
     "semanal": {
         "nome": "Semanal",
-        "preco": 149.90,
+        "preco_normal": 149.90,
+        "preco_primeira_adesao": 49.90,
         "dias": 7,
         "descricao": "Plano Semanal - 7 dias de acesso",
     },
+    "quinzenal": {
+        "nome": "Quinzenal",
+        "preco_normal": 249.90,
+        "preco_primeira_adesao": 89.90,
+        "dias": 15,
+        "descricao": "Plano Quinzenal - 15 dias de acesso",
+    },
     "mensal": {
         "nome": "Mensal",
-        "preco": 499.90,
+        "preco_normal": 449.90,
+        "preco_primeira_adesao": 149.90,
         "dias": 30,
         "descricao": "Plano Mensal - 30 dias de acesso",
     },
@@ -142,6 +158,25 @@ async def criar_pagamento(
 
     plano = PLANOS[dados.plano]
 
+    # Se for trial, redirecionar para endpoint específico
+    if dados.plano == "trial":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Para trial gratuito, use o endpoint /trial",
+        )
+
+    # Obter preço correto baseado no histórico do cliente
+    preco_info = await obter_preco_plano(db, dados.plano, dados.cpf, dados.hwid)
+
+    if not preco_info:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Plano inválido",
+        )
+
+    preco_final = preco_info["preco"]
+    is_primeira_adesao = preco_info["is_primeira_adesao"]
+
     # Gerar ID único para referência
     external_reference = f"{dados.plano}_{uuid.uuid4().hex[:12]}"
 
@@ -151,15 +186,20 @@ async def criar_pagamento(
     # URL base para callbacks
     base_url = str(request.base_url).rstrip("/")
 
+    # Descrição com info de promoção
+    descricao = plano["descricao"]
+    if is_primeira_adesao:
+        descricao += " (Preço de Primeira Adesão)"
+
     # Criar preferência de pagamento
     preference_data = {
         "items": [
             {
                 "title": f"CrashBot - {plano['nome']}",
-                "description": plano["descricao"],
+                "description": descricao,
                 "quantity": 1,
                 "currency_id": "BRL",
-                "unit_price": plano["preco"],
+                "unit_price": preco_final,
             }
         ],
         "payer": {
@@ -180,6 +220,9 @@ async def criar_pagamento(
             "nome": dados.nome,
             "email": dados.email,
             "whatsapp": dados.whatsapp,
+            "cpf": dados.cpf,
+            "hwid": dados.hwid,
+            "is_primeira_adesao": is_primeira_adesao,
         },
         "payment_methods": {
             "excluded_payment_types": [],
@@ -213,7 +256,188 @@ async def criar_pagamento(
         payment_id=preference["id"],
         init_point=preference["init_point"],
         plano=dados.plano,
-        valor=plano["preco"],
+        valor=preco_final,
+    )
+
+
+# ============================================================================
+# ENDPOINT: CRIAR TRIAL GRATUITO
+# ============================================================================
+
+
+class CriarTrialRequest(BaseModel):
+    """Request para criar trial gratuito."""
+
+    nome: str
+    email: EmailStr
+    whatsapp: str
+    cpf: str  # Formato: 000.000.000-00
+    hwid: Optional[str] = None
+
+
+class CriarTrialResponse(BaseModel):
+    """Response do trial criado."""
+
+    success: bool
+    chave: str
+    mensagem: str
+    dias: int
+
+
+@router.post("/trial", response_model=CriarTrialResponse)
+async def criar_trial(
+    dados: CriarTrialRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Cria uma licença trial gratuita (7 dias).
+    Limitado a 1 trial por CPF + HWID.
+    """
+    # Verificar elegibilidade
+    elegibilidade = await verificar_elegibilidade_trial(db, dados.cpf, dados.hwid)
+
+    if not elegibilidade["pode_usar_trial"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=elegibilidade["motivo"],
+        )
+
+    # Criar licença trial
+    chave = gerar_chave_licenca()
+    data_expiracao = datetime.now(timezone.utc) + timedelta(days=7)
+
+    nova_licenca = Licenca(
+        chave=chave,
+        ativa=True,
+        data_expiracao=data_expiracao,
+        cliente_nome=dados.nome,
+        email_cliente=dados.email,
+        whatsapp=dados.whatsapp,
+        cpf=dados.cpf,
+        hwid=dados.hwid,
+        plano_tipo="trial",
+        is_trial=True,
+        is_primeira_adesao=False,
+    )
+
+    db.add(nova_licenca)
+    await db.commit()
+
+    print(f"✅ Trial criado: {chave} para {dados.email}")
+
+    # Criar conta do usuário se não existir
+    result_user = await db.execute(select(Usuario).where(Usuario.email == dados.email))
+    usuario_existente = result_user.scalar_one_or_none()
+
+    senha_temporaria = None
+    if not usuario_existente:
+        senha_temporaria = gerar_senha_temporaria()
+        senha_hash = pwd_context.hash(senha_temporaria)
+
+        novo_usuario = Usuario(
+            email=dados.email,
+            senha_hash=senha_hash,
+            nome=dados.nome,
+            is_admin=False,
+            is_active=True,
+        )
+
+        db.add(novo_usuario)
+        await db.commit()
+        print(f"✅ Usuário criado: {dados.email}")
+    else:
+        senha_temporaria = "(sua senha atual)"
+
+    # Enviar email
+    try:
+        html_email = template_licenca_criada(
+            nome=dados.nome or "Cliente",
+            email=dados.email,
+            senha=senha_temporaria,
+            chave_licenca=chave,
+            plano="trial",
+            dias=7,
+        )
+
+        await enviar_email(
+            para=dados.email,
+            assunto="🎉 Seu trial CrashBot está ativo!",
+            html=html_email,
+        )
+    except Exception as e:
+        print(f"⚠️ Erro ao enviar email: {e}")
+
+    return CriarTrialResponse(
+        success=True,
+        chave=chave,
+        mensagem="Trial de 7 dias ativado com sucesso!",
+        dias=7,
+    )
+
+
+# ============================================================================
+# ENDPOINT: VERIFICAR ELEGIBILIDADE
+# ============================================================================
+
+
+class VerificarElegibilidadeRequest(BaseModel):
+    """Request para verificar elegibilidade."""
+
+    cpf: str
+    hwid: Optional[str] = None
+
+
+class PlanoPrecoInfo(BaseModel):
+    """Informações de preço de um plano."""
+
+    nome: str
+    preco: float
+    preco_original: float
+    dias: int
+    is_primeira_adesao: bool
+    desconto: float
+
+
+class VerificarElegibilidadeResponse(BaseModel):
+    """Response com elegibilidade e preços."""
+
+    pode_usar_trial: bool
+    motivo_trial: Optional[str] = None
+    planos: dict[str, PlanoPrecoInfo]
+
+
+@router.post("/verificar-elegibilidade", response_model=VerificarElegibilidadeResponse)
+async def verificar_elegibilidade(
+    dados: VerificarElegibilidadeRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Verifica elegibilidade do cliente para trial e primeira adesão.
+    Retorna os preços corretos para cada plano.
+    """
+    # Verificar trial
+    trial_info = await verificar_elegibilidade_trial(db, dados.cpf, dados.hwid)
+
+    # Obter preços de cada plano
+    planos_info = {}
+
+    for plano_key in ["semanal", "quinzenal", "mensal"]:
+        preco_info = await obter_preco_plano(db, plano_key, dados.cpf, dados.hwid)
+        plano_config = PLANOS[plano_key]
+
+        planos_info[plano_key] = PlanoPrecoInfo(
+            nome=plano_config["nome"],
+            preco=preco_info["preco"],
+            preco_original=preco_info["preco_original"],
+            dias=preco_info["dias"],
+            is_primeira_adesao=preco_info["is_primeira_adesao"],
+            desconto=preco_info["desconto"],
+        )
+
+    return VerificarElegibilidadeResponse(
+        pode_usar_trial=trial_info["pode_usar_trial"],
+        motivo_trial=trial_info["motivo"],
+        planos=planos_info,
     )
 
 
@@ -280,6 +504,11 @@ async def webhook_mercadopago(
         print(f"Licença já existe para pagamento {payment_id}")
         return {"status": "ok", "message": "Licença já criada"}
 
+    # Extrair dados adicionais dos metadados
+    cpf = metadata.get("cpf")
+    hwid = metadata.get("hwid")
+    is_primeira_adesao = metadata.get("is_primeira_adesao", False)
+
     # Criar nova licença
     chave = gerar_chave_licenca()
     data_expiracao = datetime.now(timezone.utc) + timedelta(days=int(dias))
@@ -291,8 +520,12 @@ async def webhook_mercadopago(
         cliente_nome=nome,
         email_cliente=email,
         whatsapp=whatsapp,
+        cpf=cpf,
+        hwid=hwid,
         plano_tipo=plano,
         payment_id=str(payment_id),
+        is_trial=False,
+        is_primeira_adesao=is_primeira_adesao,
     )
 
     db.add(nova_licenca)
