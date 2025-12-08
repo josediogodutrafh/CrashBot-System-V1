@@ -6,50 +6,261 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+
+// --- TIPAGEM ---
+interface PlanoBaseComum {
+  nome: string;
+  dias: number;
+  descricao: string;
+  popular?: boolean;
+}
+
+interface PlanoTrial extends PlanoBaseComum {
+  isTrial: true;
+  preco: number;
+}
+
+interface PlanoPago extends PlanoBaseComum {
+  isTrial?: false;
+  precoNormal: number;
+  precoPrimeiraAdesao: number;
+}
+
+type Plano = PlanoTrial | PlanoPago;
+
+type PlanosMap = {
+  [key: string]: Plano;
+};
 
 // Dados dos planos
-const planos = {
-  experimental: {
-    nome: 'Experimental',
-    preco: 29.9,
-    dias: 3,
-    descricao: 'Ideal para testar o bot',
+const planosBase: PlanosMap = {
+  trial: {
+    nome: 'Trial Gratuito',
+    preco: 0,
+    dias: 7,
+    descricao: 'Teste grátis por 7 dias',
+    isTrial: true,
   },
   semanal: {
     nome: 'Semanal',
-    preco: 149.9,
+    precoNormal: 149.9,
+    precoPrimeiraAdesao: 49.9,
     dias: 7,
-    descricao: 'Melhor custo-benefício',
+    descricao: 'Acesso por 7 dias',
     popular: true,
+  },
+  quinzenal: {
+    nome: 'Quinzenal',
+    precoNormal: 249.9,
+    precoPrimeiraAdesao: 89.9,
+    dias: 15,
+    descricao: 'Acesso por 15 dias',
   },
   mensal: {
     nome: 'Mensal',
-    preco: 499.9,
+    precoNormal: 449.9,
+    precoPrimeiraAdesao: 149.9,
     dias: 30,
-    descricao: 'Para profissionais',
+    descricao: 'Melhor custo-benefício',
   },
 };
 
 // URL da API
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
+// Função para formatar CPF
+const formatarCPF = (valor: string) => {
+  const apenas_numeros = valor.replace(/\D/g, '');
+  if (apenas_numeros.length <= 3) return apenas_numeros;
+  if (apenas_numeros.length <= 6)
+    return `${apenas_numeros.slice(0, 3)}.${apenas_numeros.slice(3)}`;
+  if (apenas_numeros.length <= 9)
+    return `${apenas_numeros.slice(0, 3)}.${apenas_numeros.slice(
+      3,
+      6
+    )}.${apenas_numeros.slice(6)}`;
+  return `${apenas_numeros.slice(0, 3)}.${apenas_numeros.slice(
+    3,
+    6
+  )}.${apenas_numeros.slice(6, 9)}-${apenas_numeros.slice(9, 11)}`;
+};
+
+// Função para formatar WhatsApp
+const formatarWhatsApp = (valor: string) => {
+  const apenas_numeros = valor.replace(/\D/g, '');
+  if (apenas_numeros.length <= 2) return apenas_numeros;
+  if (apenas_numeros.length <= 7)
+    return `(${apenas_numeros.slice(0, 2)}) ${apenas_numeros.slice(2)}`;
+  return `(${apenas_numeros.slice(0, 2)}) ${apenas_numeros.slice(
+    2,
+    7
+  )}-${apenas_numeros.slice(7, 11)}`;
+};
+
 export default function CheckoutPage() {
   const params = useParams();
   const planoId = params.plano as string;
-  const plano = planos[planoId as keyof typeof planos];
+  const planoBase = planosBase[planoId];
 
   const [formData, setFormData] = useState({
     nome: '',
     email: '',
     whatsapp: '',
+    cpf: '',
   });
   const [aceitouTermos, setAceitouTermos] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [verificandoElegibilidade, setVerificandoElegibilidade] =
+    useState(false);
   const [error, setError] = useState('');
 
-  // Se plano não existir
-  if (!plano) {
+  // Estado para elegibilidade e preços
+  const [elegibilidade, setElegibilidade] = useState<{
+    podeUsarTrial: boolean;
+    motivoTrial: string | null;
+    preco: number;
+    precoOriginal: number;
+    isPrimeiraAdesao: boolean;
+    desconto: number;
+  } | null>(null);
+
+  // 1. Envolver a função em useCallback para resolver "exhaustive-deps"
+  const verificarElegibilidade = useCallback(
+    async (cpf: string) => {
+      if (!planoBase) return; // Segurança
+      if (cpf.replace(/\D/g, '').length !== 11) return;
+
+      setVerificandoElegibilidade(true);
+      try {
+        const response = await fetch(
+          `${API_URL}/api/v1/pagamento/verificar-elegibilidade`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cpf }),
+          }
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+
+          if ('isTrial' in planoBase && planoBase.isTrial) {
+            // Plano trial
+            setElegibilidade({
+              podeUsarTrial: data.pode_usar_trial,
+              motivoTrial: data.motivo_trial,
+              preco: 0,
+              precoOriginal: 0,
+              isPrimeiraAdesao: false,
+              desconto: 0,
+            });
+          } else {
+            // Planos pagos
+            const planoInfo = data.planos[planoId];
+            if (planoInfo) {
+              setElegibilidade({
+                podeUsarTrial: data.pode_usar_trial,
+                motivoTrial: data.motivo_trial,
+                preco: planoInfo.preco,
+                precoOriginal: planoInfo.preco_original,
+                isPrimeiraAdesao: planoInfo.is_primeira_adesao,
+                desconto: planoInfo.desconto,
+              });
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Erro ao verificar elegibilidade:', err);
+      } finally {
+        setVerificandoElegibilidade(false);
+      }
+    },
+    [planoBase, planoId]
+  ); // Dependências do useCallback
+
+  // 2. useEffect agora chama a função memoizada
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (formData.cpf.replace(/\D/g, '').length === 11) {
+        verificarElegibilidade(formData.cpf);
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [formData.cpf, verificarElegibilidade]);
+
+  // 3. Remover "as any" usando Type Guards ou verificação de propriedade
+  const getPrecoExibir = () => {
+    if (!planoBase) return 0;
+    if ('isTrial' in planoBase && planoBase.isTrial) return 0;
+    if (elegibilidade) return elegibilidade.preco;
+
+    // Como temos certeza que não é trial aqui (pelo if acima), TypeScript infere PlanoPago
+    // Mas para segurança total podemos fazer cast ou asserção
+    const planoPago = planoBase as PlanoPago;
+    return planoPago.precoPrimeiraAdesao || planoPago.precoNormal;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!planoBase) return;
+
+    setLoading(true);
+    setError('');
+
+    try {
+      // Se for trial
+      if ('isTrial' in planoBase && planoBase.isTrial) {
+        const response = await fetch(`${API_URL}/api/v1/pagamento/trial`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            nome: formData.nome,
+            email: formData.email,
+            whatsapp: formData.whatsapp,
+            cpf: formData.cpf,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.detail || 'Erro ao criar trial');
+        }
+
+        // Redirecionar para página de sucesso
+        window.location.href = '/pagamento/sucesso?trial=true';
+        return;
+      }
+
+      // Planos pagos
+      const response = await fetch(`${API_URL}/api/v1/pagamento/criar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          plano: planoId,
+          nome: formData.nome,
+          email: formData.email,
+          whatsapp: formData.whatsapp,
+          cpf: formData.cpf,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Erro ao criar pagamento');
+      }
+
+      const data = await response.json();
+      window.location.href = data.init_point;
+    } catch (err) {
+      console.error('Erro:', err);
+      setError(err instanceof Error ? err.message : 'Erro ao processar');
+      setLoading(false);
+    }
+  };
+
+  // 4. Mover a verificação de existência do plano para DEPOIS dos hooks
+  if (!planoBase) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center">
         <Card className="bg-slate-800/50 border-slate-700 p-8 text-center">
@@ -66,43 +277,13 @@ export default function CheckoutPage() {
     );
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
+  const isTrial = 'isTrial' in planoBase && planoBase.isTrial;
+  const precoFinal = getPrecoExibir();
 
-    try {
-      // Chamar API para criar pagamento
-      const response = await fetch(`${API_URL}/api/v1/pagamento/criar`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          plano: planoId,
-          nome: formData.nome,
-          email: formData.email,
-          whatsapp: formData.whatsapp,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Erro ao criar pagamento');
-      }
-
-      const data = await response.json();
-
-      // Redirecionar para o Mercado Pago
-      window.location.href = data.init_point;
-    } catch (err) {
-      console.error('Erro:', err);
-      setError(
-        err instanceof Error ? err.message : 'Erro ao processar pagamento'
-      );
-      setLoading(false);
-    }
-  };
+  // 5. Corrigir a lógica booleana para o botão disabled
+  // Se elegibilidade for null, a expressão 'isTrial && elegibilidade' retornaria null, o que quebra o disabled
+  // Usamos optional chaining e comparação explícita
+  const isTrialBloqueado = isTrial && elegibilidade?.podeUsarTrial === false;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
@@ -127,7 +308,7 @@ export default function CheckoutPage() {
       <section className="container mx-auto px-4 py-10">
         <div className="max-w-4xl mx-auto">
           <h1 className="text-4xl font-bold text-white text-center mb-10">
-            Finalizar Compra
+            {isTrial ? 'Ativar Trial Gratuito' : 'Finalizar Compra'}
           </h1>
 
           <div className="grid md:grid-cols-2 gap-8">
@@ -136,41 +317,68 @@ export default function CheckoutPage() {
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-white">Resumo do Pedido</CardTitle>
-                  {'popular' in plano && plano.popular && (
+                  {planoBase.popular && (
                     <Badge className="bg-purple-600 text-white">
                       Mais Popular
                     </Badge>
+                  )}
+                  {isTrial && (
+                    <Badge className="bg-green-600 text-white">Grátis</Badge>
                   )}
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex justify-between text-slate-300">
                   <span>Plano</span>
-                  <span className="font-semibold text-white">{plano.nome}</span>
+                  <span className="font-semibold text-white">
+                    {planoBase.nome}
+                  </span>
                 </div>
                 <div className="flex justify-between text-slate-300">
                   <span>Duração</span>
                   <span className="font-semibold text-white">
-                    {plano.dias} dias
+                    {planoBase.dias} dias
                   </span>
                 </div>
                 <div className="flex justify-between text-slate-300">
                   <span>Descrição</span>
-                  <span className="text-white">{plano.descricao}</span>
+                  <span className="text-white">{planoBase.descricao}</span>
                 </div>
 
                 <hr className="border-slate-700" />
 
+                {/* Mostrar desconto se aplicável */}
+                {elegibilidade?.isPrimeiraAdesao &&
+                  elegibilidade.desconto > 0 && (
+                    <div className="bg-green-900/30 border border-green-600 p-3 rounded-lg">
+                      <p className="text-green-400 text-sm font-semibold">
+                        🎉 Preço de Primeira Adesão!
+                      </p>
+                      <p className="text-green-300 text-xs">
+                        Economia de R$ {elegibilidade.desconto.toFixed(2)}
+                      </p>
+                    </div>
+                  )}
+
                 <div className="flex justify-between items-center">
                   <span className="text-slate-300">Total</span>
-                  <span className="text-3xl font-bold text-purple-400">
-                    R$ {plano.preco.toFixed(2)}
-                  </span>
+                  <div className="text-right">
+                    {elegibilidade?.isPrimeiraAdesao && (
+                      <span className="text-slate-500 line-through text-lg mr-2">
+                        R$ {elegibilidade.precoOriginal.toFixed(2)}
+                      </span>
+                    )}
+                    <span className="text-3xl font-bold text-purple-400">
+                      {isTrial ? 'GRÁTIS' : `R$ ${precoFinal.toFixed(2)}`}
+                    </span>
+                  </div>
                 </div>
 
                 <div className="bg-slate-900/50 p-4 rounded-lg mt-4">
                   <p className="text-sm text-slate-400 text-center">
-                    🔒 Pagamento seguro via Mercado Pago
+                    {isTrial
+                      ? '✨ Sem cartão de crédito necessário'
+                      : '🔒 Pagamento seguro via Mercado Pago'}
                   </p>
                 </div>
               </CardContent>
@@ -189,6 +397,13 @@ export default function CheckoutPage() {
                     </div>
                   )}
 
+                  {/* Aviso se não pode usar trial */}
+                  {isTrial && elegibilidade && !elegibilidade.podeUsarTrial && (
+                    <div className="bg-yellow-500/20 border border-yellow-500 text-yellow-300 p-3 rounded-lg text-sm">
+                      {elegibilidade.motivoTrial}
+                    </div>
+                  )}
+
                   <div>
                     <label className="block text-slate-300 mb-2">
                       Nome Completo
@@ -203,6 +418,32 @@ export default function CheckoutPage() {
                       }
                       className="bg-slate-900 border-slate-700 text-white placeholder:text-slate-500"
                     />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-300 mb-2">CPF</label>
+                    <Input
+                      type="text"
+                      placeholder="000.000.000-00"
+                      required
+                      maxLength={14}
+                      value={formData.cpf}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          cpf: formatarCPF(e.target.value),
+                        })
+                      }
+                      className="bg-slate-900 border-slate-700 text-white placeholder:text-slate-500"
+                    />
+                    {verificandoElegibilidade && (
+                      <p className="text-xs text-purple-400 mt-1">
+                        Verificando...
+                      </p>
+                    )}
+                    <p className="text-xs text-slate-500 mt-1">
+                      Usado para identificar sua licença
+                    </p>
                   </div>
 
                   <div>
@@ -230,9 +471,13 @@ export default function CheckoutPage() {
                       type="tel"
                       placeholder="(11) 99999-9999"
                       required
+                      maxLength={15}
                       value={formData.whatsapp}
                       onChange={(e) =>
-                        setFormData({ ...formData, whatsapp: e.target.value })
+                        setFormData({
+                          ...formData,
+                          whatsapp: formatarWhatsApp(e.target.value),
+                        })
                       }
                       className="bg-slate-900 border-slate-700 text-white placeholder:text-slate-500"
                     />
@@ -243,40 +488,7 @@ export default function CheckoutPage() {
 
                   <hr className="border-slate-700 my-6" />
 
-                  <Button
-                    type="submit"
-                    disabled={loading || !aceitouTermos}
-                    className="w-full bg-purple-600 hover:bg-purple-700 text-white py-6 text-lg"
-                  >
-                    {loading ? (
-                      <span className="flex items-center gap-2">
-                        <svg
-                          className="animate-spin h-5 w-5"
-                          viewBox="0 0 24 24"
-                        >
-                          <circle
-                            className="opacity-25"
-                            cx="12"
-                            cy="12"
-                            r="10"
-                            stroke="currentColor"
-                            strokeWidth="4"
-                            fill="none"
-                          />
-                          <path
-                            className="opacity-75"
-                            fill="currentColor"
-                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                          />
-                        </svg>
-                        Redirecionando para pagamento...
-                      </span>
-                    ) : (
-                      `Pagar R$ ${plano.preco.toFixed(2)}`
-                    )}
-                  </Button>
-
-                  <div className="flex items-start gap-3 mt-4">
+                  <div className="flex items-start gap-3">
                     <input
                       type="checkbox"
                       id="termos"
@@ -304,6 +516,43 @@ export default function CheckoutPage() {
                       </Link>
                     </label>
                   </div>
+
+                  <Button
+                    type="submit"
+                    disabled={loading || !aceitouTermos || isTrialBloqueado}
+                    className="w-full bg-purple-600 hover:bg-purple-700 text-white py-6 text-lg"
+                  >
+                    {loading ? (
+                      <span className="flex items-center gap-2">
+                        <svg
+                          className="animate-spin h-5 w-5"
+                          viewBox="0 0 24 24"
+                        >
+                          <circle
+                            className="opacity-25"
+                            cx="12"
+                            cy="12"
+                            r="10"
+                            stroke="currentColor"
+                            strokeWidth="4"
+                            fill="none"
+                          />
+                          <path
+                            className="opacity-75"
+                            fill="currentColor"
+                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                          />
+                        </svg>
+                        {isTrial
+                          ? 'Ativando trial...'
+                          : 'Redirecionando para pagamento...'}
+                      </span>
+                    ) : isTrial ? (
+                      'Ativar Trial Grátis'
+                    ) : (
+                      `Pagar R$ ${precoFinal.toFixed(2)}`
+                    )}
+                  </Button>
                 </form>
               </CardContent>
             </Card>

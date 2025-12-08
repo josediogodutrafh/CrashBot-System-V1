@@ -58,8 +58,8 @@ export default function Home() {
 
       {/* Hero Section */}
       <section className="container mx-auto px-4 py-20 text-center">
-        <Badge className="mb-6 bg-purple-500/20 text-purple-300 border-purple-500/50">
-          🚀 Bot com IA Avançada
+        <Badge className="mb-6 bg-green-500/20 text-green-300 border-green-500/50">
+          🎁 Teste Grátis por 7 Dias!
         </Badge>
 
         <h1 className="text-5xl md:text-7xl font-bold text-white mb-6 leading-tight">
@@ -75,7 +75,15 @@ export default function Home() {
           real. Taxa de acerto comprovada. Resultados reais.
         </p>
 
-        <div className="flex gap-4 justify-center">
+        <div className="flex gap-4 justify-center flex-wrap">
+          <Link href="/checkout/trial">
+            <Button
+              size="lg"
+              className="bg-green-600 hover:bg-green-700 text-white px-8 py-6 text-lg"
+            >
+              🎁 Começar Trial Grátis
+            </Button>
+          </Link>
           <Link href="#planos">
             <Button
               size="lg"
@@ -134,19 +142,19 @@ export default function Home() {
 
                 <ul className="space-y-3 text-slate-300 mb-8">
                   <li className="flex items-center gap-2">
-                    <span className="text-green-400">✓</span>
+                    <span className="text-green-400">✔</span>
                     Saque rápido via PIX
                   </li>
                   <li className="flex items-center gap-2">
-                    <span className="text-green-400">✓</span>
+                    <span className="text-green-400">✔</span>
                     Bônus de boas-vindas
                   </li>
                   <li className="flex items-center gap-2">
-                    <span className="text-green-400">✓</span>
+                    <span className="text-green-400">✔</span>
                     100% compatível com o CrashBot
                   </li>
                   <li className="flex items-center gap-2">
-                    <span className="text-green-400">✓</span>
+                    <span className="text-green-400">✔</span>
                     Suporte 24 horas
                   </li>
                 </ul>
@@ -224,11 +232,13 @@ export default function Home() {
               <div className="w-12 h-12 bg-purple-600 rounded-lg flex items-center justify-center text-2xl mb-4">
                 2️⃣
               </div>
-              <CardTitle className="text-white">Compre a Licença</CardTitle>
+              <CardTitle className="text-white">
+                Ative seu Trial ou Compre
+              </CardTitle>
             </CardHeader>
             <CardContent className="text-slate-300">
-              Escolha o plano ideal para você. Pagamento seguro via Mercado
-              Pago. Licença enviada instantaneamente.
+              Comece com 7 dias grátis ou escolha um plano. Pagamento seguro via
+              Mercado Pago. Licença enviada instantaneamente.
             </CardContent>
           </Card>
 
@@ -265,61 +275,98 @@ export default function Home() {
         <h2 className="text-4xl font-bold text-white text-center mb-4">
           Escolha seu Plano
         </h2>
-        <p className="text-slate-400 text-center mb-16">
-          Comece agora e veja resultados reais
+        <p className="text-slate-400 text-center mb-6">
+          Comece grátis ou aproveite o preço de primeira adesão!
+        </p>
+        <p className="text-center mb-16">
+          <Badge className="bg-green-500/20 text-green-300 border-green-500/50">
+            🎁 Primeira compra com desconto especial!
+          </Badge>
         </p>
 
-        <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-          {/* Plano Experimental */}
-          <Card className="bg-slate-800/50 border-slate-700">
+        <div className="grid md:grid-cols-4 gap-6 max-w-6xl mx-auto">
+          {/* Trial Gratuito */}
+          <Card className="bg-gradient-to-b from-green-900/50 to-slate-800/50 border-green-500 relative">
+            <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+              <Badge className="bg-green-600 text-white">Grátis</Badge>
+            </div>
             <CardHeader>
-              <CardTitle className="text-white">Experimental</CardTitle>
+              <CardTitle className="text-white">Trial</CardTitle>
               <div className="text-slate-400">Para testar</div>
             </CardHeader>
             <CardContent>
               <div className="mb-6">
-                <span className="text-4xl font-bold text-white">R$ 29,90</span>
-                <span className="text-slate-400">/3 dias</span>
+                <span className="text-4xl font-bold text-green-400">
+                  GRÁTIS
+                </span>
+                <span className="text-slate-400">/7 dias</span>
               </div>
-              <ul className="space-y-3 text-slate-300 mb-8">
+              <ul className="space-y-3 text-slate-300 mb-8 text-sm">
                 <li>✅ Acesso completo ao bot</li>
                 <li>✅ Suporte via WhatsApp</li>
-                <li>✅ Atualizações inclusas</li>
-                <li>❌ Dashboard avançado</li>
+                <li>✅ Sem cartão de crédito</li>
+                <li>✅ 1x por CPF</li>
               </ul>
-              <Link href="/checkout/experimental">
-                <Button className="w-full bg-slate-700 hover:bg-slate-600">
-                  Começar Agora
+              <Link href="/checkout/trial">
+                <Button className="w-full bg-green-600 hover:bg-green-700">
+                  Começar Grátis
                 </Button>
               </Link>
             </CardContent>
           </Card>
 
-          {/* Plano Semanal - Destaque */}
+          {/* Plano Semanal */}
+          <Card className="bg-slate-800/50 border-slate-700">
+            <CardHeader>
+              <CardTitle className="text-white">Semanal</CardTitle>
+              <div className="text-slate-400">7 dias</div>
+            </CardHeader>
+            <CardContent>
+              <div className="mb-6">
+                <div className="text-xs text-slate-500">1ª adesão:</div>
+                <span className="text-4xl font-bold text-white">R$ 49,90</span>
+                <div className="text-xs text-slate-500 mt-1">
+                  Depois: <span className="line-through">R$ 149,90</span>
+                </div>
+              </div>
+              <ul className="space-y-3 text-slate-300 mb-8 text-sm">
+                <li>✅ Acesso completo ao bot</li>
+                <li>✅ Suporte via WhatsApp</li>
+                <li>✅ Atualizações inclusas</li>
+                <li>✅ Dashboard básico</li>
+              </ul>
+              <Link href="/checkout/semanal">
+                <Button className="w-full bg-slate-700 hover:bg-slate-600">
+                  Escolher Plano
+                </Button>
+              </Link>
+            </CardContent>
+          </Card>
+
+          {/* Plano Quinzenal - Destaque */}
           <Card className="bg-gradient-to-b from-purple-900/50 to-slate-800/50 border-purple-500 relative">
             <div className="absolute -top-3 left-1/2 -translate-x-1/2">
               <Badge className="bg-purple-600 text-white">Mais Popular</Badge>
             </div>
             <CardHeader>
-              <CardTitle className="text-white">Semanal</CardTitle>
-              <div className="text-slate-400">Melhor custo-benefício</div>
+              <CardTitle className="text-white">Quinzenal</CardTitle>
+              <div className="text-slate-400">15 dias</div>
             </CardHeader>
             <CardContent>
               <div className="mb-6">
-                <span className="text-slate-400 line-through text-lg">
-                  R$ 299
-                </span>
-                <br />
-                <span className="text-4xl font-bold text-white">R$ 149,90</span>
-                <span className="text-slate-400">/7 dias</span>
+                <div className="text-xs text-slate-500">1ª adesão:</div>
+                <span className="text-4xl font-bold text-white">R$ 89,90</span>
+                <div className="text-xs text-slate-500 mt-1">
+                  Depois: <span className="line-through">R$ 249,90</span>
+                </div>
               </div>
-              <ul className="space-y-3 text-slate-300 mb-8">
+              <ul className="space-y-3 text-slate-300 mb-8 text-sm">
                 <li>✅ Acesso completo ao bot</li>
                 <li>✅ Suporte prioritário</li>
                 <li>✅ Atualizações inclusas</li>
                 <li>✅ Dashboard avançado</li>
               </ul>
-              <Link href="/checkout/semanal">
+              <Link href="/checkout/quinzenal">
                 <Button className="w-full bg-purple-600 hover:bg-purple-700">
                   Escolher Plano
                 </Button>
@@ -331,18 +378,17 @@ export default function Home() {
           <Card className="bg-slate-800/50 border-slate-700">
             <CardHeader>
               <CardTitle className="text-white">Mensal</CardTitle>
-              <div className="text-slate-400">Para profissionais</div>
+              <div className="text-slate-400">30 dias</div>
             </CardHeader>
             <CardContent>
               <div className="mb-6">
-                <span className="text-slate-400 line-through text-lg">
-                  R$ 659
-                </span>
-                <br />
-                <span className="text-4xl font-bold text-white">R$ 499,90</span>
-                <span className="text-slate-400">/30 dias</span>
+                <div className="text-xs text-slate-500">1ª adesão:</div>
+                <span className="text-4xl font-bold text-white">R$ 149,90</span>
+                <div className="text-xs text-slate-500 mt-1">
+                  Depois: <span className="line-through">R$ 449,90</span>
+                </div>
               </div>
-              <ul className="space-y-3 text-slate-300 mb-8">
+              <ul className="space-y-3 text-slate-300 mb-8 text-sm">
                 <li>✅ Acesso completo ao bot</li>
                 <li>✅ Suporte VIP 24/7</li>
                 <li>✅ Atualizações inclusas</li>
@@ -356,6 +402,16 @@ export default function Home() {
               </Link>
             </CardContent>
           </Card>
+        </div>
+
+        {/* Info sobre primeira adesão */}
+        <div className="text-center mt-8">
+          <p className="text-slate-400 text-sm">
+            💡 O preço de primeira adesão é válido apenas para a primeira compra
+            por CPF.
+            <br />
+            Renovações são cobradas no valor normal.
+          </p>
         </div>
       </section>
 
@@ -382,13 +438,26 @@ export default function Home() {
           <Card className="bg-slate-800/50 border-slate-700">
             <CardHeader>
               <CardTitle className="text-white text-lg">
-                Por que preciso cadastrar na Brabet pelo link?
+                Como funciona o trial gratuito?
               </CardTitle>
             </CardHeader>
             <CardContent className="text-slate-300">
-              O bot foi desenvolvido especificamente para a Brabet. Contas
-              criadas pelo nosso link garantem total compatibilidade e suporte
-              técnico.
+              Você tem 7 dias para testar o bot completamente grátis! Não
+              precisa de cartão de crédito. Limitado a 1 trial por CPF e
+              dispositivo.
+            </CardContent>
+          </Card>
+
+          <Card className="bg-slate-800/50 border-slate-700">
+            <CardHeader>
+              <CardTitle className="text-white text-lg">
+                O que é o preço de primeira adesão?
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="text-slate-300">
+              Na sua primeira compra, você paga um valor promocional. Esse
+              desconto é válido apenas uma vez por CPF. Renovações são cobradas
+              no valor normal.
             </CardContent>
           </Card>
 
@@ -401,19 +470,6 @@ export default function Home() {
             <CardContent className="text-slate-300">
               Cada licença é vinculada a um computador. Se precisar trocar de
               máquina, entre em contato com nosso suporte.
-            </CardContent>
-          </Card>
-
-          <Card className="bg-slate-800/50 border-slate-700">
-            <CardHeader>
-              <CardTitle className="text-white text-lg">
-                Qual a taxa de acerto?
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="text-slate-300">
-              Nossa IA alcança uma taxa média de 68% de acerto. Porém,
-              resultados podem variar e ganhos passados não garantem ganhos
-              futuros.
             </CardContent>
           </Card>
         </div>
