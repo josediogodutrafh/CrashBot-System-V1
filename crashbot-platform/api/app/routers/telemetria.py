@@ -74,10 +74,10 @@ async def dashboard_telemetria(
         func.count(LogBot.id).label("total_logs"),
         func.count(func.distinct(LogBot.hwid)).label("bots_unicos"),
         func.count(func.distinct(LogBot.sessao_id)).label("sessoes"),
-        func.sum(case((LogBot.tipo == "Round", LogBot.lucro), else_=0)).label(
+        func.sum(case((LogBot.tipo == "bet", LogBot.lucro), else_=0)).label(
             "lucro_total"
         ),
-        func.sum(case((LogBot.tipo == "Round", 1), else_=0)).label("total_rounds"),
+        func.sum(case((LogBot.tipo == "round", 1), else_=0)).label("total_rounds"),
     )
 
     if filters:
@@ -150,7 +150,7 @@ async def _get_top_licencas(
 ) -> List[Dict[str, Any]]:
     """Helper para buscar top licenças."""
     filters = base_filters.copy()
-    filters.append(LogBot.tipo == "Round")
+    filters.append(LogBot.tipo == "bet")
 
     top_licencas_query = (
         select(
@@ -225,10 +225,10 @@ async def estatisticas_licenca(
     stats_query = select(
         func.count(LogBot.id).label("total_logs"),
         func.count(func.distinct(LogBot.sessao_id)).label("total_sessoes"),
-        func.sum(case((LogBot.tipo == "Round", LogBot.lucro), else_=0)).label(
+        func.sum(case((LogBot.tipo == "bet", LogBot.lucro), else_=0)).label(
             "lucro_total"
         ),
-        func.sum(case((LogBot.tipo == "Round", 1), else_=0)).label("total_rounds"),
+        func.sum(case((LogBot.tipo == "round", 1), else_=0)).label("total_rounds"),
         func.min(LogBot.timestamp).label("primeira_atividade"),
         func.max(LogBot.timestamp).label("ultima_atividade"),
     ).where(and_(*filters))
@@ -286,7 +286,7 @@ async def _calcular_win_rate(
         return 0, 0.0
 
     filters = _get_base_filters(data_inicio, hwid)
-    filters.append(LogBot.tipo == "Round")
+    filters.append(LogBot.tipo == "bet")
     filters.append(LogBot.lucro > 0)
 
     wins_query = select(func.count(LogBot.id)).where(and_(*filters))
@@ -300,7 +300,7 @@ async def _calcular_win_rate(
 async def _get_historico_diario(db, hwid: str, data_inicio: Optional[datetime]):
     """Helper para histórico diário."""
     filters = _get_base_filters(data_inicio, hwid)
-    filters.append(LogBot.tipo == "Round")
+    filters.append(LogBot.tipo == "round")
 
     dia_truncado = func.date_trunc("day", LogBot.timestamp)
     historico_query = (
@@ -311,7 +311,7 @@ async def _get_historico_diario(db, hwid: str, data_inicio: Optional[datetime]):
         )
         .where(LogBot.timestamp >= data_inicio)
         .where(LogBot.hwid == hwid)
-        .where(LogBot.tipo == "Round")
+        .where(LogBot.tipo == "bet")
         .group_by(dia_truncado)
         .order_by(dia_truncado)
     )
@@ -378,8 +378,8 @@ async def licencas_com_estatisticas(
     query = (
         select(
             Licenca,
-            func.count(case((LogBot.tipo == "Round", 1))).label("total_rounds"),
-            func.sum(case((LogBot.tipo == "Round", LogBot.lucro), else_=0)).label(
+            func.count(case((LogBot.tipo == "bet", 1))).label("total_rounds"),
+            func.sum(case((LogBot.tipo == "bet", LogBot.lucro), else_=0)).label(
                 "lucro_total"
             ),
             func.max(LogBot.timestamp).label("ultima_atividade"),
