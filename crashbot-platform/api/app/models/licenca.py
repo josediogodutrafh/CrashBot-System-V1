@@ -44,6 +44,14 @@ class Licenca(Base):
     plano_tipo = Column(String(50), nullable=True)  # experimental, semanal, mensal
     payment_id = Column(String(100), nullable=True)
 
+    # Controle de promoções
+    is_trial = Column(
+        Boolean, default=False, nullable=False
+    )  # Se é licença trial gratuita
+    is_primeira_adesao = Column(
+        Boolean, default=False, nullable=False
+    )  # Se usou preço promocional
+
     def __repr__(self):
         """Representação string do objeto."""
         return f"<Licenca(chave='{self.chave}', ativa={self.ativa})>"
@@ -113,6 +121,8 @@ class Licenca(Base):
             "telegram_chat_id": self.telegram_chat_id,
             "plano_tipo": self.plano_tipo,
             "payment_id": self.payment_id,
+            "is_trial": self.is_trial,
+            "is_primeira_adesao": self.is_primeira_adesao,
             "esta_expirada": self.esta_expirada,
             "dias_restantes": self.dias_restantes,
         }
