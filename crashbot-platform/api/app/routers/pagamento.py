@@ -1,6 +1,6 @@
 """
 Router: Pagamentos
-Endpoints para integração com Mercado Pago.
+Endpoints para integraÃ§Ã£o com Mercado Pago.
 """
 
 import os
@@ -13,6 +13,7 @@ from typing import Optional
 import mercadopago
 from app.database import get_db
 from app.models import Licenca, Usuario
+from app.services.admin_notification_service import admin_notifications
 from app.services.email_service import enviar_email, template_licenca_criada
 from app.services.promocao_service import (
     obter_preco_plano,
@@ -66,7 +67,7 @@ PLANOS = {
         "nome": "Trial",
         "preco": 0.00,
         "dias": 7,
-        "descricao": "Período de teste gratuito - 7 dias",
+        "descricao": "PerÃ­odo de teste gratuito - 7 dias",
     },
     "semanal": {
         "nome": "Semanal",
@@ -93,12 +94,12 @@ PLANOS = {
 
 
 # ============================================================================
-# FUNÇÕES AUXILIARES
+# FUNÃ‡Ã•ES AUXILIARES
 # ============================================================================
 
 
 def gerar_chave_licenca() -> str:
-    """Gera uma chave de licença única no formato XXXX-XXXX-XXXX-XXXX."""
+    """Gera uma chave de licenÃ§a Ãºnica no formato XXXX-XXXX-XXXX-XXXX."""
     caracteres = string.ascii_uppercase + string.digits
     partes = ["".join(secrets.choice(caracteres) for _ in range(4)) for _ in range(4)]
     return "-".join(partes)
@@ -109,20 +110,20 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 def gerar_senha_temporaria(tamanho: int = 10) -> str:
-    """Gera uma senha temporária segura."""
+    """Gera uma senha temporÃ¡ria segura."""
     caracteres = string.ascii_letters + string.digits
     return "".join(secrets.choice(caracteres) for _ in range(tamanho))
 
 
 def get_mp_sdk():
-    """Retorna instância do SDK do Mercado Pago."""
+    """Retorna instÃ¢ncia do SDK do Mercado Pago."""
     # Uso de walrus operator (:=) para simplificar
     if access_token := os.getenv("MP_ACCESS_TOKEN"):
         return mercadopago.SDK(access_token)
 
     raise HTTPException(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        detail="Mercado Pago não configurado",
+        detail="Mercado Pago nÃ£o configurado",
     )
 
 
@@ -150,31 +151,31 @@ async def criar_pagamento(
     if dados.plano not in PLANOS:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Plano inválido. Escolha: {', '.join(PLANOS.keys())}",
+            detail=f"Plano invÃ¡lido. Escolha: {', '.join(PLANOS.keys())}",
         )
 
     plano = PLANOS[dados.plano]
 
-    # Se for trial, redirecionar para endpoint específico
+    # Se for trial, redirecionar para endpoint especÃ­fico
     if dados.plano == "trial":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Para trial gratuito, use o endpoint /trial",
         )
 
-    # Obter preço correto baseado no histórico do cliente
+    # Obter preÃ§o correto baseado no histÃ³rico do cliente
     preco_info = await obter_preco_plano(db, dados.plano, dados.cpf, dados.hwid)
 
     if not preco_info:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Plano inválido",
+            detail="Plano invÃ¡lido",
         )
 
     preco_final = preco_info["preco"]
     is_primeira_adesao = preco_info["is_primeira_adesao"]
 
-    # Gerar ID único para referência
+    # Gerar ID Ãºnico para referÃªncia
     external_reference = f"{dados.plano}_{uuid.uuid4().hex[:12]}"
 
     # Configurar SDK
@@ -183,12 +184,12 @@ async def criar_pagamento(
     # URL base para callbacks
     base_url = str(request.base_url).rstrip("/")
 
-    # Descrição com info de promoção
+    # DescriÃ§Ã£o com info de promoÃ§Ã£o
     descricao = plano["descricao"]
     if is_primeira_adesao:
-        descricao += " (Preço de Primeira Adesão)"
+        descricao += " (PreÃ§o de Primeira AdesÃ£o)"
 
-    # Criar preferência de pagamento
+    # Criar preferÃªncia de pagamento
     preference_data = {
         "items": [
             {
@@ -228,7 +229,7 @@ async def criar_pagamento(
         },
     }
 
-    # Criar preferência
+    # Criar preferÃªncia
     try:
         preference_response = sdk.preference().create(preference_data)
         print(f"Resposta MP: {preference_response}")  # Debug
@@ -288,7 +289,7 @@ async def criar_trial(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Cria uma licença trial gratuita (7 dias).
+    Cria uma licenÃ§a trial gratuita (7 dias).
     Limitado a 1 trial por CPF + HWID.
     """
     # Verificar elegibilidade
@@ -300,7 +301,7 @@ async def criar_trial(
             detail=elegibilidade["motivo"],
         )
 
-    # Criar licença trial
+    # Criar licenÃ§a trial
     chave = gerar_chave_licenca()
     data_expiracao = datetime.now(timezone.utc) + timedelta(days=7)
 
@@ -321,9 +322,9 @@ async def criar_trial(
     db.add(nova_licenca)
     await db.commit()
 
-    print(f"✅ Trial criado: {chave} para {dados.email}")
+    print(f"âœ… Trial criado: {chave} para {dados.email}")
 
-    # Criar conta do usuário se não existir
+    # Criar conta do usuÃ¡rio se nÃ£o existir
     result_user = await db.execute(select(Usuario).where(Usuario.email == dados.email))
     usuario_existente = result_user.scalar_one_or_none()
 
@@ -342,7 +343,7 @@ async def criar_trial(
 
         db.add(novo_usuario)
         await db.commit()
-        print(f"✅ Usuário criado: {dados.email}")
+        print(f"âœ… UsuÃ¡rio criado: {dados.email}")
     else:
         senha_temporaria = "(sua senha atual)"
 
@@ -359,11 +360,25 @@ async def criar_trial(
 
         await enviar_email(
             para=dados.email,
-            assunto="🎉 Seu trial CrashBot está ativo!",
+            assunto="ðŸŽ‰ Seu trial CrashBot estÃ¡ ativo!",
             html=html_email,
         )
     except Exception as e:
-        print(f"⚠️ Erro ao enviar email: {e}")
+        print(f"âš ï¸ Erro ao enviar email: {e}")
+
+    # Notificar admin sobre novo trial
+    try:
+        await admin_notifications.notificar_nova_venda(
+            cliente_nome=dados.nome,
+            cliente_email=dados.email,
+            plano="trial",
+            valor=0.00,
+            chave_licenca=chave,
+            is_primeira_adesao=False,
+            is_trial=True,
+        )
+    except Exception as e:
+        print(f"⚠️ Erro ao notificar admin: {e}")
 
     return CriarTrialResponse(
         success=True,
@@ -386,7 +401,7 @@ class VerificarElegibilidadeRequest(BaseModel):
 
 
 class PlanoPrecoInfo(BaseModel):
-    """Informações de preço de um plano."""
+    """InformaÃ§Ãµes de preÃ§o de um plano."""
 
     nome: str
     preco: float
@@ -397,7 +412,7 @@ class PlanoPrecoInfo(BaseModel):
 
 
 class VerificarElegibilidadeResponse(BaseModel):
-    """Response com elegibilidade e preços."""
+    """Response com elegibilidade e preÃ§os."""
 
     pode_usar_trial: bool
     motivo_trial: Optional[str] = None
@@ -410,13 +425,13 @@ async def verificar_elegibilidade(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Verifica elegibilidade do cliente para trial e primeira adesão.
-    Retorna os preços corretos para cada plano.
+    Verifica elegibilidade do cliente para trial e primeira adesÃ£o.
+    Retorna os preÃ§os corretos para cada plano.
     """
     # Verificar trial
     trial_info = await verificar_elegibilidade_trial(db, dados.cpf, dados.hwid)
 
-    # Obter preços de cada plano
+    # Obter preÃ§os de cada plano
     planos_info = {}
 
     for plano_key in ["semanal", "quinzenal", "mensal"]:
@@ -440,7 +455,7 @@ async def verificar_elegibilidade(
 
 
 # ============================================================================
-# ENDPOINT: WEBHOOK (Notificação do Mercado Pago)
+# ENDPOINT: WEBHOOK (NotificaÃ§Ã£o do Mercado Pago)
 # ============================================================================
 
 
@@ -450,14 +465,14 @@ async def webhook_mercadopago(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Recebe notificações do Mercado Pago quando um pagamento é aprovado.
+    Recebe notificaÃ§Ãµes do Mercado Pago quando um pagamento Ã© aprovado.
     """
     try:
         body = await request.json()
     except Exception:
         return {"status": "ok"}
 
-    # Verificar tipo de notificação
+    # Verificar tipo de notificaÃ§Ã£o
     if body.get("type") != "payment":
         return {"status": "ok"}
 
@@ -491,23 +506,23 @@ async def webhook_mercadopago(
         print("Metadados incompletos")
         return {"status": "error", "message": "Metadados incompletos"}
 
-    # Verificar se já existe licença para este pagamento
+    # Verificar se jÃ¡ existe licenÃ§a para este pagamento
     result = await db.execute(
         select(Licenca).where(Licenca.payment_id == str(payment_id))
     )
 
-    # CORREÇÃO: Remova "existing :=" ou "existing ="
-    # Verifique diretamente o resultado, pois a variável não é usada depois.
+    # CORREÃ‡ÃƒO: Remova "existing :=" ou "existing ="
+    # Verifique diretamente o resultado, pois a variÃ¡vel nÃ£o Ã© usada depois.
     if result.scalar_one_or_none():
-        print(f"Licença já existe para pagamento {payment_id}")
-        return {"status": "ok", "message": "Licença já criada"}
+        print(f"LicenÃ§a jÃ¡ existe para pagamento {payment_id}")
+        return {"status": "ok", "message": "LicenÃ§a jÃ¡ criada"}
 
     # Extrair dados adicionais dos metadados
     cpf = metadata.get("cpf")
     hwid = metadata.get("hwid")
     is_primeira_adesao = metadata.get("is_primeira_adesao", False)
 
-    # Criar nova licença
+    # Criar nova licenÃ§a
     chave = gerar_chave_licenca()
     data_expiracao = datetime.now(timezone.utc) + timedelta(days=int(dias))
 
@@ -529,23 +544,23 @@ async def webhook_mercadopago(
     db.add(nova_licenca)
     await db.commit()
 
-    print(f"✅ Licença criada: {chave} para {email}")
+    print(f"âœ… LicenÃ§a criada: {chave} para {email}")
 
     # ========================================================================
-    # CRIAR CONTA DO CLIENTE (se não existir)
+    # CRIAR CONTA DO CLIENTE (se nÃ£o existir)
     # ========================================================================
     senha_temporaria = None
 
-    # Verificar se já existe usuário com este email
+    # Verificar se jÃ¡ existe usuÃ¡rio com este email
     result_user = await db.execute(select(Usuario).where(Usuario.email == email))
     usuario_existente = result_user.scalar_one_or_none()
 
     if not usuario_existente:
-        # Gerar senha temporária
+        # Gerar senha temporÃ¡ria
         senha_temporaria = gerar_senha_temporaria()
         senha_hash = pwd_context.hash(senha_temporaria)
 
-        # Criar novo usuário (cliente, não admin)
+        # Criar novo usuÃ¡rio (cliente, nÃ£o admin)
         novo_usuario = Usuario(
             email=email,
             senha_hash=senha_hash,
@@ -556,13 +571,13 @@ async def webhook_mercadopago(
 
         db.add(novo_usuario)
         await db.commit()
-        print(f"✅ Usuário criado: {email}")
+        print(f"âœ… UsuÃ¡rio criado: {email}")
     else:
-        print(f"ℹ️ Usuário já existe: {email}")
+        print(f"â„¹ï¸ UsuÃ¡rio jÃ¡ existe: {email}")
         senha_temporaria = "(sua senha atual)"
 
     # ========================================================================
-    # ENVIAR EMAIL COM LICENÇA
+    # ENVIAR EMAIL COM LICENÃ‡A
     # ========================================================================
     try:
         html_email = template_licenca_criada(
@@ -576,12 +591,31 @@ async def webhook_mercadopago(
 
         await enviar_email(
             para=email,
-            assunto="🎉 Sua licença CrashBot está pronta!",
+            assunto="ðŸŽ‰ Sua licenÃ§a CrashBot estÃ¡ pronta!",
             html=html_email,
         )
     except Exception as e:
-        print(f"⚠️ Erro ao enviar email: {e}")
-        # Não falha o webhook se o email falhar
+        print(f"âš ï¸ Erro ao enviar email: {e}")
+        # NÃ£o falha o webhook se o email falhar
+
+    # ========================================================================
+    # NOTIFICAR ADMIN SOBRE NOVA VENDA
+    # ========================================================================
+    try:
+        # Obter valor do pagamento
+        valor_pago = float(payment.get("transaction_amount", 0))
+
+        await admin_notifications.notificar_nova_venda(
+            cliente_nome=nome or "Cliente",
+            cliente_email=email,
+            plano=plano,
+            valor=valor_pago,
+            chave_licenca=chave,
+            is_primeira_adesao=is_primeira_adesao,
+            is_trial=False,
+        )
+    except Exception as e:
+        print(f"⚠️ Erro ao notificar admin: {e}")
 
     return {
         "status": "ok",
@@ -598,7 +632,7 @@ async def webhook_mercadopago(
 @router.get("/sucesso")
 async def pagamento_sucesso(
     request: Request,
-    # CORREÇÃO: Usamos Optional[str] para permitir None
+    # CORREÃ‡ÃƒO: Usamos Optional[str] para permitir None
     collection_id: Optional[str] = None,
     collection_status: Optional[str] = None,
     external_reference: Optional[str] = None,
@@ -609,11 +643,11 @@ async def pagamento_sucesso(
     processing_mode: Optional[str] = None,
     merchant_account_id: Optional[str] = None,
 ):
-    """Página de retorno para pagamento aprovado."""
-    # Redirecionar para página de sucesso na loja
+    """PÃ¡gina de retorno para pagamento aprovado."""
+    # Redirecionar para pÃ¡gina de sucesso na loja
     return {
         "status": "success",
-        "message": "Pagamento aprovado! Você receberá a licença por e-mail.",
+        "message": "Pagamento aprovado! VocÃª receberÃ¡ a licenÃ§a por e-mail.",
         "collection_id": collection_id,
         "external_reference": external_reference,
     }
@@ -621,7 +655,7 @@ async def pagamento_sucesso(
 
 @router.get("/falha")
 async def pagamento_falha():
-    """Página de retorno para pagamento recusado."""
+    """PÃ¡gina de retorno para pagamento recusado."""
     return {
         "status": "failure",
         "message": "Pagamento recusado. Por favor, tente novamente.",
@@ -630,8 +664,8 @@ async def pagamento_falha():
 
 @router.get("/pendente")
 async def pagamento_pendente():
-    """Página de retorno para pagamento pendente."""
+    """PÃ¡gina de retorno para pagamento pendente."""
     return {
         "status": "pending",
-        "message": "Pagamento pendente. Aguardando confirmação.",
+        "message": "Pagamento pendente. Aguardando confirmaÃ§Ã£o.",
     }
