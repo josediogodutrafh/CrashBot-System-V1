@@ -127,10 +127,7 @@ class BotController:
             notification_manager.load_credentials(token, chat_id)
             self.console.print("✅ Alertas do Telegram HABILITADOS", style="green")
         else:
-            self.console.print(
-                "⚠️  Alertas do Telegram DESABILITADOS",
-                style="yellow"
-            )
+            self.console.print("⚠️  Alertas do Telegram DESABILITADOS", style="yellow")
 
         self.vision = VisionSystem(str(self.config_path))
         self.learning_engine = LearningEngine()
@@ -166,8 +163,7 @@ class BotController:
 
         self.logger = logging.getLogger(__name__)
         logging.basicConfig(
-            level=logging.ERROR,
-            format="%(asctime)s - %(levelname)s - %(message)s"
+            level=logging.ERROR, format="%(asctime)s - %(levelname)s - %(message)s"
         )
 
         self.last_balance_alert_time = time.time()
@@ -178,21 +174,15 @@ class BotController:
         self.selected_risk_mode = risk_mode
         self._pending_risk_mode = risk_mode
 
+        self.console.print("✅ BotController inicializado com sucesso!", style="green")
         self.console.print(
-            "✅ BotController inicializado com sucesso!",
-            style="green"
-        )
-        self.console.print(
-            f"📊 Database Manager ativo: {self.db_manager.session_id}",
-            style="cyan"
+            f"📊 Database Manager ativo: {self.db_manager.session_id}", style="cyan"
         )
 
     def _perguntar_configuracoes_sessao(self) -> RiskMode:
         """Coleta o modo de risco do usuário."""
         self.console.print("\n[bold cyan]━━━ CONFIGURAÇÃO DA SESSÃO ━━━[/bold cyan]")
-        self.console.print(
-            "\n[bold yellow]🎯 ESCOLHA SEU MODO DE RISCO:[/bold yellow]"
-        )
+        self.console.print("\n[bold yellow]🎯 ESCOLHA SEU MODO DE RISCO:[/bold yellow]")
         self.console.print("")
         self.console.print(
             "  [green]1. CONSERVADOR[/green] - Menor risco, ganhos consistentes"
@@ -202,9 +192,7 @@ class BotController:
             "  [yellow]2. MODERADO[/yellow] - Equilíbrio entre risco e retorno"
         )
         self.console.print("")
-        self.console.print(
-            "  [red]3. AGRESSIVO[/red] - Maior risco, maiores retornos"
-        )
+        self.console.print("  [red]3. AGRESSIVO[/red] - Maior risco, maiores retornos")
         self.console.print("")
 
         risk_mode = self._obter_escolha_valida(
@@ -212,14 +200,14 @@ class BotController:
             opcoes={
                 "1": RiskMode.CONSERVADOR,
                 "2": RiskMode.MODERADO,
-                "3": RiskMode.AGRESSIVO
+                "3": RiskMode.AGRESSIVO,
             },
         )
 
         mode_colors = {
             RiskMode.CONSERVADOR: "green",
             RiskMode.MODERADO: "yellow",
-            RiskMode.AGRESSIVO: "red"
+            RiskMode.AGRESSIVO: "red",
         }
         color = mode_colors[risk_mode]
         self.console.print(
@@ -236,10 +224,7 @@ class BotController:
                 if escolha in opcoes:
                     return opcoes[escolha]
                 else:
-                    self.console.print(
-                        "Opção inválida! Tente novamente.",
-                        style="red"
-                    )
+                    self.console.print("Opção inválida! Tente novamente.", style="red")
             except Exception as e:
                 self.console.print(f"Erro: {e}", style="red")
 
@@ -250,16 +235,12 @@ class BotController:
                 return json.load(f)
         except Exception as e:
             self.console.print(
-                f"❌ Erro ao carregar {self.config_path}: {e}",
-                style="red"
+                f"❌ Erro ao carregar {self.config_path}: {e}", style="red"
             )
             return {}
 
     def _send_telemetry(
-        self,
-        tipo: str,
-        dados: Optional[Union[dict, str]] = None,
-        lucro: float = 0.0
+        self, tipo: str, dados: Optional[Union[dict, str]] = None, lucro: float = 0.0
     ):
         """Envia dados de telemetria para o servidor."""
         if not hasattr(self, "db_manager") or not self.db_manager.session_id:
@@ -271,13 +252,13 @@ class BotController:
             "sessao_id": self.db_manager.session_id,
             "tipo": tipo,
             "dados": dados_envio,
-            "lucro": lucro
+            "lucro": lucro,
         }
         try:
             threading.Thread(
                 target=requests.post,
                 args=(endpoint,),
-                kwargs={"json": payload, "timeout": 5}
+                kwargs={"json": payload, "timeout": 5},
             ).start()
         except Exception as e:
             self.logger.warning(f"Falha ao enviar telemetria: {e}")
@@ -308,8 +289,7 @@ class BotController:
                     selected_profile = profile_keys[choice - 1]
                     profile_data = profiles[selected_profile]
                     self.console.print(
-                        f"✅ Perfil '{selected_profile}' selecionado",
-                        style="green"
+                        f"✅ Perfil '{selected_profile}' selecionado", style="green"
                     )
                     return selected_profile, profile_data
                 else:
@@ -351,10 +331,7 @@ class BotController:
                 profile_name = name
                 profile_data = data
             else:
-                self.console.print(
-                    "❌ Configuração cancelada.",
-                    style="red"
-                )
+                self.console.print("❌ Configuração cancelada.", style="red")
                 return ""
         else:
             result = self.select_profile()
@@ -366,9 +343,21 @@ class BotController:
         raw_tempo = self.config.get("tempo_horas", 8)
         tempo_horas = self._parse_tempo_horas(raw_tempo, 8)
         self.max_time = tempo_horas * 3600
-        self.max_rounds = int(self.config.get("max_rodadas", 1000))
-        self.target_profit = float(self.config.get("meta_lucro_total", 1000))
-        self.start_hour = int(self.config.get("horario_inicio", 9))
+        # Correção para garantir que não estamos tentando converter um dicionário/None
+        raw_rounds = self.config.get("max_rodadas", 1000)
+        self.max_rounds = (
+            int(raw_rounds) if isinstance(raw_rounds, (int, float, str)) else 1000
+        )
+
+        raw_profit = self.config.get("meta_lucro_total", 1000)
+        self.target_profit = (
+            float(raw_profit) if isinstance(raw_profit, (int, float, str)) else 1000.0
+        )
+
+        raw_hour = self.config.get("horario_inicio", 9)
+        self.start_hour = (
+            int(raw_hour) if isinstance(raw_hour, (int, float, str)) else 9
+        )
 
         self.screen_areas = {
             "balance": profile_data.get("balance_area"),
@@ -386,34 +375,21 @@ class BotController:
             "target_click_2": profile_data.get("target_click_2"),
         }
 
-        self.console.print(
-            f"✅ Perfil '{profile_name}' carregado!",
-            style="green"
-        )
+        self.console.print(f"✅ Perfil '{profile_name}' carregado!", style="green")
         critical_areas = ["balance", "multiplier", "bet_detection"]
         if missing_areas := [
-            area for area in critical_areas
-            if not self.screen_areas.get(area)
+            area for area in critical_areas if not self.screen_areas.get(area)
         ]:
             self.console.print(
-                f"⚠️ Áreas críticas não configuradas: {missing_areas}",
-                style="yellow"
+                f"⚠️ Áreas críticas não configuradas: {missing_areas}", style="yellow"
             )
 
         bet_areas = ["bet_value_1", "target_1", "bet_button_1"]
-        configured_bet = sum(
-            bool(self.screen_areas.get(area)) for area in bet_areas
-        )
+        configured_bet = sum(bool(self.screen_areas.get(area)) for area in bet_areas)
         if configured_bet == len(bet_areas):
-            self.console.print(
-                "✅ Apostas automáticas: HABILITADAS",
-                style="green"
-            )
+            self.console.print("✅ Apostas automáticas: HABILITADAS", style="green")
         else:
-            self.console.print(
-                "⚠️ Apostas automáticas: DESATIVADAS",
-                style="yellow"
-            )
+            self.console.print("⚠️ Apostas automáticas: DESATIVADAS", style="yellow")
         return profile_name
 
     def detect_balance_continuously(self):
@@ -431,13 +407,11 @@ class BotController:
                 with self.balance_lock:
                     current_balance_snapshot = self.current_balance
                 new_balance = self.vision.get_balance(
-                    balance_area,
-                    current_balance_snapshot
+                    balance_area, current_balance_snapshot
                 )
                 if new_balance and new_balance != current_balance_snapshot:
                     if validated := self._validate_and_confirm_balance_change(
-                        new_balance,
-                        current_balance_snapshot
+                        new_balance, current_balance_snapshot
                     ):
                         with self.balance_lock:
                             old_balance = self.current_balance or 0.0
@@ -451,8 +425,7 @@ class BotController:
                         )
                         if initial_balance_snapshot:
                             self._check_and_trigger_stop_loss(
-                                validated,
-                                initial_balance_snapshot
+                                validated, initial_balance_snapshot
                             )
                 last_check = time.time()
             except Exception as e:
@@ -460,9 +433,7 @@ class BotController:
                 time.sleep(1)
 
     def _validate_and_confirm_balance_change(
-        self,
-        new_balance: float,
-        current_balance: Optional[float]
+        self, new_balance: float, current_balance: Optional[float]
     ) -> Optional[float]:
         """Valida uma mudança drástica de saldo."""
         if not current_balance or current_balance == 0:
@@ -472,7 +443,7 @@ class BotController:
             return new_balance
         self.console.print(
             f"⚠️  Mudança drástica de saldo ({change_pct:.1f}%). Confirmando...",
-            style="yellow"
+            style="yellow",
         )
         time.sleep(1)
         balance_area = self.screen_areas.get("balance")
@@ -483,16 +454,13 @@ class BotController:
         confirmed = self.vision.get_balance(balance_area, current_balance_snapshot)
         if not confirmed or abs(confirmed - new_balance) > 5:
             self.console.print(
-                f"❌ Confirmação falhou. Descartando: {new_balance:.2f}",
-                style="red"
+                f"❌ Confirmação falhou. Descartando: {new_balance:.2f}", style="red"
             )
             return None
         return confirmed
 
     def _check_and_trigger_stop_loss(
-        self,
-        current_balance: float,
-        initial_balance: float
+        self, current_balance: float, initial_balance: float
     ):
         """Verifica stop-loss."""
         if self.stop_loss_alerted:
@@ -516,13 +484,9 @@ class BotController:
             try:
                 if multiplier_area := self.screen_areas.get("multiplier"):
                     if (
-                        (multiplier := self.vision.get_multiplier(multiplier_area))
-                        and 1.0 <= multiplier <= 999.99
-                    ):
-                        frame_data = {
-                            "timestamp": time.time(),
-                            "value": multiplier
-                        }
+                        multiplier := self.vision.get_multiplier(multiplier_area)
+                    ) and 1.0 <= multiplier <= 999.99:
+                        frame_data = {"timestamp": time.time(), "value": multiplier}
                         with self.buffer_lock:
                             self.frame_buffer.append(frame_data)
                 time.sleep(self.frame_interval)
@@ -571,16 +535,13 @@ class BotController:
     def process_explosion(self, explosion_value: float, timestamp: float):
         """Processa uma explosão detectada."""
         try:
-            self.explosions.append({
-                "value": explosion_value,
-                "timestamp": datetime.now()
-            })
+            self.explosions.append(
+                {"value": explosion_value, "timestamp": datetime.now()}
+            )
             self.round_count += 1
             self.last_action = f"💥 EXPLOSÃO: {explosion_value:.2f}x"
             self._send_telemetry(
-                tipo="round",
-                dados=f"Explosao: {explosion_value:.2f}x",
-                lucro=0.0
+                tipo="round", dados=f"Explosao: {explosion_value:.2f}x", lucro=0.0
             )
             with self.balance_lock:
                 current_balance = self.current_balance or 0.0
@@ -612,10 +573,7 @@ class BotController:
                 f"🏆 META BATIDA! Suspensão: {horas}h {minutos}min restantes"
             )
             if self.strategy.check_suspension_ended(current_balance):
-                msg = (
-                    "✅ *OPERAÇÕES RETOMADAS!*\n"
-                    "Período de suspensão terminado."
-                )
+                msg = "✅ *OPERAÇÕES RETOMADAS!*\n" "Período de suspensão terminado."
                 self.trigger_alert("resume", msg)
             return False
         elif self._check_profit_target_reached(current_balance):
@@ -645,11 +603,7 @@ class BotController:
             return True
         return False
 
-    def _prepare_next_round_bet(
-        self,
-        current_balance: float,
-        explosion_value: float
-    ):
+    def _prepare_next_round_bet(self, current_balance: float, explosion_value: float):
         """Processa a estratégia e prepara a próxima aposta."""
         result = self.strategy.add_explosion_value(explosion_value)
         strategy_activated, _, veto_message = result
@@ -691,10 +645,7 @@ class BotController:
             hit_status = "[green]✅ HIT[/green]"
             msg_meta = ""
             try:
-                if (
-                    self.strategy.banca_inicial
-                    and self.strategy.meta_lucro_percentual
-                ):
+                if self.strategy.banca_inicial and self.strategy.meta_lucro_percentual:
                     meta_abs = self.strategy.banca_inicial * (
                         1 + self.strategy.meta_lucro_percentual
                     )
@@ -711,7 +662,9 @@ class BotController:
             self.trigger_alert("miss", msg)
         self.last_action += f" | {hit_status}"
         if self.last_round_id:
-            resultado = RESULTADO_HIT if result["recommendation_hit"] else RESULTADO_MISS
+            resultado = (
+                RESULTADO_HIT if result["recommendation_hit"] else RESULTADO_MISS
+            )
             dados_aposta = BetData(
                 rodada_id=self.last_round_id,
                 estrategia=result.get("strategy", "Estratégia"),
@@ -728,17 +681,14 @@ class BotController:
             self._send_telemetry(
                 tipo="bet",
                 dados=f"Resultado: {resultado}",
-                lucro=dados_aposta.lucro_liquido
+                lucro=dados_aposta.lucro_liquido,
             )
 
     def can_execute_bets(self) -> bool:
         """Verifica apenas áreas do BET 1."""
         required_areas = ["bet_value_1", "target_1", "bet_button_1"]
         if missing := [a for a in required_areas if not self.screen_areas.get(a)]:
-            self.console.print(
-                f"❌ Áreas não configuradas: {missing}",
-                style="red"
-            )
+            self.console.print(f"❌ Áreas não configuradas: {missing}", style="red")
             return False
         return True
 
@@ -750,12 +700,9 @@ class BotController:
                 and recommendation.ready
             ):
                 return
-            self.last_action = (
-                f"⚡ EXECUTANDO BET 1: {recommendation.strategy_name}"
-            )
+            self.last_action = f"⚡ EXECUTANDO BET 1: {recommendation.strategy_name}"
             if self.fill_bet_fields_and_submit(
-                recommendation.bet_1,
-                recommendation.target_1
+                recommendation.bet_1, recommendation.target_1
             ):
                 self.executed_bet_pending = {
                     "strategy": recommendation.strategy_name,
@@ -793,11 +740,7 @@ class BotController:
         if message:
             notification_manager.send_telegram_alert(message)
 
-    def fill_bet_fields_and_submit(
-        self,
-        bet_value_1: float,
-        target_1: float
-    ) -> bool:
+    def fill_bet_fields_and_submit(self, bet_value_1: float, target_1: float) -> bool:
         """Preenche campos e submete aposta."""
         try:
             bet_value_1 = max(1.0, bet_value_1)
@@ -823,12 +766,7 @@ class BotController:
             self.logger.error(f"Erro BET 1: {e}")
             return False
 
-    def click_and_fill_field(
-        self,
-        area: Dict,
-        value: str,
-        description: str
-    ) -> bool:
+    def click_and_fill_field(self, area: Dict, value: str, description: str) -> bool:
         """Clica em campo e preenche valor."""
         try:
             if not area:
@@ -878,7 +816,7 @@ class BotController:
             current_x, current_y = pyautogui.position()
             dx = target_x - current_x
             dy = target_y - current_y
-            distance = (dx ** 2 + dy ** 2) ** 0.5
+            distance = (dx**2 + dy**2) ** 0.5
             duration = random.uniform(0.1, 0.3) * (distance / 500)
             duration = max(0.05, min(0.5, duration))
             if distance > 50:
@@ -944,7 +882,7 @@ class BotController:
         mode_colors = {
             RiskMode.CONSERVADOR: "green",
             RiskMode.MODERADO: "yellow",
-            RiskMode.AGRESSIVO: "red"
+            RiskMode.AGRESSIVO: "red",
         }
         color = mode_colors.get(novo_modo, "white")
         anterior_name = modo_anterior.name if modo_anterior else "N/A"
@@ -977,7 +915,8 @@ class BotController:
                         stats = self._get_current_history_stats()
                         mode_name = (
                             self.selected_risk_mode.name
-                            if self.selected_risk_mode else "N/A"
+                            if self.selected_risk_mode
+                            else "N/A"
                         )
                         msg = (
                             f"🔔 *Relatório 30 min*\n"
@@ -1043,16 +982,12 @@ class BotController:
         countdown_text.append("Bot em suspensão\n\n", style="dim")
         countdown_text.append("⏱️ Tempo restante:\n\n", style="yellow")
         countdown_text.append(
-            f"{horas:02d}:{minutos:02d}:{segundos:02d}",
-            style="bold cyan"
+            f"{horas:02d}:{minutos:02d}:{segundos:02d}", style="bold cyan"
         )
         countdown_text.append("\n\n")
         with self.balance_lock:
             current_balance = self.current_balance or 0.0
-        countdown_text.append(
-            f"Saldo: R$ {current_balance:.2f}\n",
-            style="green"
-        )
+        countdown_text.append(f"Saldo: R$ {current_balance:.2f}\n", style="green")
         if self.strategy.banca_inicial and self.strategy.meta_lucro_percentual:
             meta = self.strategy.banca_inicial * (
                 1 + self.strategy.meta_lucro_percentual
@@ -1062,7 +997,7 @@ class BotController:
             Panel(
                 countdown_text,
                 title="[bold yellow]SUSPENSÃO ATIVA[/bold yellow]",
-                border_style="green"
+                border_style="green",
             )
         )
         layout["footer"].update(self._build_footer_panel())
@@ -1073,7 +1008,7 @@ class BotController:
         mode_colors = {
             RiskMode.CONSERVADOR: "green",
             RiskMode.MODERADO: "yellow",
-            RiskMode.AGRESSIVO: "red"
+            RiskMode.AGRESSIVO: "red",
         }
         title = Text()
         title.append("CRASH BOT - ML", style="bold cyan")
@@ -1084,9 +1019,7 @@ class BotController:
         return Panel(title, style="cyan")
 
     def _get_profit_loss_text(
-        self,
-        current_balance: Optional[float],
-        initial_balance: Optional[float]
+        self, current_balance: Optional[float], initial_balance: Optional[float]
     ) -> Text:
         """Calcula e formata o texto de lucro/prejuízo."""
         if not (
@@ -1098,10 +1031,7 @@ class BotController:
         profit = current_balance - initial_balance
         profit_pct = profit / initial_balance * 100
         profit_color = "green" if profit >= 0 else "red"
-        return Text(
-            f"R$ {profit:+.2f} ({profit_pct:+.1f}%)",
-            style=profit_color
-        )
+        return Text(f"R$ {profit:+.2f} ({profit_pct:+.1f}%)", style=profit_color)
 
     def _build_last_decision_panel(self) -> Panel:
         """Constrói o painel de última decisão do bot."""
@@ -1120,7 +1050,7 @@ class BotController:
             return Panel(
                 text,
                 title="[bold white]Última Decisão[/bold white]",
-                border_style=border_style
+                border_style=border_style,
             )
         except Exception as e:
             self.logger.error(f"Erro painel decisão: {e}")
@@ -1139,10 +1069,7 @@ class BotController:
         time_text = Text(
             f"Tempo: {self.format_time(elapsed)} | Rodadas: {self.round_count}"
         )
-        return Panel(
-            Text.assemble(balance_text, "\n", time_text),
-            title="Banca"
-        )
+        return Panel(Text.assemble(balance_text, "\n", time_text), title="Banca")
 
     def _build_history_panel(self) -> Panel:
         """Constrói o painel de histórico."""
@@ -1169,17 +1096,15 @@ class BotController:
         p80_value = np.percentile(last_250_values, 80)
 
         mean_color = "green" if mean_250 >= 2.0 else "red"
-        std_color = "red" if std_250 > 15.0 else (
-            "yellow" if std_250 > 10.0 else "green"
+        std_color = (
+            "red" if std_250 > 15.0 else ("yellow" if std_250 > 10.0 else "green")
         )
-        cv_color = "red" if cv_250 > 3.0 else (
-            "yellow" if cv_250 > 2.5 else "green"
+        cv_color = "red" if cv_250 > 3.0 else ("yellow" if cv_250 > 2.5 else "green")
+        streak_color = (
+            "red" if max_streak >= 8 else ("yellow" if max_streak >= 6 else "green")
         )
-        streak_color = "red" if max_streak >= 8 else (
-            "yellow" if max_streak >= 6 else "green"
-        )
-        zeros_color = "red" if zeros_pct > 4.0 else (
-            "yellow" if zeros_pct > 2.0 else "green"
+        zeros_color = (
+            "red" if zeros_pct > 4.0 else ("yellow" if zeros_pct > 2.0 else "green")
         )
 
         text.append(f"--- Análise ({total_count} Rodadas) ---\n", style="cyan")
@@ -1224,7 +1149,7 @@ class BotController:
             "cv_250": 0.0,
             "zeros_count": 0,
             "max_streak": 0,
-            "total_count": 0
+            "total_count": 0,
         }
         if not self.explosions:
             return stats
@@ -1244,24 +1169,18 @@ class BotController:
         try:
             analysis_data = self.strategy.get_current_analysis()
             table = self._create_styled_table(
-                title="",
-                border_style="dim",
-                show_header=False,
-                expand=True
+                title="", border_style="dim", show_header=False, expand=True
             )
             table.add_column("Item", style="cyan")
             table.add_column("Status", style="white")
             mode_colors = {
                 "CONSERVADOR": "green",
                 "MODERADO": "yellow",
-                "AGRESSIVO": "red"
+                "AGRESSIVO": "red",
             }
             risk_mode_name = analysis_data.get("risk_mode", "N/A")
             mode_color = mode_colors.get(risk_mode_name, "white")
-            table.add_row(
-                "Modo:",
-                Text(risk_mode_name, style=f"bold {mode_color}")
-            )
+            table.add_row("Modo:", Text(risk_mode_name, style=f"bold {mode_color}"))
             martingale_active = analysis_data.get("martingale_active")
             status_text = (
                 "[green]ATIVO[/green]"
@@ -1277,18 +1196,17 @@ class BotController:
             if ml_conf == -1.0:
                 conf_text = Text("Erro", style="red")
             else:
-                conf_color = "green" if ml_conf > 0.65 else (
-                    "yellow" if ml_conf > 0.52 else "dim"
+                conf_color = (
+                    "green"
+                    if ml_conf > 0.65
+                    else ("yellow" if ml_conf > 0.52 else "dim")
                 )
                 conf_text = Text(f"{ml_conf:.1%}", style=conf_color)
             table.add_row("Confiança ML:", conf_text)
             return Panel(table, title="Status da Estratégia")
         except Exception as e:
             self.logger.error(f"Erro strategy panel: {e}")
-            return Panel(
-                Text(f"Erro: {e}", style="red"),
-                title="Status"
-            )
+            return Panel(Text(f"Erro: {e}", style="red"), title="Status")
 
     def _build_strategy_stats_panel(self) -> Panel:
         """Constrói o painel de estatísticas."""
@@ -1298,7 +1216,7 @@ class BotController:
                 title="",
                 border_style="dim",
                 header_style="bold magenta",
-                show_header=True
+                show_header=True,
             )
             table.add_column("Estratégia", style="cyan")
             table.add_column("Total", justify="right")
@@ -1308,27 +1226,28 @@ class BotController:
             for stats in stats_list:
                 if "MLHighConfidence" in stats["name"]:
                     continue
-                nome = "Martingale" if "CommercialMartingale" in stats["name"] else stats["name"]
+                nome = (
+                    "Martingale"
+                    if "CommercialMartingale" in stats["name"]
+                    else stats["name"]
+                )
                 table.add_row(
                     nome,
                     str(stats["total_recommendations"]),
                     str(stats["total_hits"]),
                     str(stats["total_misses"]),
-                    f"{stats['total_hit_rate']:.1f}%"
+                    f"{stats['total_hit_rate']:.1f}%",
                 )
             return Panel(table, title="Estatísticas")
         except Exception:
-            return Panel(
-                Text("Carregando...", style="dim"),
-                title="Estatísticas"
-            )
+            return Panel(Text("Carregando...", style="dim"), title="Estatísticas")
 
     def _build_footer_panel(self) -> Panel:
         """Constrói o painel de rodapé com atalhos."""
         mode_colors = {
             RiskMode.CONSERVADOR: "green",
             RiskMode.MODERADO: "yellow",
-            RiskMode.AGRESSIVO: "red"
+            RiskMode.AGRESSIVO: "red",
         }
         text = Text()
         if self.selected_risk_mode:
@@ -1350,14 +1269,8 @@ class BotController:
 
     def _print_summary_footer_info(self):
         """Imprime informações de rodapé do resumo."""
-        self.console.print(
-            f"🆔 Sessão: {self.db_manager.session_id}",
-            style="dim"
-        )
-        self.console.print(
-            f"📁 Database: {self.db_manager.db_path}",
-            style="dim"
-        )
+        self.console.print(f"🆔 Sessão: {self.db_manager.session_id}", style="dim")
+        self.console.print(f"📁 Database: {self.db_manager.db_path}", style="dim")
 
     def format_time(self, seconds: float) -> str:
         """Formata tempo em HH:MM:SS."""
@@ -1368,8 +1281,7 @@ class BotController:
         current_balance, initial_balance = self._get_safe_balances()
         if current_balance is not None and initial_balance is not None:
             profit_text_obj = self._get_profit_loss_text(
-                current_balance,
-                initial_balance
+                current_balance, initial_balance
             )
             finance_table = self._create_table_by_type(TableType.FINANCIAL_SUMMARY)
             finance_table.add_row("Saldo inicial", f"R$ {initial_balance:.2f}")
@@ -1387,14 +1299,10 @@ class BotController:
             balance = self.vision.get_balance(balance_area)
             if balance and 0.01 <= balance <= 1000000:
                 self.console.print(
-                    f"✅ Saldo detectado: R$ {balance:.2f}",
-                    style="green"
+                    f"✅ Saldo detectado: R$ {balance:.2f}", style="green"
                 )
                 return balance
-            self.console.print(
-                f"⚠️ Tentativa {attempt+1}/8...",
-                style="yellow"
-            )
+            self.console.print(f"⚠️ Tentativa {attempt+1}/8...", style="yellow")
             time.sleep(2)
         return None
 
@@ -1408,24 +1316,19 @@ class BotController:
     def _start_threads(self):
         """Inicializa e inicia todas as threads."""
         self.balance_thread = threading.Thread(
-            target=self.detect_balance_continuously,
-            daemon=True
+            target=self.detect_balance_continuously, daemon=True
         )
         self.capture_thread = threading.Thread(
-            target=self.capture_multipliers_continuously,
-            daemon=True
+            target=self.capture_multipliers_continuously, daemon=True
         )
         self.detect_thread = threading.Thread(
-            target=self.detect_bet_and_process,
-            daemon=True
+            target=self.detect_bet_and_process, daemon=True
         )
         self.ui_thread = threading.Thread(
-            target=self.update_ui_continuously,
-            daemon=True
+            target=self.update_ui_continuously, daemon=True
         )
         self.keyboard_thread = threading.Thread(
-            target=self.listen_keyboard_continuously,
-            daemon=True
+            target=self.listen_keyboard_continuously, daemon=True
         )
         self.balance_thread.start()
         self.capture_thread.start()
@@ -1437,10 +1340,7 @@ class BotController:
         """Detecta o saldo inicial ou define um valor padrão."""
         balance_to_set = self.detect_initial_balance()
         if not balance_to_set:
-            self.console.print(
-                "⚠️ Usando saldo padrão R$ 100,00",
-                style="yellow"
-            )
+            self.console.print("⚠️ Usando saldo padrão R$ 100,00", style="yellow")
             balance_to_set = 100.0
         self._set_initial_balance(balance_to_set)
 
@@ -1487,12 +1387,8 @@ class BotController:
         """Exibe mensagem de atualização."""
         should_open_browser = False
         if obrigatoria:
-            self.console.print(
-                "[bold red]⚠️ ATUALIZAÇÃO OBRIGATÓRIA![/bold red]"
-            )
-            self.console.input(
-                "\n[yellow]Enter para abrir download...[/yellow]"
-            )
+            self.console.print("[bold red]⚠️ ATUALIZAÇÃO OBRIGATÓRIA![/bold red]")
+            self.console.input("\n[yellow]Enter para abrir download...[/yellow]")
             should_open_browser = True
         else:
             resposta = self.console.input(
@@ -1502,6 +1398,7 @@ class BotController:
                 should_open_browser = True
         if should_open_browser:
             import webbrowser
+
             webbrowser.open(download_url)
             return False
         return True
@@ -1509,14 +1406,8 @@ class BotController:
     def _check_for_updates(self) -> bool:
         """Verifica se há atualizações disponíveis."""
         try:
-            self.console.print(
-                "🔍 Verificando atualizações...",
-                style="cyan"
-            )
-            response = requests.get(
-                f"{API_URL}/api/v1/bot/versao",
-                timeout=10
-            )
+            self.console.print("🔍 Verificando atualizações...", style="cyan")
+            response = requests.get(f"{API_URL}/api/v1/bot/versao", timeout=10)
             if response.status_code == 200:
                 data = response.json()
                 versao_servidor = data.get("versao", "0.0.0")
@@ -1525,32 +1416,24 @@ class BotController:
                         versao_servidor,
                         data.get("download_url", ""),
                         data.get("changelog", ""),
-                        data.get("obrigatoria", False)
+                        data.get("obrigatoria", False),
                     )
                 else:
                     self.console.print(
                         f"[green]✅ Bot atualizado! v{BOT_VERSION}[/green]"
                     )
             elif response.status_code == 404:
-                self.console.print(
-                    "[yellow]⚠️ Nenhuma versão no servidor[/yellow]"
-                )
+                self.console.print("[yellow]⚠️ Nenhuma versão no servidor[/yellow]")
             return True
         except requests.exceptions.RequestException as e:
-            self.console.print(
-                f"[yellow]⚠️ Não verificou atualizações: {e}[/yellow]"
-            )
+            self.console.print(f"[yellow]⚠️ Não verificou atualizações: {e}[/yellow]")
             return True
         except Exception as e:
             self.logger.error(f"Erro atualizações: {e}")
             return True
 
     def _handle_update_found(
-        self,
-        versao_servidor: str,
-        download_url: str,
-        changelog: str,
-        obrigatoria: bool
+        self, versao_servidor: str, download_url: str, changelog: str, obrigatoria: bool
     ) -> bool:
         """Exibe o banner de atualização."""
         self.console.print(f"\n[bold yellow]{'='*50}[/bold yellow]")
@@ -1559,12 +1442,8 @@ class BotController:
         )
         self.console.print(f"[white]Sua versão: v{BOT_VERSION}[/white]")
         if changelog:
-            self.console.print(
-                f"\n[cyan]Novidades:[/cyan]\n[white]{changelog}[/white]"
-            )
-        self.console.print(
-            f"\n[bold blue]Download: {download_url}[/bold blue]"
-        )
+            self.console.print(f"\n[cyan]Novidades:[/cyan]\n[white]{changelog}[/white]")
+        self.console.print(f"\n[bold blue]Download: {download_url}[/bold blue]")
         self.console.print(f"[bold yellow]{'='*50}[/bold yellow]\n")
         return self._prompt_update(download_url, obrigatoria)
 
@@ -1584,10 +1463,7 @@ class BotController:
         local_hwid = get_hwid()
         license_key = self._get_license_key()
         if not license_key:
-            self.console.print(
-                "❌ Chave de licença ausente.",
-                style="bold red"
-            )
+            self.console.print("❌ Chave de licença ausente.", style="bold red")
             return False
         endpoint = f"{API_URL}/validar"
         data = {"chave": license_key, "hwid": local_hwid}
@@ -1597,28 +1473,19 @@ class BotController:
             if response.status_code == 200:
                 self.console.print(
                     f"✅ LICENÇA VÁLIDA! {response.json().get('mensagem', '')}",
-                    style="bold green"
+                    style="bold green",
                 )
                 return True
             else:
                 try:
                     resp_json = response.json()
-                    msg = resp_json.get(
-                        "mensagem",
-                        f"Erro HTTP {response.status_code}"
-                    )
+                    msg = resp_json.get("mensagem", f"Erro HTTP {response.status_code}")
                 except Exception:
                     msg = f"Erro HTTP {response.status_code}"
-                self.console.print(
-                    f"❌ ACESSO NEGADO: {msg}",
-                    style="bold red"
-                )
+                self.console.print(f"❌ ACESSO NEGADO: {msg}", style="bold red")
                 return False
         except requests.exceptions.RequestException:
-            self.console.print(
-                "❌ ERRO CONEXÃO: Servidor offline.",
-                style="bold red"
-            )
+            self.console.print("❌ ERRO CONEXÃO: Servidor offline.", style="bold red")
             return False
 
     def _run_main_loop(self):
@@ -1642,33 +1509,28 @@ class BotController:
             banca_detectada = self.initial_balance or 100.0
         risk_mode_safe = self._pending_risk_mode or RiskMode.MODERADO
         self.strategy.iniciar_sessao(
-            banca_inicial=banca_detectada,
-            risk_mode=risk_mode_safe
+            banca_inicial=banca_detectada, risk_mode=risk_mode_safe
         )
         self.running = True
         self._send_telemetry(
             tipo="sessao_inicio",
             dados={
                 "modo_risco": (
-                    self.selected_risk_mode.name
-                    if self.selected_risk_mode else "N/A"
+                    self.selected_risk_mode.name if self.selected_risk_mode else "N/A"
                 ),
-                "banca_inicial": self.initial_balance or 0.0
+                "banca_inicial": self.initial_balance or 0.0,
             },
-            lucro=0.0
+            lucro=0.0,
         )
         self._start_threads()
         self.live_display = Live(
             self.build_dashboard_layout(),
             console=self.console,
             refresh_per_second=4,
-            screen=True
+            screen=True,
         )
         self.live_display.start()
-        mode_name = (
-            self.selected_risk_mode.name
-            if self.selected_risk_mode else "N/A"
-        )
+        mode_name = self.selected_risk_mode.name if self.selected_risk_mode else "N/A"
         self.last_action = f"✅ SISTEMA INICIADO! Modo: {mode_name}"
         while self.running:
             time.sleep(1)
@@ -1697,7 +1559,7 @@ class BotController:
                 self.detect_thread,
                 self.balance_thread,
                 self.capture_thread,
-                self.keyboard_thread
+                self.keyboard_thread,
             ]
             for thread in threads:
                 if thread and thread.is_alive():
@@ -1719,13 +1581,14 @@ class BotController:
                 dados={
                     "modo_risco": (
                         self.selected_risk_mode.name
-                        if self.selected_risk_mode else "N/A"
+                        if self.selected_risk_mode
+                        else "N/A"
                     ),
                     "banca_inicial": saldo_inicial,
                     "banca_final": saldo_final,
-                    "total_rodadas": self.round_count
+                    "total_rodadas": self.round_count,
                 },
-                lucro=lucro_sessao
+                lucro=lucro_sessao,
             )
             self.db_manager.close_session(final_balance)
             self.console.print("✅ Sessão fechada", style="green")
@@ -1741,13 +1604,9 @@ class BotController:
         main_panel_content.append(
             f"⏱️  Duração: {self.format_time(duration.total_seconds())}\n"
         )
-        main_panel_content.append(
-            f"💥 Total explosões: {len(self.explosions)}\n"
-        )
+        main_panel_content.append(f"💥 Total explosões: {len(self.explosions)}\n")
         if self.selected_risk_mode:
-            main_panel_content.append(
-                f"🎯 Modo: {self.selected_risk_mode.name}\n"
-            )
+            main_panel_content.append(f"🎯 Modo: {self.selected_risk_mode.name}\n")
         if self.explosions:
             values = [e["value"] for e in self.explosions]
             min_val = min(values)
@@ -1758,11 +1617,7 @@ class BotController:
                 f"Média: {avg_val:.2f}x\n"
             )
         self.console.print(
-            Panel(
-                main_panel_content,
-                title="Resumo da Sessão",
-                border_style="cyan"
-            )
+            Panel(main_panel_content, title="Resumo da Sessão", border_style="cyan")
         )
         self._print_financial_summary()
         self._print_summary_footer_info()
@@ -1774,7 +1629,7 @@ class BotController:
         show_header: bool = True,
         title_style: str = "bold cyan",
         header_style: str = "bold white",
-        **kwargs
+        **kwargs,
     ) -> Table:
         """Factory method para criar tabelas Rich."""
         return Table(
@@ -1783,7 +1638,7 @@ class BotController:
             show_header=show_header,
             title_style=title_style,
             header_style=header_style,
-            **kwargs
+            **kwargs,
         )
 
     def _create_table_by_type(self, table_type: TableType) -> Table:
@@ -1796,8 +1651,7 @@ class BotController:
         title = config.get("title", "")
         columns = config.get("columns", [])
         table_kwargs = {
-            k: v for k, v in config.items()
-            if k not in ["title", "columns"]
+            k: v for k, v in config.items() if k not in ["title", "columns"]
         }
         table = self._create_styled_table(title=title, **table_kwargs)
         for col_name, col_kwargs in columns:
@@ -1820,27 +1674,20 @@ class BotController:
                 "Vou guiar você para mapear a tela.\n"
                 "Para cada item, posicione no [cyan]Canto Superior Esquerdo[/cyan]\n"
                 "e depois no [cyan]Canto Inferior Direito[/cyan].",
-                border_style="yellow"
+                border_style="yellow",
             )
         )
-        profile_name = self.console.input(
-            "\n[cyan]Nome do perfil: [/cyan]"
-        ) or f"User_Profile_{int(time.time())}"
-        self.console.print(
-            "\n[yellow]Deseja calibrar APOSTA 2 (Double Bet)?[/yellow]"
+        profile_name = (
+            self.console.input("\n[cyan]Nome do perfil: [/cyan]")
+            or f"User_Profile_{int(time.time())}"
         )
-        resp = self.console.input(
-            "Digite 's' para Sim ou Enter para pular: "
-        ).lower()
+        self.console.print("\n[yellow]Deseja calibrar APOSTA 2 (Double Bet)?[/yellow]")
+        resp = self.console.input("Digite 's' para Sim ou Enter para pular: ").lower()
         use_bet_2 = resp == "s"
         items_to_calibrate = self._get_items_to_calibrate(use_bet_2)
         new_profile = {}
         for area_key, click_key, friendly_name in items_to_calibrate:
-            item_data = self._calibrate_single_item(
-                area_key,
-                click_key,
-                friendly_name
-            )
+            item_data = self._calibrate_single_item(area_key, click_key, friendly_name)
             new_profile |= item_data
         if not use_bet_2:
             self._clear_unused_bet2_fields(new_profile)
@@ -1854,8 +1701,7 @@ class BotController:
         try:
             self._persist_profile_data(profile_name, new_profile)
             self.console.print(
-                f"✅ Perfil '{profile_name}' criado!",
-                style="bold green"
+                f"✅ Perfil '{profile_name}' criado!", style="bold green"
             )
             return True
         except Exception as e:
@@ -1879,30 +1725,21 @@ class BotController:
             "bet_value_click_2",
             "target_area_2",
             "target_click_2",
-            "bet_button_area_2"
+            "bet_button_area_2",
         ]
         for field in fields:
             profile[field] = None
 
     def _calibrate_single_item(
-        self,
-        area_key: str,
-        click_key: Optional[str],
-        friendly_name: str
+        self, area_key: str, click_key: Optional[str], friendly_name: str
     ) -> Dict[str, Any]:
         """Calibra um único item da tela."""
-        self.console.print(
-            f"\n📍 Mapeando: [bold cyan]{friendly_name}[/bold cyan]"
-        )
-        self.console.print(
-            "   1. Mouse no [green]CANTO SUPERIOR ESQUERDO[/green]."
-        )
+        self.console.print(f"\n📍 Mapeando: [bold cyan]{friendly_name}[/bold cyan]")
+        self.console.print("   1. Mouse no [green]CANTO SUPERIOR ESQUERDO[/green].")
         self.console.input("      [Enter] para capturar...")
         x1, y1 = pyautogui.position()
         self.console.print(f"      -> ({x1}, {y1})", style="dim")
-        self.console.print(
-            "   2. Mouse no [green]CANTO INFERIOR DIREITO[/green]."
-        )
+        self.console.print("   2. Mouse no [green]CANTO INFERIOR DIREITO[/green].")
         self.console.input("      [Enter] para capturar...")
         x2, y2 = pyautogui.position()
         self.console.print(f"      -> ({x2}, {y2})", style="dim")
@@ -1910,14 +1747,7 @@ class BotController:
         top = min(y1, y2)
         width = abs(x2 - x1)
         height = abs(y2 - y1)
-        result = {
-            area_key: {
-                "x": left,
-                "y": top,
-                "width": width,
-                "height": height
-            }
-        }
+        result = {area_key: {"x": left, "y": top, "width": width, "height": height}}
         if click_key:
             cx, cy = left + (width // 2), top + (height // 2)
             result[click_key] = {"x": cx, "y": cy}
@@ -1926,10 +1756,7 @@ class BotController:
         time.sleep(0.3)
         return result
 
-    def _get_items_to_calibrate(
-        self,
-        use_bet_2: bool
-    ) -> list:
+    def _get_items_to_calibrate(self, use_bet_2: bool) -> list:
         """Retorna a lista de itens para calibração."""
         items = [
             ("multiplier_area", None, "MULTIPLICADOR (centro da tela)"),
@@ -1940,11 +1767,13 @@ class BotController:
             ("bet_button_area_1", None, "BOTÃO VERDE (Apostar)"),
         ]
         if use_bet_2:
-            items.extend([
-                ("bet_value_area_2", "bet_value_click_2", "CAMPO VALOR: Aposta 2"),
-                ("target_area_2", "target_click_2", "CAMPO ALVO: Aposta 2"),
-                ("bet_button_area_2", None, "BOTÃO: Apostar 2"),
-            ])
+            items.extend(
+                [
+                    ("bet_value_area_2", "bet_value_click_2", "CAMPO VALOR: Aposta 2"),
+                    ("target_area_2", "target_click_2", "CAMPO ALVO: Aposta 2"),
+                    ("bet_button_area_2", None, "BOTÃO: Apostar 2"),
+                ]
+            )
         return items
 
 
@@ -1958,7 +1787,7 @@ def main():
             Panel(
                 Text("CRASH BOT - ML (Versão Comercial)", justify="center"),
                 style="cyan bold",
-                padding=(1, 10)
+                padding=(1, 10),
             )
         )
         console.print()
@@ -1970,12 +1799,9 @@ def main():
         instructions.append("- O saldo será detectado automaticamente\n")
         instructions.append("- Pressione [bold]Ctrl+C[/bold] para parar\n")
         instructions.append(
-            "- Pressione [bold]1, 2 ou 3[/bold] para trocar modo\n",
-            style="cyan"
+            "- Pressione [bold]1, 2 ou 3[/bold] para trocar modo\n", style="cyan"
         )
-        console.print(
-            Panel(instructions, title="Setup", border_style="green")
-        )
+        console.print(Panel(instructions, title="Setup", border_style="green"))
         console.print()
         console.input("[green]Pressione Enter para continuar...[/green]")
         console.print("⏳ Inicializando...", style="yellow")
@@ -1983,9 +1809,7 @@ def main():
             bot = BotController()
             console.print("✅ BotController inicializado.", style="green")
         except Exception:
-            console.print(
-                "\n\n[bold red]❌ ERRO FATAL NA INICIALIZAÇÃO:[/bold red]"
-            )
+            console.print("\n\n[bold red]❌ ERRO FATAL NA INICIALIZAÇÃO:[/bold red]")
             console.print_exception(show_locals=True)
             input("Pressione Enter para sair...")
             return
@@ -1993,10 +1817,7 @@ def main():
         try:
             bot.start()
         except KeyboardInterrupt:
-            console.print(
-                "\n\nBot interrompido pelo usuário.",
-                style="yellow"
-            )
+            console.print("\n\nBot interrompido pelo usuário.", style="yellow")
         except Exception:
             console.print("\n\n[bold red]❌ ERRO FATAL:[/bold red]")
             console.print_exception(show_locals=True)

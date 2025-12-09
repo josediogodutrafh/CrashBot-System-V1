@@ -109,7 +109,7 @@ class StrategyPolicy(ABC):
         self.is_active = False
 
     @abstractmethod
-    def check_trigger(self, history: deque) -> bool:
+    def check_trigger(self, history: deque) -> Tuple[bool, str]:
         """Verifica se a estratégia deve ser ativada (se não estiver ativa)."""
         pass
 
@@ -262,7 +262,7 @@ class CommercialMartingalePolicy(StrategyPolicy):
         return self._set_decision(
             f"⏸️ AGUARDANDO: {lows_count}/{self.lows_needed} velas (faltam {faltam})",
             "aguardando",
-            False
+            False,
         )
 
     def _process_trigger_reached(
@@ -292,7 +292,7 @@ class CommercialMartingalePolicy(StrategyPolicy):
         return self._set_decision(
             f"✅ APOSTANDO: {lows_count}/{self.lows_needed} velas baixas",
             "apostando",
-            True
+            True,
         )
 
     def _check_safety_conditions(self, history: deque) -> Tuple[bool, str]:
@@ -347,8 +347,7 @@ class CommercialMartingalePolicy(StrategyPolicy):
 
         # NOVO: Atualiza mensagem com detalhes da aposta
         self.ultima_decisao = (
-            f"✅ APOSTANDO: Dobra {self.dobra_atual} - "
-            f"R${bet_1:.2f} @ {target_1}x"
+            f"✅ APOSTANDO: Dobra {self.dobra_atual} - " f"R${bet_1:.2f} @ {target_1}x"
         )
         self.ultima_decisao_tipo = "apostando"
 
@@ -463,7 +462,7 @@ class MLHighConfidencePolicy(StrategyPolicy):
                 f"({len(recent_history)}/{REQUIRED_HISTORY_FOR_PREDICTION}, "
                 f"faltam {faltam})",
                 "aguardando",
-                False
+                False,
             )
 
         probability = self.le.predict(recent_history)
@@ -483,14 +482,14 @@ class MLHighConfidencePolicy(StrategyPolicy):
                 f"✅ ML APOSTANDO: Confiança {probability:.1%} "
                 f"(mínimo {self.confidence_threshold:.0%})",
                 "apostando",
-                True
+                True,
             )
 
         return self._set_decision(
             f"⏸️ ML PULOU: Confiança {probability:.1%} "
             f"(mínimo {self.confidence_threshold:.0%})",
             "pulou",
-            False
+            False,
         )
 
     def get_bet_recommendation(
@@ -704,7 +703,9 @@ class StrategyEngine:
             for policy in self.policies:
                 if not policy.is_active:
                     # MODIFICADO: Agora check_trigger retorna tupla (bool, str)
-                    triggered, decisao_msg = policy.check_trigger(self.explosion_history)
+                    triggered, decisao_msg = policy.check_trigger(
+                        self.explosion_history
+                    )
 
                     if triggered:
                         strategy_activated = True
