@@ -8,17 +8,14 @@ import secrets
 import string
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Optional  # <--- ADICIONADO
+from typing import Optional
 
 import mercadopago
-
-# from app.config import settings  <-- Removido se não estiver usando
 from app.database import get_db
 from app.models import Licenca, Usuario
 from app.services.email_service import enviar_email, template_licenca_criada
 from app.services.promocao_service import (
     obter_preco_plano,
-    verificar_elegibilidade_primeira_adesao,
     verificar_elegibilidade_trial,
 )
 from dotenv import load_dotenv
@@ -247,10 +244,11 @@ async def criar_pagamento(
     except HTTPException:
         raise
     except Exception as e:
+        # Sourcery: raise from previous error
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Erro ao criar pagamento: {str(e)}",
-        )
+        ) from e
 
     return CriarPagamentoResponse(
         payment_id=preference["id"],
@@ -463,9 +461,8 @@ async def webhook_mercadopago(
     if body.get("type") != "payment":
         return {"status": "ok"}
 
-    # Obter ID do pagamento
-    payment_id = body.get("data", {}).get("id")
-    if not payment_id:
+    # Obter ID do pagamento (Sourcery: use named expression)
+    if not (payment_id := body.get("data", {}).get("id")):
         return {"status": "ok"}
 
     # Buscar detalhes do pagamento
@@ -498,9 +495,10 @@ async def webhook_mercadopago(
     result = await db.execute(
         select(Licenca).where(Licenca.payment_id == str(payment_id))
     )
-    existing = result.scalar_one_or_none()
 
-    if existing:
+    # CORREÇÃO: Remova "existing :=" ou "existing ="
+    # Verifique diretamente o resultado, pois a variável não é usada depois.
+    if result.scalar_one_or_none():
         print(f"Licença já existe para pagamento {payment_id}")
         return {"status": "ok", "message": "Licença já criada"}
 
@@ -615,7 +613,7 @@ async def pagamento_sucesso(
     # Redirecionar para página de sucesso na loja
     return {
         "status": "success",
-        "message": "Pagamento aprovado! Você receberá a licença por e-mail em instantes.",
+        "message": "Pagamento aprovado! Você receberá a licença por e-mail.",
         "collection_id": collection_id,
         "external_reference": external_reference,
     }
