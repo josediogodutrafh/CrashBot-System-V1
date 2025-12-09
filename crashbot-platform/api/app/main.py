@@ -3,13 +3,18 @@ CrashBot API - FastAPI
 Versão 2.0
 
 API moderna para gestão do CrashBot.
+ATUALIZADO: Inclui routers de notificação para clientes (Item 1)
 """
 
 from app.routers.auth import router as auth_router
 from app.routers.licencas import router as licencas_router
+from app.routers.notify import router as notify_router
 from app.routers.pagamento import router as pagamento_router
 from app.routers.telemetria import router as telemetria_router
 from app.routers.versao import router as versao_router
+
+# NOVOS ROUTERS - Item 1: Notificações para Clientes
+from app.routers.webhook import router as webhook_router
 from app.routers.websocket import router as websocket_router
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -48,8 +53,6 @@ app.add_middleware(
 )
 
 # ============================================================================
-
-# ============================================================================
 # ROUTERS
 # ============================================================================
 
@@ -59,6 +62,10 @@ app.include_router(websocket_router)
 app.include_router(pagamento_router)
 app.include_router(versao_router)
 app.include_router(telemetria_router)
+
+# NOVOS ROUTERS - Item 1: Notificações para Clientes
+app.include_router(webhook_router)
+app.include_router(notify_router)
 
 # ============================================================================
 # ROTAS BÁSICAS
@@ -96,11 +103,14 @@ async def api_status():
             "licenses": "/api/v1/licencas",
             "telemetry": "/api/v1/telemetria",
             "payments": "/api/v1/pagamentos",
+            "telegram": "/api/v1/telegram",  # NOVO
+            "notify": "/api/v1/notify",  # NOVO
         },
         "features": {
             "websocket": True,
             "real_time": True,
             "authentication": "JWT",
+            "client_notifications": True,  # NOVO
         },
     }
 
@@ -162,6 +172,8 @@ async def startup_event():
     """Executado quando a API inicia."""
     print("🚀 CrashBot API iniciando...")
     print("📚 Documentação: http://localhost:8000/api/docs")
+    print("📱 Telegram Webhook: /api/v1/telegram/webhook")
+    print("🔔 Client Notifications: /api/v1/notify")
     # TODO: Conectar ao banco
     # TODO: Inicializar Redis
     # TODO: Carregar configurações
