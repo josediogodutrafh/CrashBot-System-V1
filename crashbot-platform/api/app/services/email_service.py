@@ -1,6 +1,7 @@
 """
 Serviço de Email
 Envia emails usando Resend ou SMTP.
+ATUALIZADO: Inclui instruções do Telegram Bot para clientes
 """
 
 import os
@@ -76,6 +77,7 @@ def template_licenca_criada(
 ) -> str:
     """
     Gera o HTML do email de licença criada.
+    ATUALIZADO: Inclui seção do Telegram Bot
     """
     return f"""
     <!DOCTYPE html>
@@ -117,8 +119,21 @@ def template_licenca_criada(
                 padding: 20px;
                 margin: 20px 0;
             }}
+            .box-telegram {{
+                background: rgba(0, 136, 204, 0.1);
+                border: 1px solid #0088cc;
+                border-radius: 12px;
+                padding: 20px;
+                margin: 20px 0;
+            }}
             .box-title {{
                 color: #a855f7;
+                font-weight: bold;
+                margin-bottom: 15px;
+                font-size: 16px;
+            }}
+            .box-title-telegram {{
+                color: #0088cc;
                 font-weight: bold;
                 margin-bottom: 15px;
                 font-size: 16px;
@@ -161,6 +176,32 @@ def template_licenca_criada(
                 font-size: 16px;
                 margin-top: 30px;
             }}
+            .button-telegram {{
+                display: block;
+                width: 100%;
+                background: linear-gradient(135deg, #0088cc 0%, #0077b5 100%);
+                color: white;
+                text-align: center;
+                padding: 14px;
+                border-radius: 8px;
+                text-decoration: none;
+                font-weight: bold;
+                font-size: 14px;
+                margin-top: 15px;
+            }}
+            .telegram-steps {{
+                margin: 15px 0;
+                padding-left: 0;
+                list-style: none;
+            }}
+            .telegram-steps li {{
+                padding: 8px 0;
+                color: #ccc;
+                font-size: 14px;
+            }}
+            .telegram-steps li strong {{
+                color: #0088cc;
+            }}
             .footer {{
                 text-align: center;
                 color: #666;
@@ -190,7 +231,7 @@ def template_licenca_criada(
             </div>
 
             <div class="box">
-                <div class="box-title">🔐 Dados de Acesso ao Painel</div>
+                <div class="box-title">🔑 Dados de Acesso ao Painel</div>
                 <div class="info-row">
                     <span class="info-label">Email:</span>
                     <span class="info-value">{email}</span>
@@ -215,6 +256,27 @@ def template_licenca_criada(
                     <span class="info-value">{dias} dias</span>
                 </div>
             </div>
+
+            <!-- NOVA SEÇÃO: TELEGRAM BOT -->
+            <div class="box-telegram">
+                <div class="box-title-telegram">📱 Receba Alertas no Telegram!</div>
+                <p style="color: #ccc; font-size: 14px; margin-bottom: 15px;">
+                    Configure nosso bot para receber notificações de <strong style="color: #22c55e;">HITs</strong>,
+                    <strong style="color: #ef4444;">MISSes</strong> e alertas importantes diretamente no seu celular!
+                </p>
+
+                <ul class="telegram-steps">
+                    <li><strong>1.</strong> Clique no botão abaixo para abrir o Telegram</li>
+                    <li><strong>2.</strong> Envie <strong>/start</strong> para o bot</li>
+                    <li><strong>3.</strong> Digite sua chave de licença quando solicitado</li>
+                    <li><strong>4.</strong> Pronto! Você receberá alertas em tempo real 🚀</li>
+                </ul>
+
+                <a href="https://t.me/tucunare_crashbot_bot" class="button-telegram" target="_blank">
+                    📲 Ativar Alertas no Telegram
+                </a>
+            </div>
+            <!-- FIM DA NOVA SEÇÃO -->
 
             <a href="https://tucunarebot.com.br/login" class="button">
                 Acessar Meu Painel
