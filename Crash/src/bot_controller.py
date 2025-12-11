@@ -240,20 +240,62 @@ class BotController:
             return {}
 
     def _send_telemetry(
-        self, tipo: str, dados: Optional[Union[dict, str]] = None, lucro: float = 0.0
+        self,
+        tipo: str,
+        dados: Optional[Union[dict, str]] = None,
+        lucro: float = 0.0,
+        # Novos campos opcionais
+        saldo: Optional[float] = None,
+        valor_aposta: Optional[float] = None,
+        modo_risco: Optional[str] = None,
+        estrategia: Optional[str] = None,
+        target: Optional[float] = None,
+        explosao: Optional[float] = None,
+        resultado: Optional[str] = None,
+        sequencia_perdas: Optional[int] = None,
+        banca_inicial: Optional[float] = None,
+        banca_final: Optional[float] = None,
+        stop_loss_atingido: bool = False,
+        meta_atingida: bool = False,
     ):
-        """Envia dados de telemetria para o servidor."""
+        """Envia dados de telemetria completos para o servidor."""
         if not hasattr(self, "db_manager") or not self.db_manager.session_id:
             return
+
         endpoint = f"{API_URL}/api/v1/telemetria/log"
-        dados_envio = dados if dados is not None else {}
+
+        # Converte dados para string se for dict
+        dados_str = ""
+        if dados is not None:
+            dados_str = json.dumps(dados) if isinstance(dados, dict) else str(dados)
+
         payload = {
+            # Campos obrigatórios
             "hwid": get_hwid(),
             "sessao_id": self.db_manager.session_id,
             "tipo": tipo,
-            "dados": dados_envio,
+            "dados": dados_str,
             "lucro": lucro,
+            # Campos financeiros
+            "saldo": saldo,
+            "valor_aposta": valor_aposta,
+            "banca_inicial": banca_inicial,
+            "banca_final": banca_final,
+            # Campos de jogo
+            "modo_risco": modo_risco,
+            "estrategia": estrategia,
+            "target": target,
+            "explosao": explosao,
+            "resultado": resultado,
+            "sequencia_perdas": sequencia_perdas,
+            # Alertas
+            "stop_loss_atingido": stop_loss_atingido,
+            "meta_atingida": meta_atingida,
+            # Metadados
+            "versao_bot": BOT_VERSION,
+            "sistema_operacional": f"{os.name}_{sys.platform}",
         }
+
         try:
             threading.Thread(
                 target=requests.post,
@@ -540,11 +582,21 @@ class BotController:
             )
             self.round_count += 1
             self.last_action = f"💥 EXPLOSÃO: {explosion_value:.2f}x"
-            self._send_telemetry(
-                tipo="round", dados=f"Explosao: {explosion_value:.2f}x", lucro=0.0
-            )
+
             with self.balance_lock:
                 current_balance = self.current_balance or 0.0
+
+            self._send_telemetry(
+                tipo="round",
+                dados=f"Explosao: {explosion_value:.2f}x",
+                lucro=0.0,
+                saldo=current_balance,
+                explosao=explosion_value,
+                modo_risco=(
+                    self.selected_risk_mode.name if self.selected_risk_mode else None
+                ),
+            )
+
             self._handle_previous_bet_result(explosion_value)
             dados_rodada = RoundData(
                 timestamp=datetime.now().isoformat(),
@@ -678,10 +730,31 @@ class BotController:
                 timestamp=datetime.now().isoformat(),
             )
             self.db_manager.save_bet(dados_aposta)
+
+            # Obter sequência de perdas do martingale (se disponível)
+            sequencia_perdas = None
+            try:
+                for policy in self.strategy.policies:
+                    if hasattr(policy, "perdas_consecutivas"):
+                        sequencia_perdas = getattr(policy, "perdas_consecutivas", None)
+                        break
+            except Exception:
+                pass
+
             self._send_telemetry(
                 tipo="bet",
                 dados=f"Resultado: {resultado}",
                 lucro=dados_aposta.lucro_liquido,
+                saldo=current_balance,
+                valor_aposta=result.get("bet_1", 0.0),
+                modo_risco=(
+                    self.selected_risk_mode.name if self.selected_risk_mode else None
+                ),
+                estrategia=result.get("strategy"),
+                target=result.get("target_1"),
+                explosao=explosion_value,
+                resultado=resultado,
+                sequencia_perdas=sequencia_perdas,
             )
 
     def can_execute_bets(self) -> bool:
@@ -1514,13 +1587,13 @@ class BotController:
         self.running = True
         self._send_telemetry(
             tipo="sessao_inicio",
-            dados={
-                "modo_risco": (
-                    self.selected_risk_mode.name if self.selected_risk_mode else "N/A"
-                ),
-                "banca_inicial": self.initial_balance or 0.0,
-            },
+            dados="Sessao iniciada",
             lucro=0.0,
+            saldo=banca_detectada,
+            modo_risco=(
+                self.selected_risk_mode.name if self.selected_risk_mode else None
+            ),
+            banca_inicial=banca_detectada,
         )
         self._start_threads()
         self.live_display = Live(
@@ -1576,19 +1649,26 @@ class BotController:
                 saldo_final = final_balance or 0.0
                 saldo_inicial = self.initial_balance or 0.0
                 lucro_sessao = saldo_final - saldo_inicial
+            # Verificar se stop_loss ou meta foram atingidos
+            stop_loss = getattr(self, "stop_loss_alerted", False)
+            meta = (
+                self.strategy.esta_suspenso()
+                if hasattr(self.strategy, "esta_suspenso")
+                else False
+            )
+
             self._send_telemetry(
                 tipo="sessao_fim",
-                dados={
-                    "modo_risco": (
-                        self.selected_risk_mode.name
-                        if self.selected_risk_mode
-                        else "N/A"
-                    ),
-                    "banca_inicial": saldo_inicial,
-                    "banca_final": saldo_final,
-                    "total_rodadas": self.round_count,
-                },
+                dados=f"Sessao finalizada - {self.round_count} rodadas",
                 lucro=lucro_sessao,
+                saldo=saldo_final,
+                modo_risco=(
+                    self.selected_risk_mode.name if self.selected_risk_mode else None
+                ),
+                banca_inicial=saldo_inicial,
+                banca_final=saldo_final,
+                stop_loss_atingido=stop_loss,
+                meta_atingida=meta,
             )
             self.db_manager.close_session(final_balance)
             self.console.print("✅ Sessão fechada", style="green")
