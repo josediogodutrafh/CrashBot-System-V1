@@ -489,7 +489,7 @@ class VisionSystem:
             return None
 
     def clean_balance_text_simple(self, text: str) -> Optional[str]:
-        """✅ OTIMIZADO: Limpeza de texto para saldo com mais casos"""
+        """✅ CORRIGIDO: Limpeza de texto para saldo - mantém ponto decimal correto"""
         if not text:
             return None
 
@@ -503,21 +503,28 @@ class VisionSystem:
         # Normalizar vírgula para ponto
         text = text.replace(",", ".")
 
-        # Se tem múltiplos pontos, manter apenas o último
+        # ✅ CORREÇÃO: Remover pontos extras no FINAL (ex: "674.12." -> "674.12")
+        text = text.rstrip(".")
+
+        # ✅ CORREÇÃO: Se tem múltiplos pontos, manter apenas o PRIMEIRO
+        # (porque o formato brasileiro é "674.12" não "67.412")
         if text.count(".") > 1:
-            parts = text.split(".")
-            text = "".join(parts[:-1]) + "." + parts[-1]
+            # Encontra a posição do primeiro ponto
+            first_dot = text.index(".")
+            # Remove todos os outros pontos
+            text = text[: first_dot + 1] + text[first_dot + 1 :].replace(".", "")
 
         # Validar que contém apenas números e um ponto
         if not text or not any(c.isdigit() for c in text):
             return None
 
-        # ✅ OTIMIZAÇÃO: Melhor lógica para inserir ponto decimal
+        # Se não tem ponto e é só dígitos, tentar inserir
         if "." not in text and text.isdigit():
             if len(text) == 3:
                 return f"{text[0]}.{text[1:]}"
             elif len(text) in {4, 5, 6}:
                 return f"{text[:-2]}.{text[-2:]}"
+
         return text
 
     def generate_balance_candidates(self, detected_str: str) -> List[str]:
