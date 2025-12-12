@@ -16,7 +16,7 @@ from app.schemas.licenca import (
     ValidarLicencaRequest,
     ValidarLicencaResponse,
 )
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -85,9 +85,9 @@ async def validar_licenca(
     return ValidarLicencaResponse(
         sucesso=True,
         mensagem="Licença válida",
-        # type: ignore -> Silencia erro se dias_restantes for None (Pydantic valida em runtime)
         dias_restantes=licenca.dias_restantes,  # type: ignore
         ativa=bool(licenca.ativa),
+        telegram_chat_id=licenca.telegram_chat_id,  # type: ignore
     )
 
 
@@ -99,19 +99,46 @@ async def validar_licenca(
 @router.post("/telemetria/log", response_model=TelemetriaResponse)
 async def receber_telemetria(
     payload: TelemetriaRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Recebe telemetria do bot.
+    Recebe telemetria do bot com dados completos.
     """
-    # Criar novo log
+    # Capturar IP do cliente
+    ip_cliente = request.client.host if request.client else None
+
+    # Criar novo log com todos os campos
     novo_log = LogBot(
+        # Campos obrigatórios
         sessao_id=payload.sessao_id,
         hwid=payload.hwid,
         tipo=payload.tipo,
+        timestamp=datetime.now(timezone.utc),
+        # Dados gerais
         dados=payload.dados,
         lucro=payload.lucro,
-        timestamp=datetime.now(timezone.utc),
+        # Vínculo
+        licenca_id=payload.licenca_id,
+        # Financeiros
+        saldo=payload.saldo,
+        valor_aposta=payload.valor_aposta,
+        banca_inicial=payload.banca_inicial,
+        banca_final=payload.banca_final,
+        # Jogo
+        modo_risco=payload.modo_risco,
+        estrategia=payload.estrategia,
+        target=payload.target,
+        explosao=payload.explosao,
+        resultado=payload.resultado,
+        sequencia_perdas=payload.sequencia_perdas,
+        # Alertas
+        stop_loss_atingido=payload.stop_loss_atingido,
+        meta_atingida=payload.meta_atingida,
+        # Metadados
+        versao_bot=payload.versao_bot,
+        sistema_operacional=payload.sistema_operacional,
+        ip_cliente=ip_cliente,
     )
 
     db.add(novo_log)
@@ -120,7 +147,7 @@ async def receber_telemetria(
 
     return TelemetriaResponse(
         status="ok",
-        id=int(novo_log.id),  # type: ignore - Cast explícito para int
+        id=int(novo_log.id),  # type: ignore
     )
 
 

@@ -29,21 +29,61 @@ class ValidarLicencaResponse(BaseModel):
     mensagem: str = Field(..., description="Mensagem descritiva")
     dias_restantes: int | None = Field(None, description="Dias restantes até expiração")
     ativa: bool | None = Field(None, description="Se a licença está ativa")
+    telegram_chat_id: str | None = Field(
+        None, description="Chat ID do Telegram do cliente"
+    )
 
 
 # ============================================================================
 # SCHEMAS DE TELEMETRIA
 # ============================================================================
-
-
 class TelemetriaRequest(BaseModel):
     """Request para enviar telemetria do bot."""
 
+    # Campos obrigatórios
     sessao_id: str = Field(..., description="ID da sessão do bot")
     hwid: str = Field(..., description="Hardware ID")
-    tipo: str = Field(..., description="Tipo de log (bet, win, loss, error)")
-    dados: str = Field(default="", description="Dados adicionais")
+    tipo: str = Field(
+        ...,
+        description="Tipo: sessao_inicio, aposta, sessao_fim, erro, modo_alterado, alerta",
+    )
+
+    # Campos opcionais - Dados gerais
+    dados: str | None = Field(default=None, description="JSON com dados extras")
     lucro: float = Field(default=0.0, description="Lucro/prejuízo da operação")
+
+    # Campos opcionais - Vínculo
+    licenca_id: int | None = Field(default=None, description="ID da licença")
+
+    # Campos opcionais - Financeiros
+    saldo: float | None = Field(default=None, description="Saldo atual")
+    valor_aposta: float | None = Field(default=None, description="Valor da aposta")
+    banca_inicial: float | None = Field(
+        default=None, description="Banca no início da sessão"
+    )
+    banca_final: float | None = Field(
+        default=None, description="Banca no fim da sessão"
+    )
+
+    # Campos opcionais - Jogo
+    modo_risco: str | None = Field(
+        default=None, description="CONSERVADOR, MODERADO, AGRESSIVO"
+    )
+    estrategia: str | None = Field(default=None, description="Nome da estratégia ativa")
+    target: float | None = Field(default=None, description="Target da aposta")
+    explosao: float | None = Field(default=None, description="Valor da explosão")
+    resultado: str | None = Field(default=None, description="hit ou miss")
+    sequencia_perdas: int | None = Field(
+        default=None, description="Contador de perdas consecutivas"
+    )
+
+    # Campos opcionais - Alertas
+    stop_loss_atingido: str | None = Field(default=None, description="S ou N")
+    meta_atingida: str | None = Field(default=None, description="S ou N")
+
+    # Campos opcionais - Metadados
+    versao_bot: str | None = Field(default=None, description="Versão do bot")
+    sistema_operacional: str | None = Field(default=None, description="SO do cliente")
 
 
 class TelemetriaResponse(BaseModel):
