@@ -58,6 +58,11 @@ class LogBot(Base):
     explosao = Column(Float, nullable=True)
     resultado = Column(String(10), nullable=True, index=True)  # hit, miss
     sequencia_perdas = Column(Integer, nullable=True)  # Contador de perdas consecutivas
+    dobra_atual = Column(Integer, nullable=True)  # Nível do Martingale (1-4)
+
+    # Dados de sessão
+    total_rodadas = Column(Integer, nullable=True)
+    tempo_sessao_segundos = Column(Integer, nullable=True)
 
     # Alertas
     stop_loss_atingido = Column(String(1), nullable=True, default="N")  # S ou N
@@ -101,6 +106,9 @@ class LogBot(Base):
             "explosao": self.explosao,
             "resultado": self.resultado,
             "sequencia_perdas": self.sequencia_perdas,
+            "dobra_atual": self.dobra_atual,
+            "total_rodadas": self.total_rodadas,
+            "tempo_sessao_segundos": self.tempo_sessao_segundos,
             "stop_loss_atingido": self.stop_loss_atingido,
             "meta_atingida": self.meta_atingida,
             "versao_bot": self.versao_bot,

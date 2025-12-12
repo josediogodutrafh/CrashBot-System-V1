@@ -76,6 +76,19 @@ class TelemetriaRequest(BaseModel):
     sequencia_perdas: int | None = Field(
         default=None, description="Contador de perdas consecutivas"
     )
+    dobra_atual: int | None = Field(
+        default=None, description="Nível do Martingale (1-4)"
+    )
+
+    # Campos opcionais - Sessão
+    total_rodadas: int | None = Field(
+        default=None, description="Total de rodadas na sessão"
+    )
+    tempo_sessao_segundos: int | None = Field(
+        default=None, description="Duração da sessão em segundos"
+    )
+
+    # Campos opcionais - Alertas
 
     # Campos opcionais - Alertas
     stop_loss_atingido: str | None = Field(default=None, description="S ou N")

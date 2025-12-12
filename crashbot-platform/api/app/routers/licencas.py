@@ -132,6 +132,10 @@ async def receber_telemetria(
         explosao=payload.explosao,
         resultado=payload.resultado,
         sequencia_perdas=payload.sequencia_perdas,
+        dobra_atual=payload.dobra_atual,
+        # Sessão
+        total_rodadas=payload.total_rodadas,
+        tempo_sessao_segundos=payload.tempo_sessao_segundos,
         # Alertas
         stop_loss_atingido=payload.stop_loss_atingido,
         meta_atingida=payload.meta_atingida,
