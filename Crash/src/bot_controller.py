@@ -119,15 +119,16 @@ class BotController:
         self.stop_loss_alerted = False
         self.is_windows = os.name == "nt"
 
+        # Token do bot Telegram (centralizado - mesmo para todos os clientes)
+        # O chat_id será carregado da API durante validação da licença
         notification_config = self.config.get("notifications", {})
-        token = notification_config.get("telegram_bot_token")
-        chat_id = notification_config.get("telegram_chat_id")
+        self.telegram_bot_token = notification_config.get("telegram_bot_token")
 
-        if token and chat_id and "COLE_SEU" not in token:
-            notification_manager.load_credentials(token, chat_id)
-            self.console.print("✅ Alertas do Telegram HABILITADOS", style="green")
-        else:
-            self.console.print("⚠️  Alertas do Telegram DESABILITADOS", style="yellow")
+        if not self.telegram_bot_token or "CHAVE_AQUI" in self.telegram_bot_token:
+            self.console.print(
+                "⚠️  Token Telegram não configurado no config.json",
+                style="yellow",
+            )
 
         self.vision = VisionSystem(str(self.config_path))
         self.learning_engine = LearningEngine()
@@ -1544,10 +1545,26 @@ class BotController:
         try:
             response = requests.post(endpoint, json=data, timeout=10)
             if response.status_code == 200:
+                resp_data = response.json()
                 self.console.print(
-                    f"✅ LICENÇA VÁLIDA! {response.json().get('mensagem', '')}",
+                    f"✅ LICENÇA VÁLIDA! {resp_data.get('mensagem', '')}",
                     style="bold green",
                 )
+
+                # Carregar telegram_chat_id do servidor (se disponível)
+                telegram_chat_id = resp_data.get("telegram_chat_id")
+                if telegram_chat_id and self.telegram_bot_token:
+                    notification_manager.load_credentials(
+                        self.telegram_bot_token, telegram_chat_id
+                    )
+                    self.console.print(
+                        "✅ Notificações Telegram ATIVADAS", style="green"
+                    )
+                elif not telegram_chat_id:
+                    self.console.print(
+                        "ℹ️ Configure seu Telegram no painel web", style="dim"
+                    )
+
                 return True
             else:
                 try:
