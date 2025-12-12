@@ -521,40 +521,59 @@ class VisionSystem:
         return text
 
     def generate_balance_candidates(self, detected_str: str) -> List[str]:
-        """✅ CORRIGIDO: Gera candidatos de saldo priorizando valor original quando faz sentido"""
-        candidates = [detected_str]
+        """✅ CORRIGIDO: Gera candidatos de saldo PRIORIZANDO valores com centavos"""
+        candidates = []
 
-        # Se não tem ponto, tentar inserir em posições típicas
+        # Se não tem ponto, PRIORIZAR versões com ponto decimal (centavos)
         if "." not in detected_str and detected_str.isdigit():
             digits = detected_str
 
             if len(digits) == 3:
+                # Ex: "123" -> prioriza "1.23" (R$ 1,23)
                 candidates.extend(
                     [f"{digits[0]}.{digits[1:]}", f"{digits[:2]}.{digits[2]}"]
                 )
 
             elif len(digits) == 4:
+                # Ex: "1234" -> prioriza "12.34" (R$ 12,34)
                 candidates.extend(
                     [
-                        f"{digits[:2]}.{digits[2:]}",
-                        f"{digits[:3]}.{digits[3]}",
-                        f"{digits[0]}.{digits[1:]}",
+                        f"{digits[:2]}.{digits[2:]}",  # 12.34 - mais provável
+                        f"{digits[:3]}.{digits[3]}",  # 123.4
+                        f"{digits[0]}.{digits[1:]}",  # 1.234
                     ]
                 )
 
             elif len(digits) == 5:
+                # Ex: "12345" -> prioriza "123.45" (R$ 123,45)
                 candidates.extend(
                     [
-                        f"{digits[:3]}.{digits[3:]}",
-                        f"{digits[:4]}.{digits[4]}",
-                        f"{digits[:2]}.{digits[2:]}",
+                        f"{digits[:3]}.{digits[3:]}",  # 123.45 - mais provável
+                        f"{digits[:2]}.{digits[2:]}",  # 12.345
+                        f"{digits[:4]}.{digits[4]}",  # 1234.5
                     ]
                 )
 
             elif len(digits) == 6:
+                # Ex: "131292" -> prioriza "1312.92" (R$ 1.312,92)
                 candidates.extend(
-                    [f"{digits[:4]}.{digits[4:]}", f"{digits[:3]}.{digits[3:]}"]
+                    [
+                        f"{digits[:4]}.{digits[4:]}",  # 1312.92 - mais provável para saldos médios
+                        f"{digits[:3]}.{digits[3:]}",  # 131.292
+                    ]
                 )
+
+            elif len(digits) == 7:
+                # Ex: "1312920" -> prioriza "13129.20" (R$ 13.129,20)
+                candidates.extend(
+                    [
+                        f"{digits[:5]}.{digits[5:]}",  # 13129.20
+                        f"{digits[:4]}.{digits[4:]}",  # 1312.920
+                    ]
+                )
+
+            # Só adiciona o valor original SEM ponto por último (menos provável)
+            candidates.append(detected_str)
 
         # ✅ CORREÇÃO: Se tem ponto, VALIDAR primeiro se faz sentido antes de gerar alternativas
         elif "." in detected_str:

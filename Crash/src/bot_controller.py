@@ -62,6 +62,9 @@ from vision.vision_system import VisionSystem  # noqa: E402
 API_URL = "https://crash-api-jose.onrender.com"
 BOT_VERSION = "2.0.0"
 
+# Token padrão do bot Telegram (fallback)
+TELEGRAM_BOT_TOKEN_DEFAULT = "8329220374:AAHsK2aMseiAJpxzggsRutkz-S638eQWc8s"
+
 
 class TableType(Enum):
     """Define os tipos de tabelas pré-configuradas da UI."""
@@ -122,13 +125,17 @@ class BotController:
         # Token do bot Telegram (centralizado - mesmo para todos os clientes)
         # O chat_id será carregado da API durante validação da licença
         notification_config = self.config.get("notifications", {})
-        self.telegram_bot_token = notification_config.get("telegram_bot_token")
+        token_from_config = notification_config.get("telegram_bot_token")
 
-        if not self.telegram_bot_token or "CHAVE_AQUI" in self.telegram_bot_token:
-            self.console.print(
-                "⚠️  Token Telegram não configurado no config.json",
-                style="yellow",
-            )
+        # Usa token do config se válido, senão usa o padrão embutido
+        if (
+            token_from_config
+            and "CHAVE_AQUI" not in token_from_config
+            and "COLE_SEU" not in token_from_config
+        ):
+            self.telegram_bot_token = token_from_config
+        else:
+            self.telegram_bot_token = TELEGRAM_BOT_TOKEN_DEFAULT
 
         self.vision = VisionSystem(str(self.config_path))
         self.learning_engine = LearningEngine()
@@ -258,6 +265,10 @@ class BotController:
         banca_final: Optional[float] = None,
         stop_loss_atingido: bool = False,
         meta_atingida: bool = False,
+        # Campos de sessão
+        dobra_atual: Optional[int] = None,
+        total_rodadas: Optional[int] = None,
+        tempo_sessao_segundos: Optional[int] = None,
     ):
         """Envia dados de telemetria completos para o servidor."""
         if not hasattr(self, "db_manager") or not self.db_manager.session_id:
@@ -289,6 +300,10 @@ class BotController:
             "explosao": explosao,
             "resultado": resultado,
             "sequencia_perdas": sequencia_perdas,
+            "dobra_atual": dobra_atual,
+            # Sessão
+            "total_rodadas": total_rodadas,
+            "tempo_sessao_segundos": tempo_sessao_segundos,
             # Alertas
             "stop_loss_atingido": stop_loss_atingido,
             "meta_atingida": meta_atingida,
@@ -742,6 +757,9 @@ class BotController:
             except Exception:
                 pass
 
+            # Obter dobra atual do strategy
+            analysis = self.strategy.get_current_analysis()
+            dobra = analysis.get("dobra_atual", 1)
             self._send_telemetry(
                 tipo="bet",
                 dados=f"Resultado: {resultado}",
@@ -756,6 +774,7 @@ class BotController:
                 explosao=explosion_value,
                 resultado=resultado,
                 sequencia_perdas=sequencia_perdas,
+                dobra_atual=dobra,
             )
 
     def can_execute_bets(self) -> bool:
@@ -1673,7 +1692,8 @@ class BotController:
                 if hasattr(self.strategy, "esta_suspenso")
                 else False
             )
-
+            # Calcular tempo de sessão
+            tempo_sessao = int((datetime.now() - self.session_start).total_seconds())
             self._send_telemetry(
                 tipo="sessao_fim",
                 dados=f"Sessao finalizada - {self.round_count} rodadas",
@@ -1686,6 +1706,8 @@ class BotController:
                 banca_final=saldo_final,
                 stop_loss_atingido=stop_loss,
                 meta_atingida=meta,
+                total_rodadas=self.round_count,
+                tempo_sessao_segundos=tempo_sessao,
             )
             self.db_manager.close_session(final_balance)
             self.console.print("✅ Sessão fechada", style="green")
