@@ -11,30 +11,25 @@ interface NegocioData {
   clientes: {
     total: number;
     ativos: number;
-    novos_periodo: number;
-    expirando_3_dias: number;
-    trials: number;
-    pagos: number;
-    churn_rate?: number;
+    novos_7d: number; // API usa novos_7d
+    expirando_3d: number;
+    trials_ativos: number;
+    pagos_ativos: number;
   };
   conversao: {
-    trials_ativos: number;
-    trials_convertidos: number;
+    total_trials: number; // API usa total_trials
+    convertidos: number; // API usa convertidos
     taxa_conversao: number;
   };
-  receita: {
-    total_periodo: number;
-    recorrente_estimada: number;
-    ticket_medio: number;
-    crescimento_percent?: number;
-  };
   distribuicao_planos: Record<string, number>;
+  receita_mensal_estimada: number; // API retorna direto, não dentro de objeto receita
   ultimas_vendas: Array<{
+    id: number;
     cliente: string;
+    email: string;
     plano: string;
+    data: string | null;
     valor: number;
-    data: string;
-    tipo: string;
   }>;
   clientes_por_dia: Array<{
     dia: string;
@@ -45,10 +40,11 @@ interface NegocioData {
 
 interface BotAtivo {
   hwid: string;
-  cliente_nome: string;
+  cliente: string; // API retorna "cliente", não "cliente_nome"
   plano: string;
   status: string;
   ultima_atividade: string | null;
+  minutos_inativo: number;
   lucro_sessao: number;
   apostas_sessao: number;
   modo_risco: string | null;
@@ -65,18 +61,19 @@ interface Alerta {
 
 interface OperacaoData {
   periodo: string;
-  bots_online: number;
   resumo: {
+    bots_online: number; // Está dentro do resumo na API
     total_apostas: number;
-    total_rounds: number;
-    hits: number;
-    misses: number;
+    total_explosoes: number; // API usa "total_explosoes", não "total_rounds"
+    total_hits: number; // API usa "total_hits"
+    total_misses: number; // API usa "total_misses"
     win_rate: number;
     lucro_total: number;
   };
   atividade_por_hora: Array<{
     hora: string;
-    quantidade: number;
+    total: number; // API retorna "total", não "quantidade"
+    apostas: number;
   }>;
   bots_ativos: BotAtivo[];
   distribuicao_modos: Array<{
@@ -86,9 +83,10 @@ interface OperacaoData {
   }>;
   alertas: Alerta[];
   top_clientes: Array<{
-    cliente: string;
+    cliente: string; // API retorna "cliente", não "cliente_nome"
     lucro: number;
     apostas: number;
+    win_rate: number;
   }>;
 }
 
@@ -96,29 +94,33 @@ interface ClienteTelemetria {
   licenca: {
     id: number;
     chave: string;
-    cliente_nome: string | null;
-    email_cliente: string | null;
-    plano_tipo: string | null;
-    dias_restantes: number | null;
-    ativa: boolean;
     hwid: string | null;
+    ativa: boolean;
     created_at: string | null;
     data_expiracao: string | null;
+    cliente_nome: string | null;
+    email_cliente: string | null;
+    whatsapp: string | null;
+    cpf: string | null;
+    telegram_chat_id: string | null;
+    plano_tipo: string | null;
+    payment_id: string | null;
+    is_trial: boolean;
+    is_primeira_adesao: boolean;
+    esta_expirada: boolean;
+    dias_restantes: number | null;
   };
   telemetria: {
+    status: string; // API usa "status", não "status_bot"
+    ultima_atividade: string | null;
     total_apostas: number;
     lucro_total: number;
     win_rate: number;
-    ultima_atividade: string | null;
-    status_bot: string;
   };
 }
 
 interface ClientesData {
-  periodo: string;
   total: number;
-  pagina: number;
-  por_pagina: number;
   clientes: ClienteTelemetria[];
 }
 
@@ -590,7 +592,6 @@ export default function TelemetriaPage() {
 
     const clientes = negocioData.clientes || {};
     const conversao = negocioData.conversao || {};
-    const receita = negocioData.receita || {};
     const vendasPorPlano = Object.entries(
       negocioData.distribuicao_planos || {}
     );
@@ -604,32 +605,30 @@ export default function TelemetriaPage() {
             icon="👥"
             label="Clientes Ativos"
             value={clientes.ativos || 0}
-            subvalue={`${clientes.novos_periodo || 0} novos no período`}
+            subvalue={`${clientes.novos_7d || 0} novos em 7 dias`}
             color="purple"
           />
           <StatCard
             icon="🔄"
             label="Taxa Conversão"
             value={`${safeNumber(conversao.taxa_conversao)}%`}
-            subvalue={`${conversao.trials_convertidos || 0}/${
-              conversao.trials_ativos || 0
+            subvalue={`${conversao.convertidos || 0}/${
+              conversao.total_trials || 0
             } trials`}
             color="green"
           />
           <StatCard
             icon="💰"
-            label="Receita Período"
-            value={formatCurrency(receita.total_periodo)}
-            subvalue={`Ticket médio: ${formatCurrency(receita.ticket_medio)}`}
+            label="Receita Mensal Est."
+            value={formatCurrency(negocioData.receita_mensal_estimada)}
             color="emerald"
-            trend={(receita.crescimento_percent || 0) > 0 ? 'up' : 'down'}
           />
           <StatCard
             icon="📊"
             label="Expirando (3d)"
-            value={clientes.expirando_3_dias || 0}
+            value={clientes.expirando_3d || 0}
             subvalue="Licenças a vencer"
-            color={(clientes.expirando_3_dias || 0) > 5 ? 'red' : 'blue'}
+            color={(clientes.expirando_3d || 0) > 5 ? 'red' : 'blue'}
           />
         </div>
 
@@ -721,13 +720,13 @@ export default function TelemetriaPage() {
               <div className="flex justify-between items-center p-3 bg-[#0a0a0f] rounded-lg">
                 <span className="text-gray-400">Trials Ativos</span>
                 <span className="text-yellow-400 font-bold">
-                  {clientes.trials || 0}
+                  {clientes.trials_ativos || 0}
                 </span>
               </div>
               <div className="flex justify-between items-center p-3 bg-[#0a0a0f] rounded-lg">
                 <span className="text-gray-400">Clientes Pagos</span>
                 <span className="text-purple-400 font-bold">
-                  {clientes.pagos || 0}
+                  {clientes.pagos_ativos || 0}
                 </span>
               </div>
             </div>
@@ -739,21 +738,21 @@ export default function TelemetriaPage() {
             </h3>
             <div className="space-y-3">
               <div className="flex justify-between items-center p-3 bg-[#0a0a0f] rounded-lg">
-                <span className="text-gray-400">Receita Total</span>
+                <span className="text-gray-400">Receita Mensal Estimada</span>
                 <span className="text-emerald-400 font-bold">
-                  {formatCurrency(receita.total_periodo)}
+                  {formatCurrency(negocioData.receita_mensal_estimada)}
                 </span>
               </div>
               <div className="flex justify-between items-center p-3 bg-[#0a0a0f] rounded-lg">
-                <span className="text-gray-400">Receita Recorrente Est.</span>
+                <span className="text-gray-400">Trials Convertidos</span>
                 <span className="text-white font-bold">
-                  {formatCurrency(receita.recorrente_estimada)}
+                  {conversao.convertidos || 0}
                 </span>
               </div>
               <div className="flex justify-between items-center p-3 bg-[#0a0a0f] rounded-lg">
-                <span className="text-gray-400">Ticket Médio</span>
+                <span className="text-gray-400">Total de Trials</span>
                 <span className="text-blue-400 font-bold">
-                  {formatCurrency(receita.ticket_medio)}
+                  {conversao.total_trials || 0}
                 </span>
               </div>
             </div>
@@ -781,7 +780,7 @@ export default function TelemetriaPage() {
           <StatCard
             icon="🤖"
             label="Bots Online"
-            value={operacaoData.bots_online || 0}
+            value={resumo.bots_online || 0}
             color="green"
           />
           <StatCard
@@ -804,8 +803,8 @@ export default function TelemetriaPage() {
           />
           <StatCard
             icon="🔄"
-            label="Total Rounds"
-            value={resumo.total_rounds || 0}
+            label="Total Explosões"
+            value={resumo.total_explosoes || 0}
             color="blue"
           />
         </div>
@@ -833,7 +832,7 @@ export default function TelemetriaPage() {
                           }`}
                         />
                         <span className="font-medium text-white">
-                          {bot.cliente_nome || 'Cliente'}
+                          {bot.cliente || 'Cliente'}
                         </span>
                       </div>
                       <span
@@ -1048,7 +1047,7 @@ export default function TelemetriaPage() {
                     >
                       <td className="px-6 py-4">
                         <StatusBadge
-                          status={telemetria.status_bot || 'nunca_usado'}
+                          status={telemetria.status || 'nunca_usado'}
                         />
                       </td>
                       <td className="px-6 py-4">
