@@ -304,9 +304,9 @@ class BotController:
             # Sessão
             "total_rodadas": total_rodadas,
             "tempo_sessao_segundos": tempo_sessao_segundos,
-            # Alertas
-            "stop_loss_atingido": stop_loss_atingido,
-            "meta_atingida": meta_atingida,
+            # Alertas (convertido para "S" ou "N")
+            "stop_loss_atingido": "S" if stop_loss_atingido else "N",
+            "meta_atingida": "S" if meta_atingida else "N",
             # Metadados
             "versao_bot": BOT_VERSION,
             "sistema_operacional": f"{os.name}_{sys.platform}",
