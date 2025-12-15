@@ -1,7 +1,7 @@
 """
-Router: Telemetria
-Endpoints para telemetria avançada do bot.
-Refatorado para conformidade com PEP8, Type Safety e Performance.
+Router: Telemetria V3
+Dashboard completo com 4 abas: Negócio, Operação, Clientes, Logs
+Refatorado para Alta Coesão e Type Safety.
 """
 
 import csv
@@ -13,9 +13,8 @@ from app.database import get_db
 from app.dependencies import get_current_admin
 from app.models import Licenca, LogBot, Usuario
 from fastapi import APIRouter, Depends, Query, Response
-from sqlalchemy import case, func, select
+from sqlalchemy import and_, case, desc, func, or_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.sql.expression import and_
 
 router = APIRouter(prefix="/api/v1/telemetria", tags=["telemetria"])
 
@@ -26,12 +25,14 @@ router = APIRouter(prefix="/api/v1/telemetria", tags=["telemetria"])
 
 
 def _calcular_data_inicio(periodo: str) -> Optional[datetime]:
-    """Calcula a data de início baseada no período usando dicionário (O(1))."""
+    """Calcula a data de início baseada no período."""
     agora = datetime.now(timezone.utc)
     offsets = {
+        "1h": timedelta(hours=1),
         "24h": timedelta(hours=24),
         "7d": timedelta(days=7),
         "30d": timedelta(days=30),
+        "90d": timedelta(days=90),
     }
     delta = offsets.get(periodo)
     return agora - delta if delta else None
@@ -40,9 +41,7 @@ def _calcular_data_inicio(periodo: str) -> Optional[datetime]:
 def _get_base_filters(
     data_inicio: Optional[datetime], hwid: Optional[str] = None
 ) -> List[Any]:
-    """
-    Retorna uma lista de filtros para ser desempacotada no where.
-    """
+    """Retorna lista de filtros para queries."""
     filters = []
     if data_inicio:
         filters.append(LogBot.timestamp >= data_inicio)
@@ -51,422 +50,951 @@ def _get_base_filters(
     return filters
 
 
+def _get_valor_plano(plano: str, primeira_adesao: bool) -> float:
+    """Retorna valor do plano para cálculos de receita."""
+    precos = {
+        "semanal": {"normal": 149.90, "primeira": 49.90},
+        "quinzenal": {"normal": 249.90, "primeira": 89.90},
+        "mensal": {"normal": 449.90, "primeira": 149.90},
+        "trial": {"normal": 0.0, "primeira": 0.0},
+    }
+    key = plano if plano in precos else "trial"
+    plano_info = precos[key]
+    return plano_info["primeira"] if primeira_adesao else plano_info["normal"]
+
+
 # ============================================================================
-# ENDPOINT: DASHBOARD GERAL (Admin)
+# ABA 1: NEGÓCIO - Métricas financeiras e de clientes (Refatorado)
 # ============================================================================
 
 
-@router.get("/dashboard")
-async def dashboard_telemetria(
-    periodo: str = Query("7d", description="Período: 24h, 7d, 30d, all"),
+@router.get("/negocio")
+async def dashboard_negocio(
+    periodo: str = Query("30d", description="Período: 7d, 30d, 90d, all"),
     db: AsyncSession = Depends(get_db),
     current_admin: Usuario = Depends(get_current_admin),
 ):
     """
-    Dashboard geral de telemetria com métricas agregadas.
+    Dashboard de NEGÓCIO: receita, clientes, conversão.
+    Refatorado para dividir responsabilidades.
     """
-    data_inicio = _calcular_data_inicio(periodo)
-    filters = _get_base_filters(data_inicio)
     agora = datetime.now(timezone.utc)
 
-    # 1. Estatísticas gerais
-    stats_query = select(
-        func.count(LogBot.id).label("total_logs"),
-        func.count(func.distinct(LogBot.hwid)).label("bots_unicos"),
-        func.count(func.distinct(LogBot.sessao_id)).label("sessoes"),
-        func.sum(case((LogBot.tipo == "bet", LogBot.lucro), else_=0)).label(
-            "lucro_total"
-        ),
-        func.sum(case((LogBot.tipo == "round", 1), else_=0)).label("total_rounds"),
-    )
+    # Execução paralela ou sequencial de sub-rotinas de dados
+    clientes_metrics = await _get_metricas_clientes(db, agora)
+    distribuicao = await _get_distribuicao_planos(db)
+    conversao = await _get_dados_conversao(db)
+    ultimas = await _get_ultimas_vendas(db)
+    receita = await _calcular_receita_mensal(db)
+    grafico_clientes = await _get_clientes_por_dia(db, 30)
 
-    if filters:
-        stats_query = stats_query.where(and_(*filters))
+    # Montagem do payload final
+    return {
+        "periodo": periodo,
+        "clientes": clientes_metrics,
+        "conversao": conversao,
+        "distribuicao_planos": distribuicao,
+        "receita_mensal_estimada": receita,
+        "ultimas_vendas": ultimas,
+        "clientes_por_dia": grafico_clientes,
+    }
 
-    stats_result = await db.execute(stats_query)
-    stats = stats_result.first()
 
-    # 2. Contagem por tipo
-    tipos_query = select(LogBot.tipo, func.count(LogBot.id).label("quantidade"))
-    if filters:
-        tipos_query = tipos_query.where(and_(*filters))
+async def _get_metricas_clientes(db: AsyncSession, agora: datetime) -> Dict[str, int]:
+    """Busca contagens gerais de clientes."""
+    # Total
+    total = (await db.execute(select(func.count(Licenca.id)))).scalar() or 0
 
-    tipos_query = tipos_query.group_by(LogBot.tipo)
+    # Ativos
+    ativas = (
+        await db.execute(select(func.count(Licenca.id)).where(Licenca.ativa.is_(True)))
+    ).scalar() or 0
 
-    tipos_result = await db.execute(tipos_query)
-    tipos = {row.tipo: row.quantidade for row in tipos_result}
-
-    # 3. Atividade por hora (últimas 24h)
-    hora_corte = agora - timedelta(hours=24)
-    hora_truncada = func.date_trunc("hour", LogBot.timestamp)
-    atividade_query = (
-        select(
-            hora_truncada.label("hora"),
-            func.count(LogBot.id).label("quantidade"),
+    # Novos 7 dias
+    novos = (
+        await db.execute(
+            select(func.count(Licenca.id)).where(
+                Licenca.created_at >= agora - timedelta(days=7)
+            )
         )
-        .where(LogBot.timestamp >= hora_corte)
-        .group_by(hora_truncada)
-        .order_by(hora_truncada)
+    ).scalar() or 0
+
+    # Expirando
+    expirando = (
+        await db.execute(
+            select(func.count(Licenca.id)).where(
+                and_(
+                    Licenca.ativa.is_(True),
+                    Licenca.data_expiracao <= agora + timedelta(days=3),
+                    Licenca.data_expiracao > agora,
+                )
+            )
+        )
+    ).scalar() or 0
+
+    # Trials vs Pagos
+    trials = (
+        await db.execute(
+            select(func.count(Licenca.id)).where(
+                and_(Licenca.ativa.is_(True), Licenca.is_trial.is_(True))
+            )
+        )
+    ).scalar() or 0
+
+    return {
+        "total": total,
+        "ativos": ativas,
+        "novos_7d": novos,
+        "expirando_3d": expirando,
+        "trials_ativos": trials,
+        "pagos_ativos": ativas - trials,
+    }
+
+
+async def _get_distribuicao_planos(db: AsyncSession) -> Dict[str, int]:
+    """Busca distribuição de licenças ativas por tipo de plano."""
+    result = await db.execute(
+        select(Licenca.plano_tipo, func.count(Licenca.id).label("qtd"))
+        .where(Licenca.ativa.is_(True))
+        .group_by(Licenca.plano_tipo)
     )
-    atividade_result = await db.execute(atividade_query)
-    atividade_por_hora = [
+    return {row.plano_tipo or "indefinido": row.qtd for row in result}
+
+
+async def _get_dados_conversao(db: AsyncSession) -> Dict[str, Any]:
+    """Calcula taxa de conversão de trial para pago."""
+    total_trials = (
+        await db.execute(
+            select(func.count(Licenca.id)).where(Licenca.is_trial.is_(True))
+        )
+    ).scalar() or 0
+
+    convertidos = (
+        await db.execute(
+            select(func.count(func.distinct(Licenca.email_cliente))).where(
+                and_(
+                    Licenca.is_trial.is_(False),
+                    Licenca.is_primeira_adesao.is_(True),
+                )
+            )
+        )
+    ).scalar() or 0
+
+    taxa = (convertidos / total_trials * 100) if total_trials > 0 else 0.0
+    return {
+        "total_trials": total_trials,
+        "convertidos": convertidos,
+        "taxa_conversao": round(taxa, 1),
+    }
+
+
+async def _get_ultimas_vendas(db: AsyncSession) -> List[Dict]:
+    """Retorna as 10 últimas vendas (não trials)."""
+    result = await db.execute(
+        select(Licenca)
+        .where(Licenca.is_trial.is_(False))
+        .order_by(desc(Licenca.created_at))
+        .limit(10)
+    )
+
+    vendas = []
+    for lic in result.scalars():
+        # Type Safety: Usar 'is not None' resolve o erro do Pylance sobre Column[str]
+        plano = cast(str, lic.plano_tipo) if lic.plano_tipo is not None else "trial"
+
+        is_primeira = (
+            cast(bool, lic.is_primeira_adesao)
+            if lic.is_primeira_adesao is not None
+            else False
+        )
+
+        # Type Safety: Usar 'is not None' para Column[datetime]
+        data_str = lic.created_at.isoformat() if lic.created_at is not None else None
+
+        vendas.append(
+            {
+                "id": lic.id,
+                "cliente": lic.cliente_nome or "N/A",
+                "email": lic.email_cliente,
+                "plano": plano,
+                "data": data_str,
+                "valor": _get_valor_plano(plano, is_primeira),
+            }
+        )
+    return vendas
+
+
+async def _calcular_receita_mensal(db: AsyncSession) -> float:
+    """Calcula receita recorrente mensal estimada."""
+    result = await db.execute(
+        select(Licenca.plano_tipo, Licenca.is_primeira_adesao).where(
+            and_(Licenca.ativa.is_(True), Licenca.is_trial.is_(False))
+        )
+    )
+
+    total = 0.0
+    for row in result:
+        p_tipo = row.plano_tipo or "trial"
+        p_primeira = row.is_primeira_adesao or False
+        valor = _get_valor_plano(p_tipo, p_primeira)
+
+        if p_tipo == "semanal":
+            total += valor * 4
+        elif p_tipo == "quinzenal":
+            total += valor * 2
+        else:
+            total += valor
+
+    return round(total, 2)
+
+
+async def _get_clientes_por_dia(db: AsyncSession, dias: int) -> List[Dict]:
+    """Gráfico de aquisição de clientes."""
+    agora = datetime.now(timezone.utc)
+    inicio = agora - timedelta(days=dias)
+    dia_truncado = func.date_trunc("day", Licenca.created_at)
+
+    result = await db.execute(
+        select(
+            dia_truncado.label("dia"),
+            func.count(Licenca.id).label("quantidade"),
+        )
+        .where(Licenca.created_at >= inicio)
+        .group_by(dia_truncado)
+        .order_by(dia_truncado)
+    )
+
+    return [
         {
-            "hora": row.hora.isoformat() if row.hora else None,
+            "dia": row.dia.strftime("%d/%m") if row.dia else None,
             "quantidade": row.quantidade,
         }
-        for row in atividade_result
+        for row in result
     ]
 
-    # 4. Top 5 licenças por lucro
-    top_licencas = await _get_top_licencas(db, filters)
 
-    # 5. Bots ativos agora (última atividade < 5 min)
-    bots_ativos_query = select(func.count(func.distinct(LogBot.hwid))).where(
-        LogBot.timestamp >= agora - timedelta(minutes=5)
+# ============================================================================
+# ABA 2: OPERAÇÃO - Bots, apostas, performance em tempo real
+# ============================================================================
+
+
+@router.get("/operacao")
+async def dashboard_operacao(
+    periodo: str = Query("24h", description="Período: 1h, 24h, 7d"),
+    db: AsyncSession = Depends(get_db),
+    current_admin: Usuario = Depends(get_current_admin),
+):
+    """
+    Dashboard de OPERAÇÃO: bots online, apostas, win rate, alertas.
+    """
+    agora = datetime.now(timezone.utc)
+    data_inicio = _calcular_data_inicio(periodo)
+    filters = _get_base_filters(data_inicio)
+
+    # 1. Bots Online
+    bots_online = (
+        await db.execute(
+            select(func.count(func.distinct(LogBot.hwid))).where(
+                LogBot.timestamp >= agora - timedelta(minutes=5)
+            )
+        )
+    ).scalar() or 0
+
+    # 2. Stats Gerais
+    stats = (
+        await db.execute(
+            select(
+                func.count(case((LogBot.tipo == "bet", 1))).label("apostas"),
+                func.count(case((LogBot.tipo == "round", 1))).label("rounds"),
+                func.sum(case((LogBot.tipo == "bet", LogBot.lucro), else_=0)).label(
+                    "lucro"
+                ),
+                func.count(
+                    case(
+                        (
+                            and_(
+                                LogBot.tipo == "bet",
+                                LogBot.resultado == "hit",
+                            ),
+                            1,
+                        )
+                    )
+                ).label("hits"),
+            ).where(and_(*filters) if filters else true())
+        )
+    ).first()
+
+    total_apostas = stats.apostas if stats else 0
+    total_hits = stats.hits if stats else 0
+    win_rate = (total_hits / total_apostas * 100) if total_apostas > 0 else 0.0
+
+    # 3. Atividade/Hora
+    trunc_hora = func.date_trunc("hour", LogBot.timestamp)
+    ativ_res = await db.execute(
+        select(
+            trunc_hora.label("hora"),
+            func.count(LogBot.id).label("total"),
+            func.count(case((LogBot.tipo == "bet", 1))).label("apostas"),
+        )
+        .where(LogBot.timestamp >= agora - timedelta(hours=24))
+        .group_by(trunc_hora)
+        .order_by(trunc_hora)
     )
-    bots_ativos_result = await db.execute(bots_ativos_query)
-    bots_ativos = bots_ativos_result.scalar() or 0
+    ativ_por_hora = [
+        {
+            "hora": row.hora.strftime("%H:%M") if row.hora else None,
+            "total": row.total,
+            "apostas": row.apostas,
+        }
+        for row in ativ_res
+    ]
+
+    # 4. Outros dados
+    bots_ativos = await _get_bots_ativos_detalhes(db)
+    dist_modos = await _get_distribuicao_modos(db, data_inicio)
+    alertas = await _get_alertas_sistema(db)
+    top_clientes = await _get_top_clientes(db, data_inicio)
 
     return {
         "periodo": periodo,
         "resumo": {
-            "total_logs": stats.total_logs if stats and stats.total_logs else 0,
-            "bots_unicos": stats.bots_unicos if stats and stats.bots_unicos else 0,
-            "sessoes": stats.sessoes if stats and stats.sessoes else 0,
-            "lucro_total": (
-                float(stats.lucro_total) if stats and stats.lucro_total else 0.0
-            ),
-            "total_rounds": stats.total_rounds if stats and stats.total_rounds else 0,
-            "bots_ativos_agora": bots_ativos,
+            "bots_online": bots_online,
+            "total_apostas": total_apostas,
+            "total_explosoes": stats.rounds if stats else 0,
+            "total_hits": total_hits,
+            "total_misses": total_apostas - total_hits,
+            "win_rate": round(win_rate, 1),
+            "lucro_total": float(stats.lucro) if stats and stats.lucro else 0,
         },
-        "por_tipo": tipos,
-        "atividade_por_hora": atividade_por_hora,
-        "top_licencas": top_licencas,
+        "atividade_por_hora": ativ_por_hora,
+        "bots_ativos": bots_ativos,
+        "distribuicao_modos": dist_modos,
+        "alertas": alertas,
+        "top_clientes": top_clientes,
     }
 
 
-async def _get_top_licencas(
-    db: AsyncSession, base_filters: List[Any]
-) -> List[Dict[str, Any]]:
-    """Helper para buscar top licenças."""
-    filters = base_filters.copy()
-    filters.append(LogBot.tipo == "bet")
+async def _get_distribuicao_modos(
+    db: AsyncSession, data_inicio: Optional[datetime]
+) -> List[Dict]:
+    """Helper para distribuição de modos de risco."""
+    filters = [LogBot.tipo == "bet", LogBot.modo_risco.isnot(None)]
+    if data_inicio:
+        filters.append(LogBot.timestamp >= data_inicio)
 
-    top_licencas_query = (
+    result = await db.execute(
+        select(
+            LogBot.modo_risco,
+            func.count(LogBot.id).label("qtd"),
+            func.sum(LogBot.lucro).label("lucro"),
+        )
+        .where(and_(*filters))
+        .group_by(LogBot.modo_risco)
+    )
+    return [
+        {
+            "modo": row.modo_risco or "N/A",
+            "quantidade": row.qtd,
+            "lucro": float(row.lucro) if row.lucro else 0,
+        }
+        for row in result
+    ]
+
+
+async def _get_bots_ativos_detalhes(db: AsyncSession) -> List[Dict]:
+    """Retorna detalhes dos bots com atividade recente."""
+    agora = datetime.now(timezone.utc)
+    # Bots com atividade nas últimas 24h
+    query = (
         select(
             LogBot.hwid,
-            func.sum(LogBot.lucro).label("lucro_total"),
-            func.count(LogBot.id).label("total_rounds"),
+            func.max(LogBot.timestamp).label("ultima_ativ"),
+            func.sum(case((LogBot.tipo == "bet", LogBot.lucro), else_=0)).label(
+                "lucro"
+            ),
+            func.count(case((LogBot.tipo == "bet", 1))).label("apostas"),
+            func.max(LogBot.modo_risco).label("modo"),
+            func.max(LogBot.saldo).label("saldo"),
+        )
+        .where(LogBot.timestamp >= agora - timedelta(hours=24))
+        .group_by(LogBot.hwid)
+        .order_by(desc(func.max(LogBot.timestamp)))
+        .limit(20)
+    )
+
+    result = await db.execute(query)
+    bots = []
+
+    for row in result:
+        if not row.hwid:
+            continue
+
+        # Type safe HWID
+        hwid_str = cast(str, row.hwid)
+
+        # Buscar dados do cliente
+        lic = (
+            await db.execute(
+                select(Licenca.cliente_nome, Licenca.plano_tipo).where(
+                    Licenca.hwid == hwid_str
+                )
+            )
+        ).first()
+
+        ultima = cast(datetime, row.ultima_ativ)
+        if ultima.tzinfo is None:
+            ultima = ultima.replace(tzinfo=timezone.utc)
+
+        inatividade = (agora - ultima).total_seconds() / 60
+        status = (
+            "online"
+            if inatividade < 5
+            else "recente" if inatividade < 30 else "inativo"
+        )
+
+        bots.append(
+            {
+                "hwid": f"{hwid_str[:12]}...",
+                "cliente": lic.cliente_nome if lic else "Desconhecido",
+                "plano": lic.plano_tipo if lic else "N/A",
+                "status": status,
+                "ultima_atividade": ultima.isoformat(),
+                "minutos_inativo": int(inatividade),
+                "modo_risco": row.modo or "N/A",
+                "saldo_atual": float(row.saldo) if row.saldo else 0,
+                "lucro_sessao": float(row.lucro) if row.lucro else 0,
+                "apostas_sessao": row.apostas or 0,
+            }
+        )
+    return bots
+
+
+async def _get_alertas_sistema(db: AsyncSession) -> List[Dict]:
+    """Busca alertas críticos do sistema."""
+    agora = datetime.now(timezone.utc)
+    alertas = []
+
+    # 1. Stop Loss
+    sl_res = await db.execute(
+        select(LogBot)
+        .where(
+            and_(
+                LogBot.stop_loss_atingido == "true",
+                LogBot.timestamp >= agora - timedelta(hours=24),
+            )
+        )
+        .order_by(desc(LogBot.timestamp))
+        .limit(5)
+    )
+    for log in sl_res.scalars():
+        hwid_str = cast(str, log.hwid) if log.hwid is not None else ""
+        cliente = await _get_cliente_por_hwid(db, hwid_str)
+
+        # CORREÇÃO: Verificação explícita 'is not None'
+        ts_iso = log.timestamp.isoformat() if log.timestamp is not None else None
+
+        alertas.append(
+            {
+                "tipo": "stop_loss",
+                "severidade": "critico",
+                "cliente": cliente,
+                "mensagem": "Stop-loss atingido",
+                "timestamp": ts_iso,
+                "dados": {"saldo": log.saldo},
+            }
+        )
+
+    # 2. Metas
+    meta_res = await db.execute(
+        select(LogBot)
+        .where(
+            and_(
+                LogBot.meta_atingida == "true",
+                LogBot.timestamp >= agora - timedelta(hours=24),
+            )
+        )
+        .order_by(desc(LogBot.timestamp))
+        .limit(5)
+    )
+    for log in meta_res.scalars():
+        hwid_str = cast(str, log.hwid) if log.hwid is not None else ""
+        cliente = await _get_cliente_por_hwid(db, hwid_str)
+
+        # CORREÇÃO: Verificação explícita 'is not None'
+        ts_iso = log.timestamp.isoformat() if log.timestamp is not None else None
+
+        alertas.append(
+            {
+                "tipo": "meta_atingida",
+                "severidade": "sucesso",
+                "cliente": cliente,
+                "mensagem": "Meta atingida!",
+                "timestamp": ts_iso,
+                "dados": {"saldo": log.saldo},
+            }
+        )
+
+    # 3. Licenças Expirando
+    exp_res = await db.execute(
+        select(Licenca)
+        .where(
+            and_(
+                Licenca.ativa.is_(True),
+                Licenca.data_expiracao <= agora + timedelta(days=3),
+                Licenca.data_expiracao > agora,
+            )
+        )
+        .limit(5)
+    )
+    for lic in exp_res.scalars():
+        dias = 0
+        # CORREÇÃO: Verificação explícita 'is not None' resolve o erro do Pylance
+        if lic.data_expiracao is not None:
+            dias = (lic.data_expiracao - agora).days
+
+        alertas.append(
+            {
+                "tipo": "expirando",
+                "severidade": "atencao",
+                "cliente": lic.cliente_nome or "N/A",
+                "mensagem": f"Expira em {dias} dia(s)",
+                "timestamp": agora.isoformat(),
+                "dados": {"dias": dias},
+            }
+        )
+
+    alertas.sort(key=lambda x: x["timestamp"] or "", reverse=True)
+    return alertas[:15]
+
+
+async def _get_cliente_por_hwid(db: AsyncSession, hwid: str) -> str:
+    """Busca nome do cliente."""
+    if not hwid:
+        return "Desconhecido"
+    res = await db.execute(select(Licenca.cliente_nome).where(Licenca.hwid == hwid))
+    nome = res.scalar_one_or_none()
+    return nome or "Desconhecido"
+
+
+async def _get_top_clientes(
+    db: AsyncSession, data_inicio: Optional[datetime]
+) -> List[Dict]:
+    """Top 5 clientes por lucro."""
+    filters = [LogBot.tipo == "bet"]
+    if data_inicio:
+        filters.append(LogBot.timestamp >= data_inicio)
+
+    query = (
+        select(
+            LogBot.hwid,
+            func.sum(LogBot.lucro).label("lucro"),
+            func.count(LogBot.id).label("apostas"),
+            func.count(case((LogBot.resultado == "hit", 1))).label("hits"),
         )
         .where(and_(*filters))
         .group_by(LogBot.hwid)
-        .order_by(func.sum(LogBot.lucro).desc())
+        .order_by(desc(func.sum(LogBot.lucro)))
         .limit(5)
     )
-    top_result = await db.execute(top_licencas_query)
 
-    top_licencas = []
-    for row in top_result:
-        if row.hwid:
-            licenca_query = select(Licenca.cliente_nome).where(Licenca.hwid == row.hwid)
-            licenca_result = await db.execute(licenca_query)
-            cliente_nome = licenca_result.scalar_one_or_none() or "Desconhecido"
-        else:
-            cliente_nome = "Desconhecido"
-
-        top_licencas.append(
+    result = await db.execute(query)
+    top = []
+    for row in result:
+        hwid_str = cast(str, row.hwid) if row.hwid is not None else ""
+        cliente = await _get_cliente_por_hwid(db, hwid_str)
+        rate = (row.hits / row.apostas * 100) if row.apostas > 0 else 0.0
+        top.append(
             {
-                "hwid": f"{row.hwid[:12]}..." if row.hwid else "N/A",
-                "cliente": cliente_nome,
-                "lucro_total": float(row.lucro_total) if row.lucro_total else 0,
-                "total_rounds": row.total_rounds,
+                "cliente": cliente,
+                "lucro": float(row.lucro) if row.lucro else 0,
+                "apostas": row.apostas,
+                "win_rate": round(rate, 1),
             }
         )
-    return top_licencas
+    return top
 
 
 # ============================================================================
-# ENDPOINT: ESTATÍSTICAS POR LICENÇA (Admin)
+# ABA 3: CLIENTES - Detalhamento
 # ============================================================================
 
 
-@router.get("/licenca/{licenca_id}")
-async def estatisticas_licenca(
-    licenca_id: int,
-    periodo: str = Query("7d", description="Período: 24h, 7d, 30d, all"),
+@router.get("/clientes")
+async def dashboard_clientes(
+    status: Optional[str] = Query(None),
+    busca: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
     current_admin: Usuario = Depends(get_current_admin),
 ):
-    """
-    Estatísticas detalhadas de uma licença específica.
-    """
-    licenca_result = await db.execute(select(Licenca).where(Licenca.id == licenca_id))
-    licenca = licenca_result.scalar_one_or_none()
+    """Lista clientes com filtros e status."""
+    agora = datetime.now(timezone.utc)
+    query = select(Licenca).order_by(desc(Licenca.created_at))
+    conditions = []
 
-    if not licenca:
-        return {"error": "Licença não encontrada"}
+    if busca:
+        term = f"%{busca}%"
+        conditions.append(
+            or_(
+                Licenca.cliente_nome.ilike(term),
+                Licenca.email_cliente.ilike(term),
+            )
+        )
 
-    # Fix Pylance: Verificação explícita de None
-    if licenca.hwid is None:
+    if status == "expirado":
+        conditions.append(Licenca.data_expiracao < agora)
+    elif status == "ativo":
+        conditions.append(and_(Licenca.ativa.is_(True), Licenca.data_expiracao > agora))
+    elif status == "inativo":
+        conditions.append(Licenca.ativa.is_(False))
+
+    if conditions:
+        query = query.where(and_(*conditions))
+
+    result = await db.execute(query.limit(100))
+    clientes = []
+
+    for lic in result.scalars():
+        # Type safe HWID
+        hwid_str = cast(str, lic.hwid) if lic.hwid is not None else ""
+        stats = await _get_stats_cliente(db, hwid_str, agora)
+        clientes.append({"licenca": lic.to_dict(), "telemetria": stats})
+
+    if status == "online":
+        clientes = [c for c in clientes if c["telemetria"]["status"] == "online"]
+
+    return {"total": len(clientes), "clientes": clientes}
+
+
+async def _get_stats_cliente(db: AsyncSession, hwid: str, agora: datetime) -> Dict:
+    """Calcula stats resumidos de um cliente."""
+    if not hwid:
         return {
-            "licenca": licenca.to_dict(),
-            "estatisticas": None,
-            "mensagem": "Licença ainda não foi ativada (sem HWID)",
+            "status": "nunca_usado",
+            "ultima_atividade": None,
+            "total_apostas": 0,
+            "lucro_total": 0,
+            "win_rate": 0,
         }
 
-    # Fix Pylance: Cast explícito de Column[str] para str
-    # Isso garante ao analisador estático que estamos lidando com o valor da string
-    hwid: str = cast(str, licenca.hwid)
+    res = (
+        await db.execute(
+            select(
+                func.max(LogBot.timestamp).label("ultima"),
+                func.count(case((LogBot.tipo == "bet", 1))).label("apostas"),
+                func.sum(case((LogBot.tipo == "bet", LogBot.lucro), else_=0)).label(
+                    "lucro"
+                ),
+                func.count(
+                    case(
+                        (
+                            and_(
+                                LogBot.tipo == "bet",
+                                LogBot.resultado == "hit",
+                            ),
+                            1,
+                        )
+                    )
+                ).label("hits"),
+            ).where(LogBot.hwid == hwid)
+        )
+    ).first()
 
-    data_inicio = _calcular_data_inicio(periodo)
-    filters = _get_base_filters(data_inicio, hwid)
+    status_bot = "nunca_usado"
+    ultima_str = None
 
-    # 1. Estatísticas gerais
-    stats_query = select(
-        func.count(LogBot.id).label("total_logs"),
-        func.count(func.distinct(LogBot.sessao_id)).label("total_sessoes"),
-        func.sum(case((LogBot.tipo == "bet", LogBot.lucro), else_=0)).label(
-            "lucro_total"
-        ),
-        func.sum(case((LogBot.tipo == "round", 1), else_=0)).label("total_rounds"),
-        func.min(LogBot.timestamp).label("primeira_atividade"),
-        func.max(LogBot.timestamp).label("ultima_atividade"),
-    ).where(and_(*filters))
+    if res and res.ultima:
+        ultima_dt = cast(datetime, res.ultima)
+        if ultima_dt.tzinfo is None:
+            ultima_dt = ultima_dt.replace(tzinfo=timezone.utc)
+        ultima_str = ultima_dt.isoformat()
 
-    stats_result = await db.execute(stats_query)
-    stats = stats_result.first()
+        mins = (agora - ultima_dt).total_seconds() / 60
+        status_bot = "online" if mins < 5 else "recente" if mins < 60 else "inativo"
 
-    total_rounds = stats.total_rounds if stats and stats.total_rounds else 0
-    lucro_total = float(stats.lucro_total) if stats and stats.lucro_total else 0.0
-
-    # 2. Win Rate
-    wins, win_rate = await _calcular_win_rate(db, hwid, data_inicio, total_rounds)
-
-    # 3. Histórico diário
-    historico_diario = await _get_historico_diario(db, hwid, data_inicio)
-
-    # 4. Últimas sessões
-    sessoes = await _get_ultimas_sessoes(db, hwid, data_inicio)
-
-    primeira_atv = (
-        stats.primeira_atividade.isoformat()
-        if stats and stats.primeira_atividade
-        else None
-    )
-    ultima_atv = (
-        stats.ultima_atividade.isoformat() if stats and stats.ultima_atividade else None
-    )
+    apostas = res.apostas if res else 0
+    hits = res.hits if res else 0
+    win_rate = (hits / apostas * 100) if apostas > 0 else 0.0
 
     return {
-        "licenca": licenca.to_dict(),
-        "periodo": periodo,
-        "estatisticas": {
-            "total_logs": stats.total_logs if stats and stats.total_logs else 0,
-            "total_sessoes": (
-                stats.total_sessoes if stats and stats.total_sessoes else 0
-            ),
-            "total_rounds": total_rounds,
-            "lucro_total": lucro_total,
-            "vitorias": wins,
-            "derrotas": total_rounds - wins,
-            "win_rate": round(win_rate, 2),
-            "primeira_atividade": primeira_atv,
-            "ultima_atividade": ultima_atv,
-        },
-        "historico_diario": historico_diario,
-        "ultimas_sessoes": sessoes,
+        "status": status_bot,
+        "ultima_atividade": ultima_str,
+        "total_apostas": apostas,
+        "lucro_total": float(res.lucro) if res and res.lucro else 0,
+        "win_rate": round(win_rate, 1),
     }
 
 
-async def _calcular_win_rate(
-    db, hwid: str, data_inicio: Optional[datetime], total_rounds: int
+@router.get("/cliente/{licenca_id}")
+async def detalhes_cliente(
+    licenca_id: int,
+    periodo: str = Query("7d"),
+    db: AsyncSession = Depends(get_db),
+    current_admin: Usuario = Depends(get_current_admin),
 ):
-    """Helper para calcular taxa de vitória."""
-    if total_rounds <= 0:
-        return 0, 0.0
+    """Detalhes completos de um cliente."""
+    lic = (
+        await db.execute(select(Licenca).where(Licenca.id == licenca_id))
+    ).scalar_one_or_none()
 
-    filters = _get_base_filters(data_inicio, hwid)
-    filters.append(LogBot.tipo == "bet")
-    filters.append(LogBot.lucro > 0)
+    if not lic:
+        return {"error": "Não encontrado"}
+    if lic.hwid is None:
+        return {"licenca": lic.to_dict(), "mensagem": "Sem HWID"}
 
-    wins_query = select(func.count(LogBot.id)).where(and_(*filters))
+    hwid_str = cast(str, lic.hwid)
+    inicio = _calcular_data_inicio(periodo)
 
-    wins_result = await db.execute(wins_query)
-    wins = wins_result.scalar() or 0
-    win_rate = (wins / total_rounds) * 100
-    return wins, win_rate
+    # Executa sub-rotinas
+    stats = await _get_estatisticas_gerais(db, hwid_str, inicio)
+    historico = await _get_historico_diario(db, hwid_str, inicio)
+    sessoes = await _get_ultimas_sessoes(db, hwid_str, inicio)
+    perf = await _get_performance_modos(db, hwid_str, inicio)
+
+    return {
+        "licenca": lic.to_dict(),
+        "periodo": periodo,
+        "estatisticas": stats,
+        "historico_diario": historico,
+        "ultimas_sessoes": sessoes,
+        "performance_modos": perf,
+    }
 
 
-async def _get_historico_diario(db, hwid: str, data_inicio: Optional[datetime]):
-    """Helper para histórico diário."""
-    filters = _get_base_filters(data_inicio, hwid)
-    filters.append(LogBot.tipo == "round")
+# ============================================================================
+# ABA 4: LOGS (Refatorado)
+# ============================================================================
 
-    dia_truncado = func.date_trunc("day", LogBot.timestamp)
-    historico_query = (
-        select(
-            dia_truncado.label("dia"),
-            func.sum(LogBot.lucro).label("lucro"),
-            func.count(LogBot.id).label("rounds"),
-        )
-        .where(LogBot.timestamp >= data_inicio)
-        .where(LogBot.hwid == hwid)
-        .where(LogBot.tipo == "bet")
-        .group_by(dia_truncado)
-        .order_by(dia_truncado)
+
+@router.get("/logs")
+async def dashboard_logs(
+    tipo: Optional[str] = Query(None),
+    hwid: Optional[str] = Query(None),
+    licenca_id: Optional[int] = Query(None),
+    periodo: str = Query("24h"),
+    pagina: int = Query(1, ge=1),
+    limite: int = Query(50, ge=10, le=200),
+    db: AsyncSession = Depends(get_db),
+    current_admin: Usuario = Depends(get_current_admin),
+):
+    """Lista logs com filtros."""
+    inicio = _calcular_data_inicio(periodo)
+    filters = []
+
+    if inicio:
+        filters.append(LogBot.timestamp >= inicio)
+    if tipo:
+        filters.append(LogBot.tipo == tipo)
+    if hwid:
+        filters.append(LogBot.hwid == hwid)
+
+    # Walrus operator (Sourcery suggestion)
+    if licenca_id:
+        if lic_hwid := (
+            await db.execute(select(Licenca.hwid).where(Licenca.id == licenca_id))
+        ).scalar_one_or_none():
+            filters.append(LogBot.hwid == lic_hwid)
+
+    # Count Total
+    count_q = select(func.count(LogBot.id))
+    if filters:
+        count_q = count_q.where(and_(*filters))
+    total = (await db.execute(count_q)).scalar() or 0
+
+    # Fetch Logs
+    offset = (pagina - 1) * limite
+    query = select(LogBot).order_by(desc(LogBot.timestamp)).offset(offset).limit(limite)
+    if filters:
+        query = query.where(and_(*filters))
+
+    logs = (await db.execute(query)).scalars().all()
+    logs_enrich = []
+
+    for log in logs:
+        # Type Safe
+        h_str = cast(str, log.hwid) if log.hwid is not None else ""
+        cliente = await _get_cliente_por_hwid(db, h_str)
+        d = log.to_dict()
+        d["cliente"] = cliente
+        logs_enrich.append(d)
+
+    # Stats by Type
+    w_clause = and_(*filters) if filters else true()
+    tipos_res = await db.execute(
+        select(LogBot.tipo, func.count(LogBot.id)).where(w_clause).group_by(LogBot.tipo)
     )
-    historico_result = await db.execute(historico_query)
+    tipos = {row.tipo: row[1] for row in tipos_res}
+
+    return {
+        "paginacao": {
+            "pagina": pagina,
+            "total": total,
+            "paginas": (total + limite - 1) // limite,
+        },
+        "por_tipo": tipos,
+        "logs": logs_enrich,
+    }
+
+
+# Funções de suporte para detalhes_cliente omitidas para brevidade
+# (Seguem o mesmo padrão de type safety e quebra de linhas implementado acima)
+# As funções _get_estatisticas_gerais, _get_historico_diario, etc
+# devem ser mantidas conforme sua versão original mas com os casts aplicados.
+# Vou incluir as implementações críticas abaixo.
+
+
+async def _get_estatisticas_gerais(
+    db: AsyncSession, hwid: str, data_inicio: Optional[datetime]
+) -> Dict:
+    filters = [LogBot.hwid == hwid]
+    if data_inicio:
+        filters.append(LogBot.timestamp >= data_inicio)
+
+    res = (
+        await db.execute(
+            select(
+                func.count(LogBot.id).label("logs"),
+                func.count(func.distinct(LogBot.sessao_id)).label("sessoes"),
+                func.count(case((LogBot.tipo == "bet", 1))).label("bet"),
+                func.sum(case((LogBot.tipo == "bet", LogBot.lucro), else_=0)).label(
+                    "lucro"
+                ),
+                func.count(
+                    case(
+                        (
+                            and_(
+                                LogBot.tipo == "bet",
+                                LogBot.resultado == "hit",
+                            ),
+                            1,
+                        )
+                    )
+                ).label("hits"),
+                func.min(LogBot.timestamp).label("min_ts"),
+                func.max(LogBot.timestamp).label("max_ts"),
+            ).where(and_(*filters))
+        )
+    ).first()
+
+    total_ap = res.bet if res else 0
+    hits = res.hits if res else 0
+    rate = (hits / total_ap * 100) if total_ap > 0 else 0.0
+
+    return {
+        "total_logs": res.logs if res else 0,
+        "total_sessoes": res.sessoes if res else 0,
+        "total_apostas": total_ap,
+        "lucro_total": float(res.lucro) if res and res.lucro else 0,
+        "hits": hits,
+        "win_rate": round(rate, 1),
+        "primeira_atividade": res.min_ts.isoformat() if res and res.min_ts else None,
+        "ultima_atividade": res.max_ts.isoformat() if res and res.max_ts else None,
+    }
+
+
+async def _get_historico_diario(
+    db: AsyncSession, hwid: str, data_inicio: Optional[datetime]
+):
+    dia = func.date_trunc("day", LogBot.timestamp)
+    filters = [LogBot.hwid == hwid, LogBot.tipo == "bet"]
+    if data_inicio:
+        filters.append(LogBot.timestamp >= data_inicio)
+
+    res = await db.execute(
+        select(
+            dia.label("dia"),
+            func.sum(LogBot.lucro).label("lucro"),
+            func.count(LogBot.id).label("apostas"),
+        )
+        .where(and_(*filters))
+        .group_by(dia)
+        .order_by(dia)
+    )
     return [
         {
             "dia": row.dia.strftime("%d/%m") if row.dia else None,
             "lucro": float(row.lucro) if row.lucro else 0,
-            "rounds": row.rounds,
+            "apostas": row.apostas,
         }
-        for row in historico_result
+        for row in res
     ]
 
 
-async def _get_ultimas_sessoes(db, hwid: str, data_inicio: Optional[datetime]):
-    """Helper para últimas sessões."""
-    filters = _get_base_filters(data_inicio, hwid)
+async def _get_ultimas_sessoes(
+    db: AsyncSession, hwid: str, data_inicio: Optional[datetime]
+):
+    filters = [LogBot.hwid == hwid]
+    if data_inicio:
+        filters.append(LogBot.timestamp >= data_inicio)
 
-    sessoes_query = (
+    res = await db.execute(
         select(
             LogBot.sessao_id,
-            func.min(LogBot.timestamp).label("inicio"),
+            func.min(LogBot.timestamp).label("ini"),
             func.max(LogBot.timestamp).label("fim"),
-            func.sum(LogBot.lucro).label("lucro"),
-            func.count(LogBot.id).label("eventos"),
+            func.sum(case((LogBot.tipo == "bet", LogBot.lucro), else_=0)).label(
+                "lucro"
+            ),
+            func.max(LogBot.modo_risco).label("modo"),
         )
         .where(and_(*filters))
         .group_by(LogBot.sessao_id)
-        .order_by(func.max(LogBot.timestamp).desc())
+        .order_by(desc(func.max(LogBot.timestamp)))
         .limit(10)
     )
-    sessoes_result = await db.execute(sessoes_query)
-
     return [
         {
             "sessao_id": row.sessao_id,
-            "inicio": row.inicio.isoformat() if row.inicio else None,
-            "fim": row.fim.isoformat() if row.fim else None,
-            "duracao_minutos": (
-                int((row.fim - row.inicio).total_seconds() / 60)
-                if row.inicio and row.fim
-                else 0
-            ),
+            "inicio": row.ini.isoformat() if row.ini else None,
             "lucro": float(row.lucro) if row.lucro else 0,
-            "eventos": row.eventos,
+            "modo": row.modo or "N/A",
         }
-        for row in sessoes_result
+        for row in res
     ]
 
 
-# ============================================================================
-# ENDPOINT: LISTAR LICENÇAS COM ESTATÍSTICAS (Admin)
-# ============================================================================
-
-
-@router.get("/licencas-stats")
-async def licencas_com_estatisticas(
-    db: AsyncSession = Depends(get_db),
-    current_admin: Usuario = Depends(get_current_admin),
+async def _get_performance_modos(
+    db: AsyncSession, hwid: str, data_inicio: Optional[datetime]
 ):
-    """
-    Lista todas as licenças com suas estatísticas de telemetria.
-    """
-    query = (
+    filters = [LogBot.hwid == hwid, LogBot.tipo == "bet"]
+    if data_inicio:
+        filters.append(LogBot.timestamp >= data_inicio)
+
+    res = await db.execute(
         select(
-            Licenca,
-            func.count(case((LogBot.tipo == "bet", 1))).label("total_rounds"),
-            func.sum(case((LogBot.tipo == "bet", LogBot.lucro), else_=0)).label(
-                "lucro_total"
-            ),
-            func.max(LogBot.timestamp).label("ultima_atividade"),
+            LogBot.modo_risco,
+            func.count(LogBot.id).label("qtd"),
+            func.sum(LogBot.lucro).label("lucro"),
         )
-        .outerjoin(LogBot, and_(Licenca.hwid == LogBot.hwid, Licenca.hwid.is_not(None)))
-        .where(Licenca.ativa.is_(True))
-        .group_by(Licenca.id)
-        .order_by(Licenca.id.desc())
+        .where(and_(*filters))
+        .group_by(LogBot.modo_risco)
     )
-
-    result = await db.execute(query)
-
-    resultado = []
-    agora = datetime.now(timezone.utc)
-
-    for row in result:
-        licenca, total_rounds, lucro_total, ultima_atividade = row
-
-        # Determinar status
-        status_bot = "nunca_usado"
-        if ultima_atividade:
-            last_act = cast(datetime, ultima_atividade)
-            if last_act.tzinfo is None:
-                last_act = last_act.replace(tzinfo=timezone.utc)
-
-            minutos_inativo = (agora - last_act).total_seconds() / 60
-
-            if minutos_inativo < 5:
-                status_bot = "online"
-            elif minutos_inativo < 60:
-                status_bot = "recente"
-            elif minutos_inativo < 1440:  # 24h
-                status_bot = "hoje"
-            else:
-                status_bot = "inativo"
-        elif licenca.hwid is not None:
-            status_bot = "inativo"
-
-        stats = {
-            "total_rounds": total_rounds or 0,
-            "lucro_total": float(lucro_total) if lucro_total else 0.0,
-            "ultima_atividade": (
-                ultima_atividade.isoformat() if ultima_atividade else None
-            ),
-            "status_bot": status_bot,
+    return [
+        {
+            "modo": row.modo_risco or "N/A",
+            "apostas": row.qtd,
+            "lucro": float(row.lucro) if row.lucro else 0,
         }
-
-        resultado.append({"licenca": licenca.to_dict(), "telemetria": stats})
-
-    return resultado
-
-
-# ============================================================================
-# ENDPOINT: EXPORTAR DADOS (Admin)
-# ============================================================================
+        for row in res
+    ]
 
 
 @router.get("/exportar")
 async def exportar_telemetria(
-    formato: str = Query("json", description="Formato: json ou csv"),
+    formato: str = Query("json"),
     licenca_id: Optional[int] = None,
-    periodo: str = Query("7d", description="Período: 24h, 7d, 30d, all"),
+    periodo: str = Query("7d"),
     db: AsyncSession = Depends(get_db),
     current_admin: Usuario = Depends(get_current_admin),
 ):
-    """
-    Exporta dados de telemetria.
-    """
-    data_inicio = _calcular_data_inicio(periodo)
-    filters = _get_base_filters(data_inicio)
-
-    if licenca_id:
-        licenca_result = await db.execute(
-            select(Licenca).where(Licenca.id == licenca_id)
-        )
-        licenca = licenca_result.scalar_one_or_none()
-        if licenca and licenca.hwid is not None:
-            filters.append(LogBot.hwid == licenca.hwid)
-
-    query = select(LogBot).order_by(LogBot.timestamp.desc())
-    if filters:
-        query = query.where(and_(*filters))
-
-    result = await db.execute(query.limit(10000))
-    logs = result.scalars().all()
-
-    dados = [log.to_dict() for log in logs]
+    """Exporta dados."""
+    dados_log = await dashboard_logs(
+        licenca_id=licenca_id,
+        periodo=periodo,
+        limite=10000,
+        db=db,
+        current_admin=current_admin,
+    )
+    dados = dados_log["logs"]
 
     if formato == "csv":
         output = io.StringIO()
@@ -474,11 +1002,9 @@ async def exportar_telemetria(
             writer = csv.DictWriter(output, fieldnames=dados[0].keys())
             writer.writeheader()
             writer.writerows(dados)
-
         return Response(
             content=output.getvalue(),
             media_type="text/csv",
             headers={"Content-Disposition": "attachment; filename=telemetria.csv"},
         )
-
-    return {"formato": "json", "dados": dados, "total_registros": len(dados)}
+    return {"formato": "json", "dados": dados}
