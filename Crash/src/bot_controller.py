@@ -1916,7 +1916,7 @@ class BotController:
         items = [
             ("multiplier_area", None, "MULTIPLICADOR (centro da tela)"),
             ("balance_area", None, "SALDO (R$ no topo)"),
-            ("bet_area", None, "STATUS APOSTA (onde aparece 'Apostar')"),
+            ("bet_area", None, "BET 8s (Bet 8 segundos)"),
             ("bet_value_area_1", "bet_value_click_1", "CAMPO VALOR (esquerda)"),
             ("target_area_1", "target_click_1", "CAMPO AUTO-RETIRAR (direita)"),
             ("bet_button_area_1", None, "BOTÃO VERDE (Apostar)"),
