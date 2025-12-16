@@ -151,16 +151,13 @@ class GoogleCalendarService:
             else:
                 return {"error": response.text}
 
-    async def listar_horarios_disponiveis(
-        self,
-        data_inicio: datetime,
-        data_fim: datetime,
-    ) -> dict:
+    async def _buscar_eventos_ocupados(
+        self, data_inicio: datetime, data_fim: datetime
+    ) -> list[tuple[datetime, datetime]]:
         """
-        Lista horários disponíveis para agendamento.
-        Busca eventos existentes e retorna slots livres.
+        Método auxiliar: Busca eventos na API e retorna lista de tuplas
+        (inicio, fim) já convertidas para datetime naive (sem timezone).
         """
-        # Buscar eventos existentes no período
         url = "https://www.googleapis.com/calendar/v3/calendars/primary/events"
         params = {
             "timeMin": f"{data_inicio.isoformat()}Z",
@@ -172,51 +169,72 @@ class GoogleCalendarService:
         result = await self._make_request("get", url, params=params)
 
         if "error" in result:
-            return result
+            return []
 
-        eventos_ocupados = []
+        eventos_processados = []
         for evento in result.get("items", []):
-            inicio = evento.get("start", {}).get("dateTime")
-            fim = evento.get("end", {}).get("dateTime")
-            if inicio and fim:
-                eventos_ocupados.append(
-                    {
-                        "inicio": inicio,
-                        "fim": fim,
-                        "titulo": evento.get("summary", "Ocupado"),
-                    }
+            inicio_str = evento.get("start", {}).get("dateTime")
+            fim_str = evento.get("end", {}).get("dateTime")
+
+            if inicio_str and fim_str:
+                # Converte string ISO para datetime e remove timezone
+                # para comparar com os slots gerados localmente
+                inicio_dt = datetime.fromisoformat(
+                    inicio_str.replace("Z", "+00:00")
+                ).replace(tzinfo=None)
+
+                fim_dt = datetime.fromisoformat(fim_str.replace("Z", "+00:00")).replace(
+                    tzinfo=None
                 )
 
-        # Gerar slots disponíveis (10h às 18h, 30min cada)
+                eventos_processados.append((inicio_dt, fim_dt))
+
+        return eventos_processados
+
+    def _verificar_colisao(
+        self,
+        slot_inicio: datetime,
+        slot_fim: datetime,
+        eventos_ocupados: list[tuple[datetime, datetime]],
+    ) -> bool:
+        """
+        Método auxiliar: Verifica se um slot colide com algum evento.
+        Retorna True se houver colisão (ocupado).
+        """
+        # Verifica se ALGUM (any) evento na lista colide com o slot
+        return any(
+            slot_inicio < evt_fim and slot_fim > evt_inicio
+            for evt_inicio, evt_fim in eventos_ocupados
+        )
+
+    async def listar_horarios_disponiveis(
+        self,
+        data_inicio: datetime,
+        data_fim: datetime,
+    ) -> dict:
+        """
+        Lista horários disponíveis para agendamento.
+        Busca eventos existentes e retorna slots livres.
+        """
+        # 1. Busca e pré-processa os eventos (remove complexidade de IO e Parsing do loop principal)
+        eventos_ocupados = await self._buscar_eventos_ocupados(data_inicio, data_fim)
+
         slots_disponiveis = []
+
+        # Define o cursor inicial para as 10h do dia de início
         current = data_inicio.replace(hour=10, minute=0, second=0, microsecond=0)
 
         while current < data_fim:
-            # Pular fins de semana
-            if current.weekday() < 5:  # Segunda a Sexta
+            # Regra 1: Apenas Segunda a Sexta (0=Seg, 4=Sex)
+            if current.weekday() < 5:
                 hora = current.hour
-                if 10 <= hora < 18:  # 10h às 18h
+
+                # Regra 2: Horário comercial (10h às 18h)
+                if 10 <= hora < 18:
                     slot_fim = current + timedelta(minutes=30)
 
-                    # Verificar se slot está ocupado
-                    ocupado = False
-                    for evento in eventos_ocupados:
-                        evt_inicio = datetime.fromisoformat(
-                            evento["inicio"].replace("Z", "+00:00")
-                        ).replace(tzinfo=None)
-
-                        evt_fim = datetime.fromisoformat(
-                            evento["fim"].replace("Z", "+00:00")
-                        ).replace(tzinfo=None)
-
-                        # Verifica sobreposição (De Morgan: not (A or B))
-                        # Se o slot termina depois que o evento começa E
-                        # o slot começa antes do evento terminar -> Colisão
-                        if slot_fim > evt_inicio and current < evt_fim:
-                            ocupado = True
-                            break
-
-                    if not ocupado:
+                    # Regra 3: Verifica colisão usando método auxiliar
+                    if not self._verificar_colisao(current, slot_fim, eventos_ocupados):
                         slots_disponiveis.append(
                             {
                                 "inicio": current.isoformat(),
@@ -225,7 +243,13 @@ class GoogleCalendarService:
                             }
                         )
 
+            # Avança 30 minutos
             current += timedelta(minutes=30)
+
+            # Otimização: Se passou das 18h, pula para as 10h do dia seguinte
+            if current.hour >= 18:
+                current += timedelta(days=1)
+                current = current.replace(hour=10, minute=0)
 
         return {
             "slots": slots_disponiveis,
