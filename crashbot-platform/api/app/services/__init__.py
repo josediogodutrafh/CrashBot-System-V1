@@ -1,12 +1,11 @@
-"""
+﻿"""
 Services - Lógica de negócio da aplicação.
-ATUALIZADO: Inclui serviço de notificação para clientes
+ATUALIZADO: Inclui serviço de verificação WhatsApp
 """
-
 # Admin Notifications (Item 2 - já implementado)
 from app.services.admin_notification_service import admin_notifications
 
-# Client Notifications (Item 1 - NOVO)
+# Client Notifications (Item 1)
 from app.services.client_notification_service import (
     AlertType,
     notify_hit,
@@ -15,11 +14,16 @@ from app.services.client_notification_service import (
     notify_stop_loss,
     send_client_notification,
 )
+
+# Promoções e elegibilidade
 from app.services.promocao_service import (
     obter_preco_plano,
     verificar_elegibilidade_primeira_adesao,
     verificar_elegibilidade_trial,
 )
+
+# WhatsApp Verification (NOVO)
+from app.services.whatsapp_verification_service import whatsapp_verification
 
 __all__ = [
     # Promoções
@@ -35,4 +39,6 @@ __all__ = [
     "notify_miss",
     "notify_stop_loss",
     "notify_meta_atingida",
+    # WhatsApp Verification
+    "whatsapp_verification",
 ]
