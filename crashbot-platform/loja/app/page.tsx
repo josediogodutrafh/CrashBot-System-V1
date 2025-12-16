@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Activity,
   AlertTriangle,
+  CalendarDays,
   Check,
   Cpu,
   Eye,
@@ -14,6 +15,7 @@ import {
   PlayCircle,
   Smartphone,
   Terminal,
+  Video,
 } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -297,6 +299,13 @@ export default function Home() {
                 className="hover:text-white transition-colors"
               >
                 Licenciamento
+              </Link>
+              <Link
+                href="/agendar"
+                className="hover:text-white transition-colors flex items-center gap-1"
+              >
+                <CalendarDays className="w-4 h-4" />
+                Agendar Treinamento
               </Link>
             </nav>
 
@@ -606,6 +615,70 @@ export default function Home() {
             </div>
           </section>
 
+          {/* --- NOVA SEÇÃO: AGENDAR TREINAMENTO --- */}
+          <section className="py-20 bg-gradient-to-r from-purple-900/20 via-[#0B0F19] to-purple-900/20 border-y border-purple-500/10">
+            <div className="container mx-auto px-6">
+              <div className="max-w-4xl mx-auto">
+                <Card className="bg-gradient-to-br from-purple-900/40 to-slate-900/60 border-purple-500/30 overflow-hidden relative">
+                  <div className="absolute top-0 right-0 w-64 h-64 bg-purple-500/10 blur-[80px] rounded-full pointer-events-none"></div>
+
+                  <CardContent className="p-8 md:p-12">
+                    <div className="grid md:grid-cols-2 gap-8 items-center">
+                      {/* Texto */}
+                      <div className="space-y-6">
+                        <Badge className="bg-green-500/20 text-green-300 border-green-500/30 px-3 py-1">
+                          GRATUITO
+                        </Badge>
+                        <h2 className="text-3xl md:text-4xl font-bold text-white leading-tight">
+                          Agende seu{' '}
+                          <span className="text-purple-400">Treinamento</span>
+                        </h2>
+                        <p className="text-slate-300 leading-relaxed">
+                          Marque uma sessão de <strong>30 minutos</strong> com
+                          nossa equipe para aprender a configurar e operar o
+                          CrashBot da melhor forma.
+                        </p>
+                        <ul className="space-y-3 text-sm text-slate-300">
+                          <li className="flex items-center gap-3">
+                            <Video className="w-5 h-5 text-purple-400" />
+                            Reunião via Google Meet
+                          </li>
+                          <li className="flex items-center gap-3">
+                            <CalendarDays className="w-5 h-5 text-purple-400" />
+                            Seg a Sex, 10h às 18h
+                          </li>
+                          <li className="flex items-center gap-3">
+                            <Check className="w-5 h-5 text-green-400" />
+                            Configuração inicial incluída
+                          </li>
+                        </ul>
+                      </div>
+
+                      {/* Botão */}
+                      <div className="flex flex-col items-center justify-center space-y-4">
+                        <div className="w-24 h-24 bg-purple-500/20 rounded-full flex items-center justify-center border border-purple-500/30">
+                          <CalendarDays className="w-12 h-12 text-purple-400" />
+                        </div>
+                        <Link href="/agendar" className="w-full">
+                          <Button
+                            size="lg"
+                            className="w-full h-14 bg-gradient-to-r from-purple-600 to-pink-600 font-bold text-lg shadow-[0_0_30px_-5px_rgba(147,51,234,0.5)] hover:scale-[1.02] transition-transform"
+                          >
+                            <CalendarDays className="w-5 h-5 mr-2" />
+                            Agendar Agora
+                          </Button>
+                        </Link>
+                        <p className="text-xs text-slate-500 text-center">
+                          Escolha o melhor horário para você
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          </section>
+
           {/* --- NOVA SEÇÃO: REQUISITOS TÉCNICOS (RODAPÉ) --- */}
           <section className="py-16 border-t border-white/5 bg-[#05080f]">
             <div className="container mx-auto px-6">
@@ -700,6 +773,9 @@ export default function Home() {
               </Link>
               <Link href="/privacidade" className="hover:text-purple-400">
                 Privacidade
+              </Link>
+              <Link href="/agendar" className="hover:text-purple-400">
+                Agendar Treinamento
               </Link>
             </div>
           </footer>
