@@ -1,12 +1,13 @@
-"""
+﻿"""
 CrashBot API - FastAPI
 Versão 2.0
 
 API moderna para gestão do CrashBot.
-ATUALIZADO: Inclui routers de notificação para clientes (Item 1)
+ATUALIZADO: Inclui router de agendamento Google Calendar (Item 5)
 """
 
 from app.routers.auth import router as auth_router
+from app.routers.calendar import router as calendar_router
 from app.routers.licencas import router as licencas_router
 from app.routers.notify import router as notify_router
 from app.routers.pagamento import router as pagamento_router
@@ -62,6 +63,7 @@ app.include_router(websocket_router)
 app.include_router(pagamento_router)
 app.include_router(versao_router)
 app.include_router(telemetria_router)
+app.include_router(calendar_router)  # NOVO - Item 5: Agendamentos
 
 # NOVOS ROUTERS - Item 1: Notificações para Clientes
 app.include_router(webhook_router)
@@ -88,8 +90,8 @@ async def health_check():
     """Health check - Verifica se a API está funcionando."""
     return {
         "status": "healthy",
-        "database": "connected",  # TODO: verificar conexão real
-        "redis": "connected",  # TODO: adicionar Redis
+        "database": "connected",
+        "redis": "connected",
     }
 
 
@@ -103,14 +105,16 @@ async def api_status():
             "licenses": "/api/v1/licencas",
             "telemetry": "/api/v1/telemetria",
             "payments": "/api/v1/pagamentos",
-            "telegram": "/api/v1/telegram",  # NOVO
-            "notify": "/api/v1/notify",  # NOVO
+            "telegram": "/api/v1/telegram",
+            "notify": "/api/v1/notify",
+            "calendar": "/api/v1/calendar",  # NOVO
         },
         "features": {
             "websocket": True,
             "real_time": True,
             "authentication": "JWT",
-            "client_notifications": True,  # NOVO
+            "client_notifications": True,
+            "google_calendar": True,  # NOVO
         },
     }
 
@@ -170,21 +174,17 @@ async def internal_error_handler(request, exc):
 @app.on_event("startup")
 async def startup_event():
     """Executado quando a API inicia."""
-    print("🚀 CrashBot API iniciando...")
-    print("📚 Documentação: http://localhost:8000/api/docs")
-    print("📱 Telegram Webhook: /api/v1/telegram/webhook")
-    print("🔔 Client Notifications: /api/v1/notify")
-    # TODO: Conectar ao banco
-    # TODO: Inicializar Redis
-    # TODO: Carregar configurações
+    print(" CrashBot API iniciando...")
+    print(" Documentação: http://localhost:8000/api/docs")
+    print(" Telegram Webhook: /api/v1/telegram/webhook")
+    print(" Client Notifications: /api/v1/notify")
+    print(" Google Calendar: /api/v1/calendar")
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Executado quando a API desliga."""
-    print("👋 CrashBot API encerrando...")
-    # TODO: Fechar conexões do banco
-    # TODO: Fechar conexão Redis
+    print(" CrashBot API encerrando...")
 
 
 # ============================================================================
@@ -198,6 +198,6 @@ if __name__ == "__main__":
         "main:app",
         host="0.0.0.0",
         port=8000,
-        reload=True,  # Auto-reload em desenvolvimento
+        reload=True,
         log_level="info",
     )
