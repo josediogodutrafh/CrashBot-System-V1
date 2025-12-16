@@ -16,6 +16,7 @@ import random
 import sys
 import threading
 import time
+import tkinter as tk
 import winsound
 from collections import deque
 from datetime import datetime, timedelta
@@ -1849,30 +1850,65 @@ class BotController:
         for field in fields:
             profile[field] = None
 
-    def _calibrate_single_item(
-        self, area_key: str, click_key: Optional[str], friendly_name: str
-    ) -> Dict[str, Any]:
-        """Calibra um único item da tela."""
-        self.console.print(f"\n📍 Mapeando: [bold cyan]{friendly_name}[/bold cyan]")
-        self.console.print("   1. Mouse no [green]CANTO SUPERIOR ESQUERDO[/green].")
-        self.console.input("      [Enter] para capturar...")
-        x1, y1 = pyautogui.position()
-        self.console.print(f"      -> ({x1}, {y1})", style="dim")
-        self.console.print("   2. Mouse no [green]CANTO INFERIOR DIREITO[/green].")
-        self.console.input("      [Enter] para capturar...")
-        x2, y2 = pyautogui.position()
-        self.console.print(f"      -> ({x2}, {y2})", style="dim")
-        left = min(x1, x2)
-        top = min(y1, y2)
-        width = abs(x2 - x1)
-        height = abs(y2 - y1)
-        result = {area_key: {"x": left, "y": top, "width": width, "height": height}}
+    def _select_area_visual(self, title: str) -> Optional[Dict]:
+        """Abre tela para seleção visual de área (arrastar retângulo)."""
+        result = {"x": 0, "y": 0, "width": 0, "height": 0}
+
+        def on_press(event):
+            nonlocal start_x, start_y
+            start_x = event.x
+            start_y = event.y
+            if rect[0]:
+                canvas.delete(rect[0])
+            rect[0] = canvas.create_rectangle(start_x, start_y, start_x, start_y, outline='#00FF00', width=3)
+
+        def on_drag(event):
+            if rect[0]:
+                canvas.coords(rect[0], start_x, start_y, event.x, event.y)
+
+        def on_release(event):
+            x1, y1 = min(start_x, event.x), min(start_y, event.y)
+            x2, y2 = max(start_x, event.x), max(start_y, event.y)
+            if (x2 - x1) > 5 and (y2 - y1) > 5:
+                result["x"], result["y"] = x1, y1
+                result["width"], result["height"] = x2 - x1, y2 - y1
+            root.quit()
+            root.destroy()
+
+        def on_cancel(event):
+            result["width"] = 0
+            root.quit()
+            root.destroy()
+
+        start_x, start_y = 0, 0
+        rect = [None]
+        root = tk.Tk()
+        root.attributes('-fullscreen', True)
+        root.attributes('-alpha', 0.3)
+        root.attributes('-topmost', True)
+        root.configure(bg='black')
+        screen_w, screen_h = root.winfo_screenwidth(), root.winfo_screenheight()
+        canvas = tk.Canvas(root, width=screen_w, height=screen_h, bg='black', highlightthickness=0, cursor='cross')
+        canvas.pack()
+        canvas.create_text(screen_w // 2, 40, text=f"🎯 {title}", font=('Arial', 28, 'bold'), fill='white')
+        canvas.create_text(screen_w // 2, 80, text="CLIQUE e ARRASTE para selecionar | ESC = cancelar", font=('Arial', 16), fill='yellow')
+        canvas.bind('<ButtonPress-1>', on_press)
+        canvas.bind('<B1-Motion>', on_drag)
+        canvas.bind('<ButtonRelease-1>', on_release)
+        root.bind('<Escape>', on_cancel)
+        root.mainloop()
+        return result if result["width"] > 0 else None
+
+    def _calibrate_single_item(self, area_key: str, click_key: Optional[str], friendly_name: str) -> Optional[Dict[str, Any]]:
+        """Calibra um único item da tela usando seleção visual."""
+        area_result = self._select_area_visual(friendly_name)
+        if not area_result:
+            return None
+        self.console.print(f"[green]✅ {friendly_name}: {area_result['width']}x{area_result['height']}[/green]")
+        result = {area_key: area_result}
         if click_key:
-            cx, cy = left + (width // 2), top + (height // 2)
+            cx, cy = area_result["x"] + area_result["width"] // 2, area_result["y"] + area_result["height"] // 2
             result[click_key] = {"x": cx, "y": cy}
-            self.console.print(f"      -> Clique: ({cx}, {cy})", style="dim")
-        self.console.print("✅ Salvo!", style="green")
-        time.sleep(0.3)
         return result
 
     def _get_items_to_calibrate(self, use_bet_2: bool) -> list:
