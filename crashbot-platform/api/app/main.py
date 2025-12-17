@@ -6,9 +6,11 @@ API moderna para gestão do CrashBot.
 ATUALIZADO: Inclui router de agendamento Google Calendar (Item 5)
 """
 
+from app.database import get_db
 from app.routers.auth import router as auth_router
 from app.routers.calendar import router as calendar_router
 from app.routers.licencas import router as licencas_router
+from app.routers.licencas import validar_licenca
 from app.routers.notify import router as notify_router
 from app.routers.pagamento import router as pagamento_router
 from app.routers.telemetria import router as telemetria_router
@@ -17,7 +19,8 @@ from app.routers.versao import router as versao_router
 # NOVOS ROUTERS - Item 1: Notificações para Clientes
 from app.routers.webhook import router as webhook_router
 from app.routers.websocket import router as websocket_router
-from fastapi import FastAPI, Request
+from app.schemas import ValidarLicencaRequest
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
 
@@ -131,9 +134,9 @@ async def telemetria_compat(request: Request):
 
 
 @app.post("/validar")
-async def validar_compat(request: Request):
-    """Redireciona para nova rota de validação."""
-    return RedirectResponse(url="/api/v1/validar", status_code=307)
+async def validar_compat(payload: ValidarLicencaRequest, db=Depends(get_db)):
+    """Rota de compatibilidade - chama diretamente a função de validação."""
+    return await validar_licenca(payload=payload, db=db)
 
 
 # ============================================================================
