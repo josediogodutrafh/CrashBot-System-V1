@@ -1,7 +1,7 @@
+import FacebookPixel from '@/components/ui/FacebookPixel';
 import GoogleAnalytics from '@/components/ui/GoogleAnalytics';
 import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
-import FacebookPixel from './components/FacebookPixel'; // <--- ADICIONADO AQUI
 import './globals.css';
 
 const geistSans = Geist({
