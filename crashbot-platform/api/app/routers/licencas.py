@@ -43,9 +43,12 @@ async def validar_licenca(
 
     # Licença não encontrada
     if not licenca:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Licença não encontrada",
+        return ValidarLicencaResponse(
+            sucesso=False,
+            mensagem="Licença não encontrada",
+            ativa=False,
+            dias_restantes=0,
+            telegram_chat_id=None,
         )
 
     # Licença desativada
