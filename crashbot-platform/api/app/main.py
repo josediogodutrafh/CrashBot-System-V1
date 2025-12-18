@@ -23,6 +23,14 @@ from app.schemas.licenca import ValidarLicencaRequest
 from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
+
+# ============================================================================
+# RATE LIMITING
+# ============================================================================
+limiter = Limiter(key_func=get_remote_address)
 
 # ============================================================================
 # CONFIGURAÇÃO DA APP
@@ -35,6 +43,10 @@ app = FastAPI(
     docs_url="/api/docs",
     redoc_url="/api/redoc",
 )
+
+# Adiciona rate limiter à app
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore
 
 # ============================================================================
 # MIDDLEWARES
@@ -134,9 +146,11 @@ async def telemetria_compat(request: Request):
 
 
 @app.post("/validar")
-async def validar_compat(payload: ValidarLicencaRequest, db=Depends(get_db)):
+async def validar_compat(
+    request: Request, payload: ValidarLicencaRequest, db=Depends(get_db)
+):
     """Rota de compatibilidade - chama diretamente a função de validação."""
-    return await validar_licenca(payload=payload, db=db)
+    return await validar_licenca(request=request, payload=payload, db=db)
 
 
 # ============================================================================

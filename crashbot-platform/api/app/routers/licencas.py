@@ -18,8 +18,12 @@ from app.schemas.licenca import (
 )
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+limiter = Limiter(key_func=get_remote_address)
 
 router = APIRouter(prefix="/api/v1", tags=["licencas"])
 
@@ -30,7 +34,9 @@ router = APIRouter(prefix="/api/v1", tags=["licencas"])
 
 
 @router.post("/validar", response_model=ValidarLicencaResponse)
+@limiter.limit("10/minute")  # Máximo 10 validações por minuto por IP
 async def validar_licenca(
+    request: Request,  # Adicionar este parâmetro
     payload: ValidarLicencaRequest,
     db: AsyncSession = Depends(get_db),
 ):
@@ -58,6 +64,7 @@ async def validar_licenca(
             mensagem="Licença desativada",
             ativa=False,
             dias_restantes=0,
+            telegram_chat_id=None,
         )
 
     # Licença expirada
@@ -67,6 +74,7 @@ async def validar_licenca(
             mensagem="Licença expirada",
             dias_restantes=0,
             ativa=bool(licenca.ativa),
+            telegram_chat_id=None,
         )
 
     # Verificar HWID (CORREÇÃO DEFINITIVA)
