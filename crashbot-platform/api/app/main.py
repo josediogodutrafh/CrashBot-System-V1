@@ -19,7 +19,7 @@ from app.routers.versao import router as versao_router
 # NOVOS ROUTERS - Item 1: Notificações para Clientes
 from app.routers.webhook import router as webhook_router
 from app.routers.websocket import router as websocket_router
-from app.schemas import ValidarLicencaRequest
+from app.schemas.licenca import ValidarLicencaRequest
 from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse

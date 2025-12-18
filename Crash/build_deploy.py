@@ -138,7 +138,7 @@ def build_exe(version_str, full_version_str):
         "--assume-yes-for-downloads",
         
         # Otimizacoes
-        "--lto=yes",
+        "--lto=no",
         "--jobs=4",
         
         # Informacoes do executavel
