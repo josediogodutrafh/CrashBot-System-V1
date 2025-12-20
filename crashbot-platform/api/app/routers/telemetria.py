@@ -1,4 +1,4 @@
-"""
+﻿"""
 Router: Telemetria V3
 Dashboard completo com 4 abas: Negócio, Operação, Clientes, Logs
 Refatorado para Alta Coesão e Type Safety.
@@ -479,7 +479,7 @@ async def _get_alertas_sistema(db: AsyncSession) -> List[Dict]:
         select(LogBot)
         .where(
             and_(
-                LogBot.stop_loss_atingido == "true",
+                LogBot.stop_loss_atingido == "S",
                 LogBot.timestamp >= agora - timedelta(hours=24),
             )
         )
@@ -509,7 +509,7 @@ async def _get_alertas_sistema(db: AsyncSession) -> List[Dict]:
         select(LogBot)
         .where(
             and_(
-                LogBot.meta_atingida == "true",
+                LogBot.meta_atingida == "S",
                 LogBot.timestamp >= agora - timedelta(hours=24),
             )
         )
@@ -1008,3 +1008,5 @@ async def exportar_telemetria(
             headers={"Content-Disposition": "attachment; filename=telemetria.csv"},
         )
     return {"formato": "json", "dados": dados}
+
+
