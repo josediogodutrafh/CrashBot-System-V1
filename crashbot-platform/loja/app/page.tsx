@@ -149,6 +149,25 @@ const LIVE_CONFIG = {
   titulo: 'Sessão Conservador - Banca R$ 1k/ Meta 1.4k',
 };
 
+// --- CONFIGURAÇÃO DOS TUTORIAIS (ARQUIVOS LOCAIS) ---
+const TUTORIAL_VIDEOS = [
+  {
+    path: '/videos/tuto_01.mp4', // Caminho do arquivo na pasta public
+    titulo: '1. Instalação e Login',
+    desc: 'Passo a passo para baixar, instalar e ativar sua licença no Windows.',
+  },
+  {
+    path: '/videos/tuto_02.mp4',
+    titulo: '2. Configuração Estratégica',
+    desc: 'Como ajustar o MartinGale, Stop Loss e Metas diárias.',
+  },
+  {
+    path: '/videos/tuto_03.mp4',
+    titulo: '3. Funcionalidades Avançadas',
+    desc: 'Domine a leitura de sinais, análise de gráficos e recursos extras.',
+  },
+];
+
 function VideoShowcase() {
   return (
     <div className="mt-12 max-w-5xl mx-auto">
@@ -247,6 +266,57 @@ function VideoShowcase() {
           </div>
         </div>
       </Card>
+    </div>
+  );
+}
+
+// --- 4. GALERIA DE TUTORIAIS (PLAYER NATIVO) ---
+function TutorialGallery() {
+  return (
+    <div className="mt-20 max-w-6xl mx-auto">
+      <div className="text-center mb-10">
+        <Badge className="bg-blue-500/20 text-blue-300 border-blue-500/30 px-3 py-1 mb-4">
+          ACADEMIA CRASHBOT
+        </Badge>
+        <h3 className="text-2xl md:text-3xl font-bold text-white">
+          Domine a Ferramenta
+        </h3>
+        <p className="text-slate-400 mt-2">
+          Tutoriais rápidos para você começar a operar em menos de 10 minutos.
+        </p>
+      </div>
+
+      <div className="grid md:grid-cols-3 gap-6">
+        {TUTORIAL_VIDEOS.map((video, index) => (
+          <Card
+            key={index}
+            className="bg-slate-900/50 border-slate-800 overflow-hidden hover:border-purple-500/50 transition-all group flex flex-col"
+          >
+            {/* Player de Vídeo Nativo */}
+            <div className="aspect-video bg-black relative">
+              <video
+                controls
+                preload="metadata"
+                className="w-full h-full object-cover"
+                poster="/logo.png" // Opcional: mostra seu logo antes do play
+              >
+                <source src={video.path} type="video/mp4" />
+                Seu navegador não suporta a tag de vídeo.
+              </video>
+            </div>
+
+            {/* Conteúdo do Card */}
+            <CardContent className="p-5 flex-1">
+              <h4 className="text-lg font-bold text-white mb-2 group-hover:text-purple-400 transition-colors">
+                {video.titulo}
+              </h4>
+              <p className="text-sm text-slate-400 leading-relaxed">
+                {video.desc}
+              </p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
     </div>
   );
 }
@@ -396,6 +466,7 @@ export default function Home() {
                 </p>
               </div>
               <VideoShowcase />
+              <TutorialGallery />
             </div>
           </section>
 
