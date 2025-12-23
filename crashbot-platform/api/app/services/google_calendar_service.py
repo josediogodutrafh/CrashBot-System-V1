@@ -3,6 +3,7 @@ Service: Google Calendar
 Gerencia agendamentos de treinamento via Google Calendar API.
 """
 
+import json
 import os
 from datetime import datetime, timedelta
 from typing import Optional
@@ -30,22 +31,31 @@ class GoogleCalendarService:
         self._load_tokens()
 
     def _load_tokens(self):
-        """Carrega tokens salvos do arquivo."""
-        import json
-
+        """Carrega tokens da Variável de Ambiente (Render) ou arquivo local."""
         try:
+            # 1. TENTA LER DA VARIÁVEL DE AMBIENTE (PRIORIDADE NO SERVIDOR)
+            env_token = os.getenv("GOOGLE_TOKEN_JSON_CONTENT")
+            if env_token:
+                print("🔹 Carregando tokens via Variável de Ambiente (Render)...")
+                data = json.loads(env_token)
+                self.access_token = data.get("access_token")
+                self.refresh_token = data.get("refresh_token")
+                return
+
+            # 2. SE NÃO TIVER VARIÁVEL, TENTA LER DO ARQUIVO (LOCAL)
             if os.path.exists(self.token_file):
                 with open(self.token_file, "r") as f:
                     data = json.load(f)
                     self.access_token = data.get("access_token")
                     self.refresh_token = data.get("refresh_token")
+            else:
+                print("⚠️ Nenhum token encontrado (Nem arquivo, nem ENV).")
+
         except Exception as e:
-            print(f"Erro ao carregar tokens: {e}")
+            print(f"❌ Erro ao carregar tokens: {e}")
 
     def _save_tokens(self):
-        """Salva tokens no arquivo."""
-        import json
-
+        """Salva tokens no arquivo (Apenas localmente)."""
         try:
             with open(self.token_file, "w") as f:
                 json.dump(
@@ -56,7 +66,8 @@ class GoogleCalendarService:
                     f,
                 )
         except Exception as e:
-            print(f"Erro ao salvar tokens: {e}")
+            # No Render, pode dar erro de permissão de escrita, o que é normal e ignorável
+            print(f"Aviso: Não foi possível salvar token no disco: {e}")
 
     def get_auth_url(self) -> str:
         """Gera URL para autorização OAuth."""
@@ -122,7 +133,7 @@ class GoogleCalendarService:
     async def _make_request(self, method: str, url: str, **kwargs) -> dict:
         """Faz requisição autenticada para a API do Google."""
         if not self.access_token:
-            return {"error": "Não autenticado. Acesse /api/v1/calendar/auth"}
+            return {"error": "Não autenticado. Configure GOOGLE_TOKEN_JSON_CONTENT."}
 
         headers = {
             "Authorization": f"Bearer {self.access_token}",
@@ -132,31 +143,29 @@ class GoogleCalendarService:
         async with httpx.AsyncClient() as client:
             response = await getattr(client, method)(url, headers=headers, **kwargs)
 
-            # Se token expirou, tenta renovar
+            # Se token expirou (401), tenta renovar
             if response.status_code == 401:
+                print("🔄 Token expirado. Tentando renovar...")
                 if await self.refresh_access_token():
                     headers["Authorization"] = f"Bearer {self.access_token}"
                     response = await getattr(client, method)(
                         url, headers=headers, **kwargs
                     )
                 else:
-                    return {
-                        "error": (
-                            "Token expirado. " "Reautentique em /api/v1/calendar/auth"
-                        )
-                    }
+                    return {"error": "Token expirado e falha na renovação."}
 
-            if response.status_code in [200, 201]:
+            if response.status_code in [200, 201, 204]:
+                if response.status_code == 204:
+                    return {}
                 return response.json()
             else:
-                return {"error": response.text}
+                return {"error": f"Google API Erro: {response.text}"}
 
     async def _buscar_eventos_ocupados(
         self, data_inicio: datetime, data_fim: datetime
     ) -> list[tuple[datetime, datetime]]:
         """
-        Método auxiliar: Busca eventos na API e retorna lista de tuplas
-        (inicio, fim) já convertidas para datetime naive (sem timezone).
+        Método auxiliar: Busca eventos na API e retorna lista de tuplas.
         """
         url = "https://www.googleapis.com/calendar/v3/calendars/primary/events"
         params = {
@@ -177,8 +186,7 @@ class GoogleCalendarService:
             fim_str = evento.get("end", {}).get("dateTime")
 
             if inicio_str and fim_str:
-                # Converte string ISO para datetime e remove timezone
-                # para comparar com os slots gerados localmente
+                # Remove o Z e converte para naive para facilitar comparação local
                 inicio_dt = datetime.fromisoformat(
                     inicio_str.replace("Z", "+00:00")
                 ).replace(tzinfo=None)
@@ -197,11 +205,7 @@ class GoogleCalendarService:
         slot_fim: datetime,
         eventos_ocupados: list[tuple[datetime, datetime]],
     ) -> bool:
-        """
-        Método auxiliar: Verifica se um slot colide com algum evento.
-        Retorna True se houver colisão (ocupado).
-        """
-        # Verifica se ALGUM (any) evento na lista colide com o slot
+        """Verifica se um slot colide com algum evento."""
         return any(
             slot_inicio < evt_fim and slot_fim > evt_inicio
             for evt_inicio, evt_fim in eventos_ocupados
@@ -212,28 +216,17 @@ class GoogleCalendarService:
         data_inicio: datetime,
         data_fim: datetime,
     ) -> dict:
-        """
-        Lista horários disponíveis para agendamento.
-        Busca eventos existentes e retorna slots livres.
-        """
-        # 1. Busca e pré-processa os eventos (remove complexidade de IO e Parsing do loop principal)
+        """Lista horários disponíveis para agendamento."""
         eventos_ocupados = await self._buscar_eventos_ocupados(data_inicio, data_fim)
-
         slots_disponiveis = []
 
-        # Define o cursor inicial para as 10h do dia de início
+        # Começa as 10h
         current = data_inicio.replace(hour=10, minute=0, second=0, microsecond=0)
 
         while current < data_fim:
-            # Regra 1: Apenas Segunda a Sexta (0=Seg, 4=Sex)
-            if current.weekday() < 5:
-                hora = current.hour
-
-                # Regra 2: Horário comercial (10h às 18h)
-                if 10 <= hora < 18:
+            if current.weekday() < 5:  # Seg-Sex
+                if 10 <= current.hour < 18:  # 10h as 18h
                     slot_fim = current + timedelta(minutes=30)
-
-                    # Regra 3: Verifica colisão usando método auxiliar
                     if not self._verificar_colisao(current, slot_fim, eventos_ocupados):
                         slots_disponiveis.append(
                             {
@@ -243,18 +236,12 @@ class GoogleCalendarService:
                             }
                         )
 
-            # Avança 30 minutos
             current += timedelta(minutes=30)
-
-            # Otimização: Se passou das 18h, pula para as 10h do dia seguinte
             if current.hour >= 18:
                 current += timedelta(days=1)
                 current = current.replace(hour=10, minute=0)
 
-        return {
-            "slots": slots_disponiveis,
-            "total": len(slots_disponiveis),
-        }
+        return {"slots": slots_disponiveis, "total": len(slots_disponiveis)}
 
     async def criar_agendamento(
         self,
@@ -266,14 +253,9 @@ class GoogleCalendarService:
         nome_convidado: Optional[str] = None,
         whatsapp_convidado: Optional[str] = None,
     ) -> dict:
-        """
-        Cria um evento de treinamento no Google Calendar.
-        Automaticamente adiciona Google Meet.
-        """
+        """Cria evento no Google Calendar com Meet."""
         url = "https://www.googleapis.com/calendar/v3/calendars/primary/events"
 
-        # Horário de Brasília (UTC-3)
-        inicio = data_hora
         fim = data_hora + timedelta(minutes=duracao_minutos)
 
         descricao_completa = f"""
@@ -293,13 +275,10 @@ Agendado automaticamente via CrashBot
             "summary": titulo,
             "description": descricao_completa,
             "start": {
-                "dateTime": inicio.strftime("%Y-%m-%dT%H:%M:%S"),
+                "dateTime": data_hora.isoformat(),
                 "timeZone": "America/Sao_Paulo",
             },
-            "end": {
-                "dateTime": fim.strftime("%Y-%m-%dT%H:%M:%S"),
-                "timeZone": "America/Sao_Paulo",
-            },
+            "end": {"dateTime": fim.isoformat(), "timeZone": "America/Sao_Paulo"},
             "conferenceData": {
                 "createRequest": {
                     "requestId": f"crashbot-{datetime.now().timestamp()}",
@@ -309,27 +288,23 @@ Agendado automaticamente via CrashBot
             "reminders": {
                 "useDefault": False,
                 "overrides": [
-                    {"method": "email", "minutes": 60 * 24},  # 24h antes
-                    {"method": "popup", "minutes": 60},  # 1h antes
+                    {"method": "email", "minutes": 60 * 24},
+                    {"method": "popup", "minutes": 60},
                 ],
             },
         }
 
-        # Adicionar convidado se tiver email
         if email_convidado:
             evento["attendees"] = [{"email": email_convidado}]
 
-        # Criar evento com conferência
-        result = await self._make_request(
-            "post",
-            f"{url}?conferenceDataVersion=1&sendUpdates=all",
-            json=evento,
-        )
+        # URL com parâmetro para criar o Meet
+        full_url = f"{url}?conferenceDataVersion=1&sendUpdates=all"
+
+        result = await self._make_request("post", full_url, json=evento)
 
         if "error" in result:
             return result
 
-        # Extrair link do Meet
         meet_link = None
         if "conferenceData" in result:
             entry_points = result["conferenceData"].get("entryPoints", [])
@@ -349,23 +324,15 @@ Agendado automaticamente via CrashBot
         }
 
     async def cancelar_agendamento(self, evento_id: str) -> dict:
-        """Cancela um agendamento existente."""
-        url = (
-            "https://www.googleapis.com/calendar/v3/calendars/primary/events/"
-            f"{evento_id}"
-        )
-
+        url = f"https://www.googleapis.com/calendar/v3/calendars/primary/events/{evento_id}"
         async with httpx.AsyncClient() as client:
             headers = {"Authorization": f"Bearer {self.access_token}"}
             response = await client.delete(url, headers=headers)
-
             if response.status_code == 204:
                 return {"success": True, "message": "Agendamento cancelado"}
-            else:
-                return {"success": False, "message": response.text}
+            return {"success": False, "message": response.text}
 
     def is_authenticated(self) -> bool:
-        """Verifica se está autenticado."""
         return self.access_token is not None
 
 
