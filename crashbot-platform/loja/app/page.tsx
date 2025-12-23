@@ -12,7 +12,6 @@ import {
   Eye,
   Lock,
   Monitor,
-  PlayCircle,
   Smartphone,
   Terminal,
   Video,
@@ -141,12 +140,11 @@ function LivingTerminal() {
 }
 
 // --- 3. GALERIA DE VÍDEO ---
-// --- CONFIGURAÇÃO DA LIVE ---
-// Quando for entrar ao vivo, mude para 'ONLINE' e coloque o ID do vídeo do YouTube
+// --- CONFIGURAÇÃO DA LIVE (KICK) ---
 const LIVE_CONFIG = {
-  status: 'OFFLINE', // Opções: 'ONLINE' ou 'OFFLINE'
-  youtubeId: 'SEU_ID_DO_YOUTUBE', // Ex: se o link é youtube.com/watch?v=AbCdEfGh, o ID é 'AbCdEfGh'
-  titulo: 'Sessão Conservador - Banca R$ 1k/ Meta 1.4k',
+  status: 'ONLINE',
+  kickChannel: 'CrashBot_tucunare', // Seu usuário exato
+  titulo: '🔴 AO VIVO: Operação TucunaréBot Sem Cortes',
 };
 
 // --- CONFIGURAÇÃO DOS TUTORIAIS (ARQUIVOS LOCAIS) ---
@@ -183,87 +181,32 @@ function VideoShowcase() {
               TRANSMISSÃO CRIPTOGRAFADA // CANAL 01
             </span>
           </div>
-
-          {/* BADGE DE STATUS */}
-          {LIVE_CONFIG.status === 'ONLINE' ? (
-            <Badge className="bg-red-600 hover:bg-red-700 text-white border-0 animate-pulse flex gap-2">
-              <div className="w-2 h-2 bg-white rounded-full"></div> AO VIVO
-              AGORA
-            </Badge>
-          ) : (
-            <Badge
-              variant="outline"
-              className="border-slate-600 text-slate-500 flex gap-2"
-            >
-              <div className="w-2 h-2 bg-slate-500 rounded-full"></div> SINAL
-              DESLIGADO
-            </Badge>
-          )}
+          <Badge className="bg-red-600 text-white border-0 animate-pulse flex gap-2">
+            <div className="w-2 h-2 bg-white rounded-full"></div> AO VIVO
+          </Badge>
         </div>
 
-        {/* TELA DO VÍDEO */}
-        <div className="aspect-video bg-black relative flex items-center justify-center">
-          {LIVE_CONFIG.status === 'ONLINE' ? (
-            // --- MODO ONLINE: MOSTRA O YOUTUBE ---
-            <iframe
-              width="100%"
-              height="100%"
-              src={`https://www.youtube.com/embed/${LIVE_CONFIG.youtubeId}?autoplay=1&controls=1&rel=0&modestbranding=1`}
-              title="Live CrashBot"
-              frameBorder="0"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-              className="relative z-10"
-            ></iframe>
-          ) : (
-            // --- MODO OFFLINE: MOSTRA AVISO ---
-            <div className="text-center p-10 relative z-10">
-              <div className="w-20 h-20 bg-slate-800/50 rounded-full flex items-center justify-center mx-auto mb-6 border border-slate-700">
-                <div className="w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center animate-pulse">
-                  <PlayCircle className="w-8 h-8 text-slate-600" />
-                </div>
-              </div>
-              <h3 className="text-2xl font-bold text-white mb-2">
-                Transmissão Encerrada
-              </h3>
-              <p className="text-slate-400 max-w-md mx-auto mb-8">
-                Nossas sessões ao vivo ocorrem periodicamente. Entre no grupo
-                VIP para ser notificado da próxima operação.
-              </p>
-              <Button
-                variant="outline"
-                className="border-purple-500 text-purple-400 hover:bg-purple-500 hover:text-white"
-              >
-                🔔 Avise-me da próxima Live
-              </Button>
-            </div>
-          )}
-
-          {/* EFEITOS VISUAIS DE FUNDO (GRID) */}
-          <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-5 pointer-events-none"></div>
-          <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:40px_40px] pointer-events-none"></div>
+        {/* ÁREA DO PLAYER KICK (SEM CÓDIGO ANTIGO) */}
+        <div className="aspect-video bg-black relative flex items-center justify-center overflow-hidden">
+          <iframe
+            src={`https://player.kick.com/${LIVE_CONFIG.kickChannel}?autoplay=true&muted=true`}
+            height="100%"
+            width="100%"
+            frameBorder="0"
+            scrolling="no"
+            allowFullScreen={true}
+            className="relative z-10 w-full h-full"
+          />
+          <div className="absolute top-4 left-4 z-20 flex items-center gap-2">
+            <span className="bg-black/80 text-[#53FC18] text-xs font-bold px-2 py-1 rounded border border-[#53FC18]/30">
+              SINAL KICK 🟢
+            </span>
+          </div>
         </div>
 
-        {/* RODAPÉ DO MONITOR (DADOS) */}
-        <div className="bg-[#0b1121] p-4 border-t border-slate-800 grid grid-cols-2 md:grid-cols-4 gap-4 text-xs font-mono">
-          <div>
-            <div className="text-slate-500 mb-1">DATA CENTER</div>
-            <div className="text-green-400">CUIABÁ/MT (BR)</div>
-          </div>
-          <div>
-            <div className="text-slate-500 mb-1">LATÊNCIA</div>
-            <div className="text-blue-400">
-              {LIVE_CONFIG.status === 'ONLINE' ? '12ms' : '--'}
-            </div>
-          </div>
-          <div>
-            <div className="text-slate-500 mb-1">BOT VERSION</div>
-            <div className="text-purple-400">v8.3 STABLE</div>
-          </div>
-          <div className="text-right">
-            <div className="text-slate-500 mb-1">TÍTULO DA SESSÃO</div>
-            <div className="text-white font-bold">{LIVE_CONFIG.titulo}</div>
-          </div>
+        {/* RODAPÉ SIMPLES */}
+        <div className="bg-[#0b1121] p-4 border-t border-slate-800 text-xs font-mono text-center text-slate-500">
+          BOT VERSION v8.3 STABLE // {LIVE_CONFIG.titulo}
         </div>
       </Card>
     </div>
