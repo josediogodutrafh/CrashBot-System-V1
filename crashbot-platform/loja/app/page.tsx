@@ -143,7 +143,7 @@ function LivingTerminal() {
 // --- CONFIGURAÇÃO DA LIVE (KICK) ---
 const LIVE_CONFIG = {
   status: 'ONLINE',
-  kickChannel: 'CrashBot_tucunare', // Seu usuário exato
+  kickChannel: 'crashbot-tucunare', // Seu usuário exato
   titulo: '🔴 AO VIVO: Operação TucunaréBot Sem Cortes',
 };
 
