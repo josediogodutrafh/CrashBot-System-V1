@@ -1,0 +1,328 @@
+/* ==========================================================================
+   CRASH AI DASHBOARD - Futuristic Dark Theme
+   ========================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+/* === RESET & BASE === */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    background: #0a0a1a;
+    color: #e0e0ff;
+    font-family: 'Inter', -apple-system, sans-serif;
+    overflow-x: hidden;
+}
+
+/* === ANIMATED BACKGROUND === */
+body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background:
+        radial-gradient(ellipse at 20% 50%, rgba(0, 240, 255, 0.03) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 20%, rgba(255, 0, 255, 0.03) 0%, transparent 50%),
+        radial-gradient(ellipse at 50% 80%, rgba(0, 255, 136, 0.02) 0%, transparent 50%);
+    pointer-events: none;
+    z-index: -1;
+}
+
+/* === SCROLLBAR === */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+::-webkit-scrollbar-track {
+    background: #0a0a1a;
+}
+::-webkit-scrollbar-thumb {
+    background: #2a2a5a;
+    border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: #00f0ff;
+}
+
+/* === NAVBAR === */
+.navbar {
+    background: linear-gradient(180deg, #111128 0%, #0d0d22 100%) !important;
+    border-bottom: 1px solid #2a2a5a;
+    box-shadow: 0 2px 20px rgba(0, 240, 255, 0.1);
+    padding: 0.5rem 2rem;
+}
+
+.navbar-brand {
+    font-family: 'Orbitron', monospace !important;
+    font-weight: 700 !important;
+    font-size: 1.4rem !important;
+    background: linear-gradient(135deg, #00f0ff, #ff00ff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    letter-spacing: 2px;
+}
+
+.nav-link {
+    color: #8888aa !important;
+    font-family: 'Inter', sans-serif;
+    font-weight: 500;
+    font-size: 0.9rem;
+    letter-spacing: 0.5px;
+    padding: 0.6rem 1.2rem !important;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+    margin: 0 0.2rem;
+}
+
+.nav-link:hover,
+.nav-link.active {
+    color: #00f0ff !important;
+    background: rgba(0, 240, 255, 0.08);
+    text-shadow: 0 0 10px rgba(0, 240, 255, 0.5);
+}
+
+/* === KPI CARDS === */
+.kpi-card {
+    background: linear-gradient(135deg, #161637 0%, #111128 100%);
+    border: 1px solid #2a2a5a;
+    border-radius: 16px;
+    padding: 1.5rem;
+    position: relative;
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+.kpi-card:hover {
+    border-color: #00f0ff;
+    box-shadow: 0 0 25px rgba(0, 240, 255, 0.15);
+    transform: translateY(-2px);
+}
+
+.kpi-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--card-accent, #00f0ff), transparent);
+}
+
+.kpi-label {
+    font-family: 'Inter', sans-serif;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: #8888aa;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin-bottom: 0.5rem;
+}
+
+.kpi-value {
+    font-family: 'Orbitron', monospace;
+    font-size: 1.8rem;
+    font-weight: 700;
+    line-height: 1;
+    margin-bottom: 0.3rem;
+}
+
+.kpi-sub {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    color: #6666aa;
+}
+
+/* === CHART CONTAINERS === */
+.chart-container {
+    background: linear-gradient(135deg, #161637 0%, #111128 100%);
+    border: 1px solid #2a2a5a;
+    border-radius: 16px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    transition: all 0.3s ease;
+}
+
+.chart-container:hover {
+    border-color: rgba(0, 240, 255, 0.3);
+    box-shadow: 0 0 20px rgba(0, 240, 255, 0.08);
+}
+
+.chart-title {
+    font-family: 'Orbitron', monospace;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: #00f0ff;
+    letter-spacing: 1px;
+    margin-bottom: 1rem;
+    text-transform: uppercase;
+}
+
+/* === GOAL CARDS === */
+.goal-card {
+    background: linear-gradient(135deg, #161637 0%, #111128 100%);
+    border: 1px solid #2a2a5a;
+    border-radius: 16px;
+    padding: 1.8rem;
+    margin-bottom: 1rem;
+    position: relative;
+    overflow: hidden;
+}
+
+.goal-card::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--goal-color, #00f0ff);
+    opacity: 0.6;
+}
+
+.goal-label {
+    font-family: 'Orbitron', monospace;
+    font-size: 0.8rem;
+    font-weight: 500;
+    letter-spacing: 1px;
+    margin-bottom: 0.8rem;
+}
+
+.goal-progress {
+    height: 8px;
+    background: #1a1a3a;
+    border-radius: 4px;
+    overflow: hidden;
+    margin: 0.8rem 0;
+}
+
+.goal-progress-bar {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 1s ease;
+    box-shadow: 0 0 10px var(--goal-color, #00f0ff);
+}
+
+.goal-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.4rem;
+    font-weight: 700;
+}
+
+.goal-target {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    color: #6666aa;
+}
+
+/* === DATA TABLE === */
+.dash-table-container {
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.dash-spreadsheet-container .dash-spreadsheet-inner th {
+    background: #161637 !important;
+    color: #00f0ff !important;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    border-bottom: 2px solid #2a2a5a !important;
+    padding: 12px 16px !important;
+}
+
+.dash-spreadsheet-container .dash-spreadsheet-inner td {
+    background: #111128 !important;
+    color: #e0e0ff !important;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    border-bottom: 1px solid #1a1a3a !important;
+    padding: 10px 16px !important;
+}
+
+.dash-spreadsheet-container .dash-spreadsheet-inner tr:hover td {
+    background: #1a1a4a !important;
+}
+
+/* === FILTER PANEL === */
+.filter-panel {
+    background: linear-gradient(135deg, #161637 0%, #111128 100%);
+    border: 1px solid #2a2a5a;
+    border-radius: 16px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.filter-label {
+    font-family: 'Inter', sans-serif;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #8888aa;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 0.5rem;
+}
+
+/* Dash components override */
+.Select-control,
+.DateInput_input {
+    background: #1a1a3a !important;
+    border: 1px solid #2a2a5a !important;
+    color: #e0e0ff !important;
+    border-radius: 8px !important;
+}
+
+input[type="number"],
+input[type="text"],
+.dash-input {
+    background: #1a1a3a !important;
+    border: 1px solid #2a2a5a !important;
+    color: #e0e0ff !important;
+    border-radius: 8px !important;
+    padding: 0.5rem 1rem !important;
+    font-family: 'JetBrains Mono', monospace !important;
+}
+
+input:focus {
+    border-color: #00f0ff !important;
+    box-shadow: 0 0 10px rgba(0, 240, 255, 0.2) !important;
+    outline: none !important;
+}
+
+/* === FOOTER === */
+.footer {
+    text-align: center;
+    padding: 2rem;
+    color: #4444666;
+    font-size: 0.75rem;
+    font-family: 'JetBrains Mono', monospace;
+    border-top: 1px solid #1a1a3a;
+    margin-top: 2rem;
+}
+
+/* === ANIMATIONS === */
+@keyframes pulse-glow {
+    0%, 100% { box-shadow: 0 0 5px rgba(0, 240, 255, 0.2); }
+    50% { box-shadow: 0 0 20px rgba(0, 240, 255, 0.4); }
+}
+
+@keyframes fade-in {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-in {
+    animation: fade-in 0.5s ease forwards;
+}
+
+/* === RESPONSIVE === */
+@media (max-width: 768px) {
+    .kpi-value { font-size: 1.3rem; }
+    .navbar-brand { font-size: 1.1rem !important; }
+}
