@@ -1,10 +1,11 @@
 ﻿"""
-CrashBot API - FastAPI
+TucunaréBot API - FastAPI
 Versão 2.0
 
-API moderna para gestão do CrashBot.
-ATUALIZADO: Inclui router de agendamento Google Calendar (Item 5)
+API para gestão de licenças, pagamentos, telemetria e análise IA.
 """
+
+from contextlib import asynccontextmanager
 
 from app.database import get_db
 from app.routers.auth import router as auth_router
@@ -15,8 +16,6 @@ from app.routers.notify import router as notify_router
 from app.routers.pagamento import router as pagamento_router
 from app.routers.telemetria import router as telemetria_router
 from app.routers.versao import router as versao_router
-
-# NOVOS ROUTERS - Item 1: Notificações para Clientes
 from app.routers.webhook import router as webhook_router
 from app.routers.websocket import router as websocket_router
 from app.schemas.licenca import ValidarLicencaRequest
@@ -33,15 +32,30 @@ from slowapi.util import get_remote_address
 limiter = Limiter(key_func=get_remote_address)
 
 # ============================================================================
+# LIFESPAN (substitui on_event deprecated)
+# ============================================================================
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup e shutdown da API."""
+    print("TucunaréBot API iniciando...")
+    print("Documentação: http://localhost:8000/api/docs")
+    yield
+    print("TucunaréBot API encerrando...")
+
+
+# ============================================================================
 # CONFIGURAÇÃO DA APP
 # ============================================================================
 
 app = FastAPI(
-    title="CrashBot API",
-    description="API moderna para gestão, vendas e telemetria do CrashBot",
+    title="TucunaréBot API",
+    description="API para gestão de licenças, pagamentos, telemetria e análise IA",
     version="2.0.0",
     docs_url="/api/docs",
     redoc_url="/api/redoc",
+    lifespan=lifespan,
 )
 
 # Adiciona rate limiter à app
@@ -93,7 +107,7 @@ app.include_router(notify_router)
 async def root():
     """Rota raiz - Informações da API."""
     return {
-        "name": "CrashBot API",
+        "name": "TucunaréBot API",
         "version": "2.0.0",
         "status": "online",
         "docs": "/api/docs",
@@ -181,27 +195,6 @@ async def internal_error_handler(request, exc):
             "message": "Erro interno do servidor",
         },
     )
-
-
-# ============================================================================
-# STARTUP/SHUTDOWN EVENTS
-# ============================================================================
-
-
-@app.on_event("startup")
-async def startup_event():
-    """Executado quando a API inicia."""
-    print(" CrashBot API iniciando...")
-    print(" Documentação: http://localhost:8000/api/docs")
-    print(" Telegram Webhook: /api/v1/telegram/webhook")
-    print(" Client Notifications: /api/v1/notify")
-    print(" Google Calendar: /api/v1/calendar")
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Executado quando a API desliga."""
-    print(" CrashBot API encerrando...")
 
 
 # ============================================================================

@@ -25,7 +25,7 @@ export const metadata: Metadata = {
     template: '%s | TucunaréBot',
   },
   description:
-    'O TucunaréBot é um sistema de automação por visão computacional para Crash Game. Tecnologia indetectável, latência zero e disciplina algorítmica. Opere 24/7 com inteligência artificial.',
+    'O TucunaréBot é um sistema de automação com interceptação WebSocket e IA para Crash Game. Precisão total, latência zero e disciplina algorítmica. Opere 24/7 com inteligência artificial.',
   keywords: [
     'bot crash',
     'crash game bot',
@@ -65,7 +65,7 @@ export const metadata: Metadata = {
     url: 'https://tucunarebot.com.br',
     title: 'TucunaréBot - Robô de Automação para Crash Game',
     description:
-      'Sistema de automação por visão computacional. Tecnologia indetectável, latência zero, opere 24/7.',
+      'Sistema de automação com WebSocket e IA. Precisão total, latência zero, opere 24/7.',
     siteName: 'TucunaréBot',
     images: [
       {
@@ -80,7 +80,7 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     title: 'TucunaréBot - Robô de Automação para Crash Game',
     description:
-      'Sistema de automação por visão computacional. Tecnologia indetectável, latência zero.',
+      'Sistema de automação com WebSocket e IA. Precisão total, latência zero.',
     images: ['https://tucunarebot.com.br/og-image.jpg'],
   },
   alternates: {
@@ -97,7 +97,7 @@ const organizationSchema = {
   legalName: 'Tucunaré Locação de Máquinas e Equipamentos LTDA',
   url: 'https://tucunarebot.com.br',
   logo: 'https://tucunarebot.com.br/logo.png',
-  description: 'Sistema de automação por visão computacional para Crash Game.',
+  description: 'Sistema de automação com WebSocket e IA para Crash Game.',
   address: {
     '@type': 'PostalAddress',
     addressLocality: 'Tangará da Serra',
@@ -117,7 +117,7 @@ const softwareSchema = {
   '@type': 'SoftwareApplication',
   name: 'TucunaréBot',
   applicationCategory: 'GameApplication',
-  operatingSystem: 'Windows',
+  operatingSystem: 'Windows, macOS',
   offers: {
     '@type': 'Offer',
     price: '49.90',
@@ -130,7 +130,7 @@ const softwareSchema = {
     ratingCount: '150',
   },
   description:
-    'Robô de automação para Crash Game com visão computacional e inteligência artificial.',
+    'Robô de automação para Crash Game com interceptação WebSocket e inteligência artificial.',
 };
 
 export default function RootLayout({
