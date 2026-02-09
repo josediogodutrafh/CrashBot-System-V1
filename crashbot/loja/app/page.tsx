@@ -58,14 +58,14 @@ function MarketTicker() {
           DETECTADA
         </span>
         <span className="flex items-center gap-2">
-          <Cpu className="w-3 h-3 text-blue-400" /> LATÊNCIA OCR: 12ms
+          <Cpu className="w-3 h-3 text-blue-400" /> LATÊNCIA WS: 3ms
         </span>
         <span className="flex items-center gap-2">
           <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>{' '}
           BOT #889: META BATIDA 🚀
         </span>
         <span className="flex items-center gap-2 text-purple-400">
-          <Eye className="w-3 h-3" /> VISÃO COMPUTACIONAL: ATIVA
+          <Eye className="w-3 h-3" /> INTERCEPTAÇÃO WEBSOCKET: ATIVA
         </span>
       </div>
     </div>
@@ -75,13 +75,13 @@ function MarketTicker() {
 // --- 2. TERMINAL INTELIGENTE ---
 function LivingTerminal() {
   const [lines, setLines] = useState<string[]>([
-    '> SYSTEM_INIT: CrashBot Core v3.2',
+    '> SYSTEM_INIT: TucunaréBot Engine v2.0',
   ]);
 
   useEffect(() => {
     const sequence = [
-      { text: '> CONNECT: Optical Engine (OCR)... OK', delay: 500 },
-      { text: '> SCANNING: Analisando últimos 50 candles...', delay: 1500 },
+      { text: '> CONNECT: WebSocket Capture (CDP)... OK', delay: 500 },
+      { text: '> SCANNING: Analisando últimos 50 rounds...', delay: 1500 },
       {
         text: '> PATTERN: Tendência de Recuperação (94%)',
         delay: 2500,
@@ -206,7 +206,7 @@ function VideoShowcase() {
 
         {/* RODAPÉ SIMPLES */}
         <div className="bg-[#0b1121] p-4 border-t border-slate-800 text-xs font-mono text-center text-slate-500">
-          BOT VERSION v8.3 STABLE // {LIVE_CONFIG.titulo}
+          BOT VERSION v2.0 STABLE // {LIVE_CONFIG.titulo}
         </div>
       </Card>
     </div>
@@ -345,7 +345,7 @@ export default function Home() {
               <div className="space-y-8 relative">
                 <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-purple-500/30 bg-purple-500/10 text-purple-300 text-[10px] font-bold uppercase tracking-widest">
                   <span className="w-2 h-2 rounded-full bg-purple-400 animate-pulse"></span>
-                  Nova Versão v8.3 Disponível
+                  Nova Versão v2.0 Disponível
                 </div>
                 <h1 className="text-5xl md:text-7xl font-bold leading-tight tracking-tight">
                   <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-pink-400 to-blue-400 animate-gradient-x">
@@ -355,9 +355,9 @@ export default function Home() {
                   Automatize suas apostas com Inteligência.
                 </h1>
                 <p className="text-lg text-slate-400 max-w-xl leading-relaxed">
-                  Este sistema utiliza <strong>Visão Computacional</strong> para
-                  ler os multiplicadores externamente, permitindo encontrar
-                  padrões Lucrativos.
+                  Sistema de automação com <strong>Interceptação WebSocket</strong> e{' '}
+                  <strong>Inteligência Artificial</strong> para análise de padrões
+                  e execução estratégica em tempo real.
                 </p>
                 <div className="flex flex-col sm:flex-row gap-4">
                   <Link href="/checkout/trial" className="w-full sm:w-auto">
@@ -389,7 +389,7 @@ export default function Home() {
                       <div className="w-3 h-3 rounded-full bg-green-500/50"></div>
                     </div>
                     <div className="ml-auto text-[10px] text-slate-500 font-mono">
-                      crashbot_engine.exe — running
+                      tucunarebot_agent — running
                     </div>
                   </div>
                   <LivingTerminal />
@@ -715,7 +715,7 @@ export default function Home() {
                     </span>
                   </div>
                   <p className="text-xs text-slate-400">
-                    Windows 10 ou 11 (64 bits)
+                    Windows 10/11 ou macOS (64 bits)
                   </p>
                 </Card>
 
@@ -765,7 +765,7 @@ export default function Home() {
                     </span>
                   </div>
                   <p className="text-xs text-red-300">
-                    Não funciona em Celular, Tablet, Mac ou Linux.
+                    Não funciona em Celular ou Tablet.
                   </p>
                 </Card>
               </div>
@@ -776,7 +776,7 @@ export default function Home() {
           <footer className="py-12 text-center text-slate-600 text-sm bg-[#010409]">
             <div className="mb-4 text-2xl">🤖</div>
             <p className="mb-4">
-              © 2025 CrashBot AI. Todos os direitos reservados.
+              © 2026 TucunaréBot. Todos os direitos reservados.
             </p>
             <div className="flex justify-center gap-6 text-xs">
               <Link href="/manual" className="hover:text-purple-400">

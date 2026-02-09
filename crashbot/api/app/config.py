@@ -32,11 +32,8 @@ class Settings(BaseSettings):
     # ========================================================================
     # BANCO DE DADOS
     # ========================================================================
-    # PostgreSQL no Render (igual ao antigo)
-    DATABASE_URL: str = (
-        "postgresql://crash_db_user:BQudpCSoH52uCJ1Nn7qDT9bHyxeUllSU@"
-        "dpg-d4i9h3re5dus73egah5g-a.oregon-postgres.render.com/crash_db"
-    )
+    # PostgreSQL no Render - definir via .env
+    DATABASE_URL: str = ""
 
     # ========================================================================
     # REDIS (opcional - para cache e sessions)
