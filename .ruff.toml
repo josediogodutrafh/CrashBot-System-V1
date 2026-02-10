@@ -1,0 +1,18 @@
+# Ruff configuration (alternativa ao pyproject.toml)
+# Este arquivo existe para facilitar customizações rápidas
+
+# Mesma configuração que pyproject.toml
+line-length = 88
+target-version = "py310"
+
+exclude = [
+    ".git",
+    ".mypy_cache",
+    ".ruff_cache",
+    ".venv",
+    "venv",
+    "__pycache__",
+    "build",
+    "dist",
+    "migrations",
+]

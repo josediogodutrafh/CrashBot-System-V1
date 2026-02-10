@@ -1,0 +1,222 @@
+# ============================================
+# PRE-COMMIT HOOKS - CRASHBOT SYSTEM
+# ============================================
+# Garante qualidade de código antes de commits
+#
+# Instalação:
+#   pip install pre-commit
+#   pre-commit install
+#
+# Uso:
+#   git commit (roda automaticamente)
+#   pre-commit run --all-files (rodar manualmente)
+#   pre-commit run --files <file> (rodar em arquivo específico)
+
+repos:
+  # ============================================
+  # HOOKS GERAIS
+  # ============================================
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      # Previne commits em branches protegidas
+      - id: no-commit-to-branch
+        args: [--branch, main, --branch, master, --branch, production]
+
+      # Remove whitespace desnecessário
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+
+      # Garante final de arquivo com newline
+      - id: end-of-file-fixer
+
+      # Valida YAML
+      - id: check-yaml
+        args: [--unsafe]  # Permite tags YAML customizadas
+
+      # Valida JSON
+      - id: check-json
+
+      # Valida TOML
+      - id: check-toml
+
+      # Previne arquivos grandes (>500KB)
+      - id: check-added-large-files
+        args: [--maxkb=500]
+
+      # Detecta merge conflict markers
+      - id: check-merge-conflict
+
+      # Previne commits de private keys
+      - id: detect-private-key
+
+      # Valida que scripts têm shebang
+      - id: check-executables-have-shebangs
+
+      # Fixa encoding UTF-8
+      - id: mixed-line-ending
+        args: [--fix=lf]
+
+      # Previne commit de credenciais AWS
+      - id: detect-aws-credentials
+        args: [--allow-missing-credentials]
+
+  # ============================================
+  # PYTHON - FORMATAÇÃO
+  # ============================================
+
+  # Black - Auto-formatter
+  - repo: https://github.com/psf/black
+    rev: 24.1.1
+    hooks:
+      - id: black
+        language_version: python3.10
+        args: [--line-length=88]
+
+  # isort - Organiza imports
+  - repo: https://github.com/PyCQA/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+        args: [--profile=black]
+
+  # ============================================
+  # PYTHON - LINTING
+  # ============================================
+
+  # Ruff - Linter ultra-rápido
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.1.15
+    hooks:
+      # Linter
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+      # Formatter (opcional, Black já formata)
+      # - id: ruff-format
+
+  # ============================================
+  # PYTHON - SEGURANÇA
+  # ============================================
+
+  # Bandit - Detecta vulnerabilidades de segurança
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.7.6
+    hooks:
+      - id: bandit
+        args: [-c, pyproject.toml]
+        additional_dependencies: ["bandit[toml]"]
+        exclude: ^tests/
+
+  # ============================================
+  # PYTHON - TYPE CHECKING (Opcional - pode ser lento)
+  # ============================================
+
+  # MyPy - Type checking (descomente se quiser usar)
+  # - repo: https://github.com/pre-commit/mirrors-mypy
+  #   rev: v1.8.0
+  #   hooks:
+  #     - id: mypy
+  #       additional_dependencies: [types-all]
+  #       args: [--ignore-missing-imports]
+
+  # ============================================
+  # PYTHON - DOCSTRINGS
+  # ============================================
+
+  # Pydocstyle - Valida docstrings (opcional)
+  # - repo: https://github.com/PyCQA/pydocstyle
+  #   rev: 6.3.0
+  #   hooks:
+  #     - id: pydocstyle
+  #       args: [--convention=google]
+
+  # ============================================
+  # JAVASCRIPT/TYPESCRIPT - FORMATAÇÃO
+  # ============================================
+
+  # Prettier - Formata JS/TS/JSON/YAML/Markdown
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v3.1.0
+    hooks:
+      - id: prettier
+        types_or: [javascript, jsx, ts, tsx, json, yaml, markdown]
+        exclude: ^(package-lock\.json|\.next/)
+
+  # ESLint - Linting JS/TS
+  - repo: https://github.com/pre-commit/mirrors-eslint
+    rev: v8.56.0
+    hooks:
+      - id: eslint
+        files: \.(js|jsx|ts|tsx)$
+        types: [file]
+        args: [--fix, --max-warnings=0]
+        additional_dependencies:
+          - eslint@8.56.0
+          - eslint-config-next
+          - eslint-config-prettier
+
+  # ============================================
+  # SECRETS DETECTION
+  # ============================================
+
+  # Detect-secrets - Previne commit de secrets
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.4.0
+    hooks:
+      - id: detect-secrets
+        args: [--baseline, .secrets.baseline]
+        exclude: package-lock.json
+
+  # ============================================
+  # MARKDOWN
+  # ============================================
+
+  # Markdownlint
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.38.0
+    hooks:
+      - id: markdownlint
+        args: [--fix]
+
+  # ============================================
+  # COMMIT MESSAGES (Opcional)
+  # ============================================
+
+  # Commitizen - Valida formato de commit messages
+  # - repo: https://github.com/commitizen-tools/commitizen
+  #   rev: v3.13.0
+  #   hooks:
+  #     - id: commitizen
+  #       stages: [commit-msg]
+
+# ============================================
+# CONFIGURAÇÃO GLOBAL
+# ============================================
+default_language_version:
+  python: python3.10
+  node: "18.0.0"
+
+# Stages de execução
+default_stages: [commit, push]
+
+# Execução paralela para performance
+fail_fast: false  # Continue mesmo se um hook falhar (para ver todos os erros)
+
+# Exclude patterns globais
+exclude: |
+  (?x)^(
+      \.git/|
+      \.venv/|
+      venv/|
+      node_modules/|
+      __pycache__/|
+      \.next/|
+      build/|
+      dist/|
+      htmlcov/|
+      \.pytest_cache/|
+      \.mypy_cache/|
+      \.ruff_cache/|
+      migrations/|
+      .*\.egg-info/
+  )

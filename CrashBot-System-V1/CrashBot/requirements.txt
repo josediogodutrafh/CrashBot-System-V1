@@ -1,0 +1,95 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# CRASHBOT v3.0 - REQUIREMENTS
+# ═══════════════════════════════════════════════════════════════════════════════
+# Instale com: pip install -r requirements.txt
+#
+# IMPORTANTE: Para PyTorch com GPU, instale separadamente:
+#   pip install torch --index-url https://download.pytorch.org/whl/cu118
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# ─────────────────────────────────────────────────────────────────────────────────
+# CORE - Obrigatórios
+# ─────────────────────────────────────────────────────────────────────────────────
+
+# Computação numérica
+numpy>=1.24.0
+
+# Visão computacional
+opencv-python>=4.8.0
+Pillow>=10.0.0
+
+# OCR
+pytesseract>=0.3.10
+
+# Automação (cliques e digitação)
+pyautogui>=0.9.54
+
+# Captura de tela
+mss>=9.0.0
+
+# Requisições HTTP (telemetria)
+requests>=2.31.0
+
+# ─────────────────────────────────────────────────────────────────────────────────
+# GUI - Interface Gráfica
+# ─────────────────────────────────────────────────────────────────────────────────
+
+dearpygui>=1.10.0
+
+# ─────────────────────────────────────────────────────────────────────────────────
+# ML - Machine Learning (Opcional mas recomendado)
+# ─────────────────────────────────────────────────────────────────────────────────
+
+# Deep Learning
+torch>=2.0.0
+
+# Reinforcement Learning
+stable-baselines3>=2.1.0
+gymnasium>=0.29.0
+
+# Otimização de hiperparâmetros
+optuna>=3.4.0
+
+# Manipulação de dados
+pandas>=2.0.0
+
+# Serialização de modelos
+joblib>=1.3.0
+
+# ML Clássico
+scikit-learn>=1.3.0
+
+# ─────────────────────────────────────────────────────────────────────────────────
+# UTILIDADES
+# ─────────────────────────────────────────────────────────────────────────────────
+
+# Barra de progresso
+tqdm>=4.66.0
+
+# Validação de dados
+pydantic>=2.0.0
+
+# Terminal colorido
+colorama>=0.4.6
+
+# ─────────────────────────────────────────────────────────────────────────────────
+# COMPILAÇÃO (Opcional - para gerar .exe)
+# ─────────────────────────────────────────────────────────────────────────────────
+
+# nuitka>=2.0
+# ordered-set>=4.1.0
+
+# ─────────────────────────────────────────────────────────────────────────────────
+# DESENVOLVIMENTO (Opcional)
+# ─────────────────────────────────────────────────────────────────────────────────
+
+# Testes
+# pytest>=7.4.0
+# pytest-cov>=4.1.0
+
+# Formatação
+# black>=23.0.0
+# isort>=5.12.0
+
+# Type checking
+# mypy>=1.5.0

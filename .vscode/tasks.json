@@ -1,0 +1,719 @@
+{
+  // ============================================
+  // CRASHBOT SYSTEM - TASKS AUTOMATION
+  // ============================================
+  // See https://go.microsoft.com/fwlink/?LinkId=733558
+  // for the documentation about the tasks.json format
+
+  "version": "2.0.0",
+  "tasks": [
+    // ============================================
+    // FORMATAÇÃO E LINTING
+    // ============================================
+    {
+      "label": "🎨 Format: Black",
+      "type": "shell",
+      "command": "black",
+      "args": [
+        "CrashBot/",
+        "Crash/",
+        "crashbot-platform/api/",
+        "tests/"
+      ],
+      "group": "none",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": false
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "🎨 Format: isort",
+      "type": "shell",
+      "command": "isort",
+      "args": [
+        "CrashBot/",
+        "Crash/",
+        "crashbot-platform/api/",
+        "tests/"
+      ],
+      "group": "none",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "🎨 Format: All (Black + isort)",
+      "dependsOn": [
+        "🎨 Format: Black",
+        "🎨 Format: isort"
+      ],
+      "dependsOrder": "sequence",
+      "group": {
+        "kind": "build",
+        "isDefault": false
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "🔍 Lint: Ruff",
+      "type": "shell",
+      "command": "ruff",
+      "args": [
+        "check",
+        "CrashBot/",
+        "Crash/",
+        "crashbot-platform/api/",
+        "tests/"
+      ],
+      "group": "none",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": {
+        "owner": "ruff",
+        "fileLocation": ["relative", "${workspaceFolder}"],
+        "pattern": {
+          "regexp": "^(.+):(\\d+):(\\d+):\\s+(.+)\\s+\\[(.+)\\]$",
+          "file": 1,
+          "line": 2,
+          "column": 3,
+          "message": 4,
+          "code": 5
+        }
+      }
+    },
+    {
+      "label": "🔍 Lint: Ruff (Auto-fix)",
+      "type": "shell",
+      "command": "ruff",
+      "args": [
+        "check",
+        "--fix",
+        "CrashBot/",
+        "Crash/",
+        "crashbot-platform/api/",
+        "tests/"
+      ],
+      "group": "none",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "🔍 Lint: MyPy",
+      "type": "shell",
+      "command": "mypy",
+      "args": [
+        "CrashBot/",
+        "Crash/",
+        "crashbot-platform/api/"
+      ],
+      "group": "none",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": {
+        "owner": "mypy",
+        "fileLocation": ["relative", "${workspaceFolder}"],
+        "pattern": {
+          "regexp": "^(.+):(\\d+):\\s+(.+):\\s+(.+)$",
+          "file": 1,
+          "line": 2,
+          "severity": 3,
+          "message": 4
+        }
+      }
+    },
+    {
+      "label": "🔒 Security: Bandit",
+      "type": "shell",
+      "command": "bandit",
+      "args": [
+        "-r",
+        "CrashBot/",
+        "Crash/",
+        "crashbot-platform/api/",
+        "-c",
+        "pyproject.toml"
+      ],
+      "group": "none",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "✅ Check All (Format + Lint + Security)",
+      "dependsOn": [
+        "🎨 Format: All (Black + isort)",
+        "🔍 Lint: Ruff (Auto-fix)",
+        "🔒 Security: Bandit"
+      ],
+      "dependsOrder": "sequence",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": []
+    },
+
+    // ============================================
+    // TESTES
+    // ============================================
+    {
+      "label": "🧪 Test: All",
+      "type": "shell",
+      "command": "pytest",
+      "args": [
+        "-v",
+        "--tb=short"
+      ],
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "🧪 Test: Unit Only",
+      "type": "shell",
+      "command": "pytest",
+      "args": [
+        "-v",
+        "-m",
+        "unit"
+      ],
+      "group": "test",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "🧪 Test: Fast (No Slow)",
+      "type": "shell",
+      "command": "pytest",
+      "args": [
+        "-v",
+        "-m",
+        "not slow"
+      ],
+      "group": "test",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "🧪 Test: Coverage",
+      "type": "shell",
+      "command": "pytest",
+      "args": [
+        "--cov=CrashBot",
+        "--cov=crashbot-platform/api",
+        "--cov-report=html",
+        "--cov-report=term-missing",
+        "-v"
+      ],
+      "group": "test",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "🧪 Test: Watch Mode",
+      "type": "shell",
+      "command": "pytest-watch",
+      "args": [
+        "--",
+        "-v"
+      ],
+      "group": "test",
+      "isBackground": true,
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": []
+    },
+
+    // ============================================
+    // EXECUÇÃO - BOT
+    // ============================================
+    {
+      "label": "🤖 Run: CrashBot (Main)",
+      "type": "shell",
+      "command": "python",
+      "args": [
+        "main.py"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/CrashBot"
+      },
+      "group": "none",
+      "isBackground": true,
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "focus": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "🤖 Run: CrashBot (Headless)",
+      "type": "shell",
+      "command": "python",
+      "args": [
+        "main.py",
+        "--headless"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/CrashBot"
+      },
+      "group": "none",
+      "isBackground": true,
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "🤖 Run: CrashBot (Calibrate)",
+      "type": "shell",
+      "command": "python",
+      "args": [
+        "main.py",
+        "--calibrate"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/CrashBot"
+      },
+      "group": "none",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": []
+    },
+
+    // ============================================
+    // EXECUÇÃO - API
+    // ============================================
+    {
+      "label": "🚀 Run: FastAPI (Dev)",
+      "type": "shell",
+      "command": "uvicorn",
+      "args": [
+        "app.main:app",
+        "--reload",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+        "--log-level",
+        "debug"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/crashbot-platform/api"
+      },
+      "group": "none",
+      "isBackground": true,
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "🚀 Run: FastAPI (Production)",
+      "type": "shell",
+      "command": "uvicorn",
+      "args": [
+        "app.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+        "--workers",
+        "4"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/crashbot-platform/api"
+      },
+      "group": "none",
+      "isBackground": true,
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": []
+    },
+
+    // ============================================
+    // EXECUÇÃO - FRONTEND
+    // ============================================
+    {
+      "label": "⚛️ Run: Next.js (Dev)",
+      "type": "shell",
+      "command": "npm",
+      "args": [
+        "run",
+        "dev"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/crashbot-platform/loja"
+      },
+      "group": "none",
+      "isBackground": true,
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "⚛️ Build: Next.js",
+      "type": "shell",
+      "command": "npm",
+      "args": [
+        "run",
+        "build"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/crashbot-platform/loja"
+      },
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+
+    // ============================================
+    // INSTALAÇÃO
+    // ============================================
+    {
+      "label": "📦 Install: Python Dependencies",
+      "type": "shell",
+      "command": "pip",
+      "args": [
+        "install",
+        "-r",
+        "CrashBot/requirements.txt"
+      ],
+      "group": "none",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "📦 Install: Dev Dependencies",
+      "type": "shell",
+      "command": "pip",
+      "args": [
+        "install",
+        "pytest",
+        "pytest-cov",
+        "pytest-asyncio",
+        "black",
+        "isort",
+        "ruff",
+        "mypy",
+        "pre-commit",
+        "bandit"
+      ],
+      "group": "none",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "📦 Install: Pre-commit Hooks",
+      "type": "shell",
+      "command": "pre-commit",
+      "args": [
+        "install"
+      ],
+      "group": "none",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+
+    // ============================================
+    // PRE-COMMIT
+    // ============================================
+    {
+      "label": "🎯 Pre-commit: Run All",
+      "type": "shell",
+      "command": "pre-commit",
+      "args": [
+        "run",
+        "--all-files"
+      ],
+      "group": "none",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "🎯 Pre-commit: Update Hooks",
+      "type": "shell",
+      "command": "pre-commit",
+      "args": [
+        "autoupdate"
+      ],
+      "group": "none",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+
+    // ============================================
+    // LIMPEZA
+    // ============================================
+    {
+      "label": "🧹 Clean: Python Cache",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-Command",
+        "Get-ChildItem -Path . -Include __pycache__,*.pyc,*.pyo,.pytest_cache,.mypy_cache,.ruff_cache -Recurse -Force | Remove-Item -Recurse -Force"
+      ],
+      "group": "none",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "🧹 Clean: Coverage Reports",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-Command",
+        "Remove-Item -Path htmlcov,.coverage -Recurse -Force -ErrorAction SilentlyContinue"
+      ],
+      "group": "none",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "🧹 Clean: All",
+      "dependsOn": [
+        "🧹 Clean: Python Cache",
+        "🧹 Clean: Coverage Reports"
+      ],
+      "group": "none",
+      "problemMatcher": []
+    },
+
+    // ============================================
+    // DOCKER
+    // ============================================
+    {
+      "label": "🐳 Docker: Build",
+      "type": "shell",
+      "command": "docker-compose",
+      "args": [
+        "build"
+      ],
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "🐳 Docker: Up",
+      "type": "shell",
+      "command": "docker-compose",
+      "args": [
+        "up",
+        "-d"
+      ],
+      "group": "none",
+      "isBackground": true,
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "🐳 Docker: Down",
+      "type": "shell",
+      "command": "docker-compose",
+      "args": [
+        "down"
+      ],
+      "group": "none",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "🐳 Docker: Logs",
+      "type": "shell",
+      "command": "docker-compose",
+      "args": [
+        "logs",
+        "-f"
+      ],
+      "group": "none",
+      "isBackground": true,
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": []
+    },
+
+    // ============================================
+    // DATABASE
+    // ============================================
+    {
+      "label": "🗄️ DB: Alembic Migrate",
+      "type": "shell",
+      "command": "alembic",
+      "args": [
+        "upgrade",
+        "head"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/crashbot-platform/api"
+      },
+      "group": "none",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "🗄️ DB: Create Migration",
+      "type": "shell",
+      "command": "alembic",
+      "args": [
+        "revision",
+        "--autogenerate",
+        "-m",
+        "${input:migrationMessage}"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/crashbot-platform/api"
+      },
+      "group": "none",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+
+    // ============================================
+    // GIT
+    // ============================================
+    {
+      "label": "📝 Git: Clean Merged Branches",
+      "type": "shell",
+      "command": "git",
+      "args": [
+        "branch",
+        "--merged",
+        "|",
+        "grep",
+        "-v",
+        "\\*",
+        "|",
+        "xargs",
+        "git",
+        "branch",
+        "-d"
+      ],
+      "group": "none",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+
+    // ============================================
+    // COMPOSITE TASKS
+    // ============================================
+    {
+      "label": "🎯 Full Check (Format + Lint + Test)",
+      "dependsOn": [
+        "🎨 Format: All (Black + isort)",
+        "🔍 Lint: Ruff (Auto-fix)",
+        "🧪 Test: Fast (No Slow)"
+      ],
+      "dependsOrder": "sequence",
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "🚀 Start Full Stack",
+      "dependsOn": [
+        "🤖 Run: CrashBot (Main)",
+        "🚀 Run: FastAPI (Dev)",
+        "⚛️ Run: Next.js (Dev)"
+      ],
+      "dependsOrder": "parallel",
+      "group": "none",
+      "problemMatcher": []
+    }
+  ],
+
+  // ============================================
+  // INPUTS
+  // ============================================
+  "inputs": [
+    {
+      "id": "migrationMessage",
+      "description": "Migration message",
+      "default": "auto migration",
+      "type": "promptString"
+    }
+  ]
+}

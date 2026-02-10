@@ -1,0 +1,46 @@
+# Ignorar TODOS os ambientes virtuais de qualquer pasta
+.venv/
+venv/
+env/
+
+# Ignorar arquivos compilados
+__pycache__/
+*.pyc
+*.spec
+dist/
+build/
+# --- Ignorar arquivos de dados locais e logs ---
+*.log
+*.db
+*.db-shm
+*.db-wal
+.ipynb_checkpoints/
+
+# --- SEGURANÇA (MUITO IMPORTANTE) ---
+# Ignorar chaves de licença e configs com senhas
+license_key.txt
+config.json
+settings.json
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+
+# --- Node.js ---
+node_modules/
+npm-debug.log
+dist/
+
+# --- Variáveis de Ambiente (SENHAS - MUITO IMPORTANTE) ---
+.env
+.env.local
+
+# --- Sistema Operacional ---
+.DS_Store
+Thumbs.db
+
+# --- Logs do VS Code ---
+.vscode/

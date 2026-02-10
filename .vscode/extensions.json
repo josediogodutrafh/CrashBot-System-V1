@@ -1,0 +1,74 @@
+{
+  "recommendations": [
+    // Python Core
+    "ms-python.python",
+    "ms-python.vscode-pylance",
+    "ms-python.debugpy",
+    "ms-python.black-formatter",
+    "ms-python.isort",
+    "charliermarsh.ruff",
+
+    // Frontend (Next.js/TypeScript)
+    "dbaeumer.vscode-eslint",
+    "esbenp.prettier-vscode",
+    "dsznajder.es7-react-js-snippets",
+    "bradlc.vscode-tailwindcss",
+    "formulahendry.auto-rename-tag",
+    "christian-kohler.path-intellisense",
+
+    // API Testing
+    "rangav.vscode-thunder-client",
+    "humao.rest-client",
+
+    // Database
+    "mtxr.sqltools",
+    "mtxr.sqltools-driver-pg",
+    "mtxr.sqltools-driver-sqlite",
+    "qwtel.sqlite-viewer",
+
+    // Docker
+    "ms-azuretools.vscode-docker",
+
+    // Git
+    "eamodio.gitlens",
+    "mhutchie.git-graph",
+
+    // Productivity
+    "usernamehw.errorlens",
+    "aaron-bond.better-comments",
+    "gruntfuggly.todo-tree",
+
+    // Data Science / ML
+    "ms-toolsai.jupyter",
+    "njpwerner.autodocstring",
+
+    // Config Files
+    "redhat.vscode-yaml",
+
+    // Theme
+    "pkief.material-icon-theme",
+    "zhuangtongfa.material-theme"
+  ],
+  "unwantedRecommendations": [
+    // AI assistants duplicados (já tem Claude Code)
+    "github.copilot",
+    "github.copilot-chat",
+    "google.geminicodeassist",
+    "sourcery.sourcery",
+
+    // Frameworks não usados
+    "changkaiyan.tf2snippets",
+    "vahidk.tensorflow-snippets",
+    "mongodb.mongodb-vscode",
+
+    // Duplicados
+    "graykode.ai-docstring",
+    "pydocgenai.pydocgenai",
+    "formulahendry.vscode-mysql",
+    "cweijan.dbclient-jdbc",
+    "ckolkman.vscode-postgres",
+    "adpyke.vscode-sql-formatter",
+    "guodongsun.vscode-git-cruise",
+    "xabikos.javascriptsnippets"
+  ]
+}

@@ -1,0 +1,94 @@
+# ============================================
+# PYTHON
+# ============================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.spec
+dist/
+build/
+
+# ============================================
+# AMBIENTES VIRTUAIS
+# ============================================
+.venv/
+venv/
+env/
+
+# ============================================
+# NODE.JS
+# ============================================
+node_modules/
+npm-debug.log
+.next/
+out/
+
+# ============================================
+# SEGURANÇA (SENHAS E CREDENCIAIS)
+# ============================================
+.env
+.env.local
+license_key.txt
+config.json
+*.license
+licenses/
+
+# ============================================
+# DADOS E LOGS (NÃO VERSIONAR)
+# ============================================
+*.log
+*.db
+*.db-shm
+*.db-wal
+*.jsonl
+profiles/
+screenshots/
+captures/
+sessions/
+bot_logs/
+crash_logs/
+telemetry/
+training_data/
+data/
+models/*.pkl
+models/*.pt
+models/*.pth
+
+# ============================================
+# IDE E SISTEMA OPERACIONAL
+# ============================================
+.DS_Store
+Thumbs.db
+.ipynb_checkpoints/
+.claude/
+
+# VSCode (manter configs, ignorar resto)
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# ============================================
+# TESTING E QUALIDADE
+# ============================================
+htmlcov/
+.coverage
+.coverage.*
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.secrets.baseline
+
+# ============================================
+# PRE-COMMIT
+# ============================================
+.pre-commit-config.yaml.backup
+
+# ============================================
+# LEGACY / COMPILAÇÃO
+# ============================================
+*.exe
+*.dist/
+Tesseract-OCR/
