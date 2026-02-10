@@ -43,7 +43,7 @@ router = APIRouter(prefix="/api/v1/pagamento", tags=["pagamento"])
 class CriarPagamentoRequest(BaseModel):
     """Request para criar pagamento."""
 
-    plano: str  # trial, semanal, quinzenal, mensal
+    plano: str  # trial, semanal, mensal
     nome: str
     email: EmailStr
     whatsapp: str
@@ -114,22 +114,13 @@ PLANOS = {
     },
     "semanal": {
         "nome": "Semanal",
-        "preco_normal": 149.90,
-        "preco_primeira_adesao": 49.90,
+        "preco_normal": 69.00,
         "dias": 7,
         "descricao": "Plano Semanal - 7 dias de acesso",
     },
-    "quinzenal": {
-        "nome": "Quinzenal",
-        "preco_normal": 249.90,
-        "preco_primeira_adesao": 89.90,
-        "dias": 15,
-        "descricao": "Plano Quinzenal - 15 dias de acesso",
-    },
     "mensal": {
         "nome": "Mensal",
-        "preco_normal": 449.90,
-        "preco_primeira_adesao": 149.90,
+        "preco_normal": 249.00,
         "dias": 30,
         "descricao": "Plano Mensal - 30 dias de acesso",
     },
@@ -215,7 +206,6 @@ async def criar_pagamento(
         )
 
     preco_final = preco_info["preco"]
-    is_primeira_adesao = preco_info["is_primeira_adesao"]
 
     # Gerar ID único para referência
     external_reference = f"{dados.plano}_{uuid.uuid4().hex[:12]}"
@@ -226,17 +216,12 @@ async def criar_pagamento(
     # URL base para callbacks
     base_url = str(request.base_url).rstrip("/")
 
-    # Descrição com info de promoção
-    descricao = plano["descricao"]
-    if is_primeira_adesao:
-        descricao += " (Preço de Primeira Adesão)"
-
     # Criar preferência de pagamento
     preference_data = {
         "items": [
             {
                 "title": f"CrashBot - {plano['nome']}",
-                "description": descricao,
+                "description": plano["descricao"],
                 "quantity": 1,
                 "currency_id": "BRL",
                 "unit_price": preco_final,
@@ -262,7 +247,7 @@ async def criar_pagamento(
             "whatsapp": dados.whatsapp,
             "cpf": dados.cpf,
             "hwid": dados.hwid,
-            "is_primeira_adesao": is_primeira_adesao,
+            "is_primeira_adesao": False,
         },
         "payment_methods": {
             "excluded_payment_types": [],
@@ -486,7 +471,6 @@ async def confirmar_trial(
             plano="trial",
             valor=0.00,
             chave_licenca=chave,
-            is_primeira_adesao=False,
             is_trial=True,
         )
     except Exception as e:
@@ -629,7 +613,6 @@ async def criar_trial(
             plano="trial",
             valor=0.00,
             chave_licenca=chave,
-            is_primeira_adesao=False,
             is_trial=True,
         )
     except Exception as e:
@@ -661,10 +644,7 @@ class PlanoPrecoInfo(BaseModel):
 
     nome: str
     preco: float
-    preco_original: float
     dias: int
-    is_primeira_adesao: bool
-    desconto: float
 
 
 class VerificarElegibilidadeResponse(BaseModel):
@@ -682,34 +662,27 @@ async def verificar_elegibilidade(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Verifica elegibilidade do cliente para trial e primeira adesão.
+    Verifica elegibilidade do cliente para trial.
     Retorna os preços corretos para cada plano.
     """
-    # Validar CPF
     cpf_valido = validar_cpf(dados.cpf)
 
-    # Verificar trial
     trial_info = await verificar_elegibilidade_trial(
-        db, 
-        cpf=dados.cpf, 
+        db,
+        cpf=dados.cpf,
         whatsapp=dados.whatsapp,
-        hwid=dados.hwid
+        hwid=dados.hwid,
     )
 
-    # Obter preços de cada plano
     planos_info = {}
-
-    for plano_key in ["semanal", "quinzenal", "mensal"]:
+    for plano_key in ["semanal", "mensal"]:
         preco_info = await obter_preco_plano(db, plano_key, dados.cpf, dados.hwid)
         plano_config = PLANOS[plano_key]
 
         planos_info[plano_key] = PlanoPrecoInfo(
             nome=plano_config["nome"],
             preco=preco_info["preco"],
-            preco_original=preco_info["preco_original"],
             dias=preco_info["dias"],
-            is_primeira_adesao=preco_info["is_primeira_adesao"],
-            desconto=preco_info["desconto"],
         )
 
     return VerificarElegibilidadeResponse(
@@ -784,7 +757,6 @@ async def webhook_mercadopago(
     # Extrair dados adicionais dos metadados
     cpf = metadata.get("cpf")
     hwid = metadata.get("hwid")
-    is_primeira_adesao = metadata.get("is_primeira_adesao", False)
 
     # Criar nova licença
     chave = gerar_chave_licenca()
@@ -802,7 +774,7 @@ async def webhook_mercadopago(
         plano_tipo=plano,
         payment_id=str(payment_id),
         is_trial=False,
-        is_primeira_adesao=is_primeira_adesao,
+        is_primeira_adesao=False,
     )
 
     db.add(nova_licenca)
@@ -863,7 +835,6 @@ async def webhook_mercadopago(
             plano=plano,
             valor=valor_pago,
             chave_licenca=chave,
-            is_primeira_adesao=is_primeira_adesao,
             is_trial=False,
         )
     except Exception as e:

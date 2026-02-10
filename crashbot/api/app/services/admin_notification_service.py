@@ -44,19 +44,13 @@ class AdminNotificationService:
         plano: str,
         valor: float,
         chave_licenca: str,
-        is_primeira_adesao: bool = False,
         is_trial: bool = False,
     ):
         """
         Notifica o admin sobre uma nova venda.
         Envia por email, Telegram e WhatsApp.
         """
-        # Formatar mensagem
-        tipo_venda = (
-            "🎁 TRIAL"
-            if is_trial
-            else ("🌟 PRIMEIRA ADESÃO" if is_primeira_adesao else "💰 VENDA")
-        )
+        tipo_venda = "🎁 TRIAL" if is_trial else "💰 VENDA"
 
         mensagem_texto = f"""
 {tipo_venda} - NOVO CLIENTE!
@@ -80,7 +74,6 @@ class AdminNotificationService:
                 plano,
                 valor,
                 chave_licenca,
-                is_primeira_adesao,
                 is_trial,
             )
             tasks_results.append(("email", result))
@@ -104,24 +97,12 @@ class AdminNotificationService:
         plano: str,
         valor: float,
         chave_licenca: str,
-        is_primeira_adesao: bool,
         is_trial: bool,
     ) -> bool:
         """Envia email formatado sobre nova venda."""
 
-        tipo_badge = (
-            "TRIAL GRATUITO"
-            if is_trial
-            else ("PRIMEIRA ADESÃO" if is_primeira_adesao else "VENDA REGULAR")
-        )
-
-        # Lógica de cor simplificada para evitar E501
-        if is_trial:
-            badge_color = "#10B981"
-        elif is_primeira_adesao:
-            badge_color = "#8B5CF6"
-        else:
-            badge_color = "#3B82F6"
+        tipo_badge = "TRIAL GRATUITO" if is_trial else "VENDA"
+        badge_color = "#10B981" if is_trial else "#3B82F6"
 
         data_fmt = datetime.now().strftime("%d/%m/%Y às %H:%M")
 

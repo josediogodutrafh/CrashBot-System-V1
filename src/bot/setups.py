@@ -221,6 +221,23 @@ AVAILABLE_SETUPS = {
 # Lista ordenada para menus
 SETUP_LIST = list(AVAILABLE_SETUPS.keys())
 
+# Nomes comerciais para exibicao ao usuario
+SETUP_DISPLAY_NAMES = {
+    "1/2":                "Conservador",
+    "1/2 + 1/2":          "Moderado",
+    "1/2 + 1/2 + 1/2":   "Resistente",
+    "1/2/4":              "Equilibrado",
+    "1/2/4 + 1/2/4":     "Duplo",
+    "1/2/4/8":            "Agressivo",
+    "1/2/4/8/16":         "Ultra",
+    "Inteligente":        "Automatico",
+}
+
+
+def get_display_name(setup_name: str) -> str:
+    """Retorna o nome comercial de um setup."""
+    return SETUP_DISPLAY_NAMES.get(setup_name, setup_name)
+
 
 def get_setup(name: str) -> BaseSetup:
     """Retorna instancia do setup pelo nome."""

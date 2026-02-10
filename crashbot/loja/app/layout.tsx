@@ -120,7 +120,7 @@ const softwareSchema = {
   operatingSystem: 'Windows, macOS',
   offers: {
     '@type': 'Offer',
-    price: '49.90',
+    price: '69.00',
     priceCurrency: 'BRL',
     availability: 'https://schema.org/InStock',
   },

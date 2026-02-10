@@ -1,6 +1,6 @@
-﻿"""
+"""
 TucunaréBot API - FastAPI
-Versão 2.0
+Versão 3.0
 
 API para gestão de licenças, pagamentos, telemetria e análise IA.
 """
@@ -52,7 +52,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="TucunaréBot API",
     description="API para gestão de licenças, pagamentos, telemetria e análise IA",
-    version="2.0.0",
+    version="3.0.0",
     docs_url="/api/docs",
     redoc_url="/api/redoc",
     lifespan=lifespan,
@@ -108,7 +108,7 @@ async def root():
     """Rota raiz - Informações da API."""
     return {
         "name": "TucunaréBot API",
-        "version": "2.0.0",
+        "version": "3.0.0",
         "status": "online",
         "docs": "/api/docs",
     }
@@ -128,7 +128,7 @@ async def health_check():
 async def api_status():
     """Status detalhado da API."""
     return {
-        "api_version": "2.0.0",
+        "api_version": "3.0.0",
         "endpoints": {
             "auth": "/api/v1/auth",
             "licenses": "/api/v1/licencas",

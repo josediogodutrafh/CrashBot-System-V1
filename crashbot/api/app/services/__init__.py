@@ -18,7 +18,6 @@ from app.services.client_notification_service import (
 # Promoções e elegibilidade
 from app.services.promocao_service import (
     obter_preco_plano,
-    verificar_elegibilidade_primeira_adesao,
     verificar_elegibilidade_trial,
 )
 
@@ -28,7 +27,6 @@ from app.services.whatsapp_verification_service import whatsapp_verification
 __all__ = [
     # Promoções
     "verificar_elegibilidade_trial",
-    "verificar_elegibilidade_primeira_adesao",
     "obter_preco_plano",
     # Admin Notifications
     "admin_notifications",

@@ -145,15 +145,94 @@ async def toggle_versao(
             detail="Versao nao encontrada",
         )
 
-    # CORREÇÃO: Cast para bool para evitar erro de 'Column' no 'not'
-    # O Pylance se confunde com colunas booleanas em modelos antigos do SQLAlchemy
     status_atual = bool(versao.ativa)
-
-    # Atribuição direta. O type checker pode reclamar da atribuição a Column,
-    # mas em runtime isso funciona perfeitamente no SQLAlchemy.
-    # Adicionamos type: ignore para silenciar o erro específico de atribuição estática
     versao.ativa = not status_atual  # type: ignore
-
     await db.commit()
 
     return {"success": True, "ativa": versao.ativa}
+
+
+# ============================================================================
+# ENDPOINT ADMIN: Deletar versão
+# ============================================================================
+
+
+@router.delete("/versao/{versao_id}")
+async def deletar_versao(
+    versao_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_admin: Usuario = Depends(get_current_admin),
+):
+    """Deleta uma versão do bot (admin)."""
+    result = await db.execute(select(VersaoBot).where(VersaoBot.id == versao_id))
+    versao: Optional[VersaoBot] = result.scalar_one_or_none()
+
+    if not versao:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Versao nao encontrada",
+        )
+
+    await db.delete(versao)
+    await db.commit()
+
+    return {"success": True, "deletada": str(versao.versao)}
+
+
+# ============================================================================
+# ENDPOINT ADMIN: Limpar versões antigas e registrar a nova
+# ============================================================================
+
+
+@router.post("/versoes/cleanup")
+async def cleanup_versoes(
+    db: AsyncSession = Depends(get_db),
+    current_admin: Usuario = Depends(get_current_admin),
+):
+    """
+    Desativa todas as versões antigas e registra a v3.0.0 como atual.
+    Uso único após o deploy da nova versão.
+    """
+    # Desativar todas as versões existentes
+    result = await db.execute(select(VersaoBot).where(VersaoBot.ativa.is_(True)))
+    versoes_ativas = result.scalars().all()
+    desativadas = []
+
+    for v in versoes_ativas:
+        v.ativa = False  # type: ignore
+        desativadas.append(str(v.versao))
+
+    # Verificar se v3.0.0 já existe
+    result_v3 = await db.execute(
+        select(VersaoBot).where(VersaoBot.versao == "3.0.0")
+    )
+    v3 = result_v3.scalar_one_or_none()
+
+    if v3:
+        v3.ativa = True  # type: ignore
+        v3.obrigatoria = True  # type: ignore
+        v3.changelog = (  # type: ignore
+            "v3.0 - WebSocket capture, novo sistema de precos, "
+            "Telegram stateless, deploy Render"
+        )
+    else:
+        v3 = VersaoBot(
+            versao="3.0.0",
+            download_url="https://tucunarebot.com.br/download/v3",
+            changelog=(
+                "v3.0 - WebSocket capture, novo sistema de precos, "
+                "Telegram stateless, deploy Render"
+            ),
+            obrigatoria=True,
+            ativa=True,
+        )
+        db.add(v3)
+
+    await db.commit()
+
+    return {
+        "success": True,
+        "desativadas": desativadas,
+        "versao_atual": "3.0.0",
+        "obrigatoria": True,
+    }

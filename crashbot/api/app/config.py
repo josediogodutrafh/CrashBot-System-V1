@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     # APLICAÇÃO
     # ========================================================================
     APP_NAME: str = "CrashBot API"
-    APP_VERSION: str = "2.0.0"
+    APP_VERSION: str = "3.0.0"
     DEBUG: bool = False
     ENVIRONMENT: str = "development"  # development | staging | production
 

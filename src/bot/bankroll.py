@@ -37,7 +37,8 @@ class BankrollManager:
         self,
         caixa: float = 0.0,
         banca: float = 500.0,
-        meta_percent: int = 20,
+        meta_percent: float = 20,
+        stop_loss_percent: float = 100,
     ):
         # Caixa = reserva total | Banca = alocacao para apostas
         self.caixa = caixa if caixa > 0 else banca
@@ -45,8 +46,14 @@ class BankrollManager:
         self.bankroll_base = banca  # alias para compatibilidade
 
         self.current_bankroll = banca
+
+        # Meta de lucro (% do CAIXA)
         self.meta_percent = meta_percent
-        self.meta_value = banca * meta_percent / 100
+        self.meta_value = self.caixa * meta_percent / 100
+
+        # Stop Loss (% do CAIXA)
+        self.stop_loss_percent = stop_loss_percent
+        self.stop_loss_value = self.caixa * stop_loss_percent / 100
 
         # Contadores financeiros
         self.total_deposited = banca
@@ -64,7 +71,9 @@ class BankrollManager:
         logger.info(
             f"BankrollManager: caixa=R${self.caixa:.2f}, "
             f"banca=R${banca:.2f} ({self.n_bancas:.1f} bancas), "
-            f"meta={meta_percent}% (R${self.meta_value:.2f})"
+            f"meta={meta_percent:.1f}% do caixa (R${self.meta_value:.2f}), "
+            f"stop_loss={stop_loss_percent:.1f}% do caixa "
+            f"(R${self.stop_loss_value:.2f})"
         )
 
     @property
@@ -76,13 +85,16 @@ class BankrollManager:
 
     # ── Meta ──────────────────────────────────────────────────────────
 
-    def set_meta(self, percent: int):
-        """Altera a meta de lucro."""
-        if percent not in METAS_DISPONIVEIS:
-            raise ValueError(f"Meta {percent}% inválida. Opções: {METAS_DISPONIVEIS}")
+    def set_meta(self, percent: float):
+        """Altera a meta de lucro (% do caixa)."""
+        if percent <= 0:
+            raise ValueError(f"Meta {percent}% inválida. Deve ser > 0.")
         self.meta_percent = percent
-        self.meta_value = self.bankroll_base * percent / 100
-        logger.info(f"Meta alterada para {percent}% (R${self.meta_value:.2f})")
+        self.meta_value = self.caixa * percent / 100
+        logger.info(
+            f"Meta alterada para {percent:.1f}% do caixa "
+            f"(R${self.meta_value:.2f})"
+        )
 
     def get_meta_threshold(self) -> float:
         """Saldo que dispara o saque."""
@@ -143,6 +155,11 @@ class BankrollManager:
     def check_bust(self) -> bool:
         """Verifica se a banca zerou."""
         return self.current_bankroll <= 0
+
+    def check_stop_loss(self) -> bool:
+        """Verifica se atingiu o stop loss."""
+        loss = self.bankroll_base - self.current_bankroll
+        return loss >= self.stop_loss_value
 
     # ── Atualização de saldo ──────────────────────────────────────────
 

@@ -9,13 +9,13 @@ Menu de configuracao inicial (caixa, banca, setup, meta, horarios)
 e listener de teclado para hot-swap em tempo real.
 
 Teclas de atalho (durante execucao):
-  F1  -> Setup 1/2
-  F2  -> Setup 1/2 + 1/2
-  F3  -> Setup 1/2 + 1/2 + 1/2
-  F4  -> Setup 1/2/4
-  F5  -> Setup 1/2/4 + 1/2/4
-  F6  -> Setup 1/2/4/8
-  F7  -> Setup 1/2/4/8/16
+  F1  -> Conservador (1/2)
+  F2  -> Moderado (1/2 + 1/2)
+  F3  -> Resistente (1/2 + 1/2 + 1/2)
+  F4  -> Equilibrado (1/2/4)
+  F5  -> Duplo (1/2/4 + 1/2/4)
+  F6  -> Agressivo (1/2/4/8)
+  F7  -> Ultra (1/2/4/8/16)
   F8  -> Ciclar meta
   F9  -> Pausar/retomar
   F10 -> Encerrar
@@ -35,10 +35,11 @@ from rich.text import Text
 from src.bot.setups import (
     AVAILABLE_SETUPS,
     SETUP_LIST,
+    SETUP_DISPLAY_NAMES,
     BaseSetup,
+    get_display_name,
     get_setup,
 )
-from src.bot.bankroll import METAS_DISPONIVEIS
 
 logger = logging.getLogger(__name__)
 
@@ -154,22 +155,29 @@ def selecionar_setup(console: Console, banca: float) -> BaseSetup:
     """Menu para escolher o setup de jogo."""
     console.print()
     console.print("=" * 55, style="cyan")
-    console.print("SETUP DE JOGO", style="bold cyan")
+    console.print("ESTRATEGIA DE JOGO", style="bold cyan")
     console.print("=" * 55, style="cyan")
     console.print()
 
     opcoes = [
-        ("1", "1/2", "Conservador", f"banca/3, 2 dobras, unit=R${banca/3:.2f}"),
-        ("2", "1/2 + 1/2", "Moderado", f"banca/6, 4 dobras, unit=R${banca/6:.2f}"),
-        ("3", "1/2 + 1/2 + 1/2", "Resistente", f"banca/9, 6 dobras, unit=R${banca/9:.2f}"),
-        ("4", "1/2/4", "Equilibrado", f"banca/7, 3 dobras, unit=R${banca/7:.2f}"),
-        ("5", "1/2/4 + 1/2/4", "Duplo", f"banca/14, 6 dobras, unit=R${banca/14:.2f}"),
-        ("6", "1/2/4/8", "Agressivo", f"banca/15, 4 dobras, unit=R${banca/15:.2f}"),
-        ("7", "1/2/4/8/16", "Ultra", f"banca/31, 5 dobras, unit=R${banca/31:.2f}"),
+        ("1", "1/2", "Conservador",
+         f"aposta inicial = 1/3 da banca (R${banca/3:.2f}), 2 dobras"),
+        ("2", "1/2 + 1/2", "Moderado",
+         f"aposta inicial = 1/6 da banca (R${banca/6:.2f}), 4 dobras em 2 ciclos"),
+        ("3", "1/2 + 1/2 + 1/2", "Resistente",
+         f"aposta inicial = 1/9 da banca (R${banca/9:.2f}), 6 dobras em 3 ciclos"),
+        ("4", "1/2/4", "Equilibrado",
+         f"aposta inicial = 1/7 da banca (R${banca/7:.2f}), 3 dobras"),
+        ("5", "1/2/4 + 1/2/4", "Duplo",
+         f"aposta inicial = 1/14 da banca (R${banca/14:.2f}), 6 dobras em 2 ciclos"),
+        ("6", "1/2/4/8", "Agressivo",
+         f"aposta inicial = 1/15 da banca (R${banca/15:.2f}), 4 dobras"),
+        ("7", "1/2/4/8/16", "Ultra",
+         f"aposta inicial = 1/31 da banca (R${banca/31:.2f}), 5 dobras"),
     ]
 
-    for num, nome, tipo, desc in opcoes:
-        console.print(f"  [{num}] {nome:20s} ({tipo})", style="white")
+    for num, seq, nome, desc in opcoes:
+        console.print(f"  [{num}] {nome:14s} ({seq})", style="white")
         console.print(f"      {desc}", style="dim")
 
     console.print()
@@ -177,25 +185,26 @@ def selecionar_setup(console: Console, banca: float) -> BaseSetup:
     while True:
         try:
             choice = console.input(
-                "[green]Escolha o setup (1-7): [/green]"
+                "[green]Escolha a estrategia (1-7): [/green]"
             ).strip()
             idx = int(choice) - 1
             if 0 <= idx < len(SETUP_LIST):
                 setup_name = SETUP_LIST[idx]
                 setup = get_setup(setup_name)
+                display = get_display_name(setup_name)
 
                 # Validar unit >= 1.0
                 unit = setup.calculate_unit(banca)
                 if unit < 1.0:
                     console.print(
                         f"Banca muito baixa para este setup "
-                        f"(unit=R${unit:.2f}, minimo R$1.00)",
+                        f"(aposta base=R${unit:.2f}, minimo R$1.00)",
                         style="red",
                     )
                     continue
 
                 console.print(
-                    f"\n  Setup: {setup.get_description()}",
+                    f"\n  Estrategia: {display} ({setup.name})",
                     style="green",
                 )
                 return setup
@@ -205,39 +214,226 @@ def selecionar_setup(console: Console, banca: float) -> BaseSetup:
             console.print("Opcao invalida.", style="red")
 
 
-def selecionar_meta(console: Console, banca: float) -> int:
-    """Menu para escolher a meta de lucro."""
+def _input_percentual(
+    console: Console, prompt: str, max_val: float = 500,
+) -> float:
+    """Helper: le um percentual numerico do usuario."""
+    while True:
+        try:
+            raw = console.input(prompt).strip()
+            raw = raw.replace(",", ".").replace("%", "")
+            val = float(raw)
+            if val <= 0:
+                console.print("Deve ser maior que 0.", style="red")
+                continue
+            if val > max_val:
+                console.print(f"Maximo: {max_val:.0f}%.", style="red")
+                continue
+            return val
+        except ValueError:
+            console.print("Digite um valor numerico valido!", style="red")
+
+
+def _input_horas(console: Console, prompt: str, max_val: float = 24) -> float:
+    """Helper: le horas do usuario (0 = sem limite)."""
+    while True:
+        try:
+            raw = console.input(prompt).strip().replace(",", ".")
+            val = float(raw)
+            if val < 0:
+                console.print("Nao pode ser negativo.", style="red")
+                continue
+            if val > max_val:
+                console.print(f"Maximo: {max_val:.0f} horas.", style="red")
+                continue
+            return val
+        except ValueError:
+            console.print("Digite um valor numerico valido!", style="red")
+
+
+def selecionar_meta(console: Console, caixa: float, banca: float) -> dict:
+    """Menu para configurar meta, stop loss, duracao e acoes."""
+
+    # ══════════════════════════════════════════════════════════════
+    # 1. STOP GAIN (meta de lucro % do CAIXA)
+    # ══════════════════════════════════════════════════════════════
     console.print()
     console.print("=" * 55, style="cyan")
-    console.print("META DE LUCRO", style="bold cyan")
+    console.print("META DE LUCRO (STOP GAIN)", style="bold cyan")
     console.print("=" * 55, style="cyan")
     console.print()
-
-    for i, pct in enumerate(METAS_DISPONIVEIS):
-        valor = banca * pct / 100
-        label = chr(65 + i)  # A, B, C, D, E, F
-        console.print(
-            f"  [{label}] {pct:>3d}%  ->  "
-            f"R$ {valor:.2f}  (saque em R$ {banca + valor:.2f})",
-            style="white",
-        )
-
+    console.print(
+        f"  Percentual de lucro em relacao ao caixa (R$ {caixa:.2f})",
+        style="dim",
+    )
+    console.print(
+        f"  Ex: 10 = meta de R$ {caixa * 10 / 100:.2f} de lucro",
+        style="dim",
+    )
     console.print()
-    mapa = {chr(65 + i): pct for i, pct in enumerate(METAS_DISPONIVEIS)}
+
+    stop_gain = _input_percentual(
+        console, "[green]Meta de lucro (% do caixa): [/green]"
+    )
+    gain_valor = caixa * stop_gain / 100
+    console.print(
+        f"\n  Stop Gain: {stop_gain:.1f}% do caixa "
+        f"(R$ {gain_valor:.2f} de lucro)",
+        style="green",
+    )
+
+    # Acao ao atingir stop gain
+    console.print()
+    console.print("  O que fazer ao atingir o stop gain?", style="dim")
+    console.print("  [1] Encerrar sessao", style="white")
+    console.print(
+        "  [2] Suspender apostas por X horas e retomar", style="white"
+    )
+    console.print(
+        "  [3] Reinvestir X% do lucro e continuar", style="white"
+    )
+    console.print()
+
+    gain_action = "encerrar"
+    gain_suspend_hours = 0.0
+    gain_reinvest_pct = 0.0
 
     while True:
         choice = console.input(
-            "[green]Escolha a meta (A-F): [/green]"
-        ).strip().upper()
-        if choice in mapa:
-            pct = mapa[choice]
-            valor = banca * pct / 100
+            "[green]Acao stop gain (1-3): [/green]"
+        ).strip()
+        if choice == "1":
+            gain_action = "encerrar"
+            console.print("  Acao: encerrar sessao", style="green")
+            break
+        elif choice == "2":
+            gain_action = "suspender"
+            gain_suspend_hours = _input_horas(
+                console,
+                "[green]Suspender por quantas horas? [/green]",
+            )
             console.print(
-                f"\n  Meta: {pct}% (R$ {valor:.2f} de lucro)",
+                f"  Acao: suspender {gain_suspend_hours:.1f}h e retomar",
                 style="green",
             )
-            return pct
-        console.print("Opcao invalida. Digite A-F.", style="red")
+            break
+        elif choice == "3":
+            gain_action = "reinvestir"
+            console.print(
+                "  Qual % do lucro reinvestir na proxima sessao?",
+                style="dim",
+            )
+            gain_reinvest_pct = _input_percentual(
+                console,
+                "[green]Reinvestir (% do lucro): [/green]",
+                max_val=100,
+            )
+            console.print(
+                f"  Acao: reinvestir {gain_reinvest_pct:.0f}% do lucro",
+                style="green",
+            )
+            break
+        console.print("Opcao invalida. Digite 1, 2 ou 3.", style="red")
+
+    # ══════════════════════════════════════════════════════════════
+    # 2. STOP LOSS (perda maxima % do CAIXA)
+    # ══════════════════════════════════════════════════════════════
+    console.print()
+    console.print("=" * 55, style="cyan")
+    console.print("PERDA MAXIMA (STOP LOSS)", style="bold cyan")
+    console.print("=" * 55, style="cyan")
+    console.print()
+    console.print(
+        f"  Percentual maximo de perda do caixa (R$ {caixa:.2f})",
+        style="dim",
+    )
+    console.print(
+        f"  Ex: 50 = para se perder R$ {caixa * 50 / 100:.2f}",
+        style="dim",
+    )
+    console.print()
+
+    stop_loss = _input_percentual(
+        console, "[green]Stop loss (% do caixa): [/green]", max_val=100,
+    )
+    loss_valor = caixa * stop_loss / 100
+    console.print(
+        f"\n  Stop Loss: {stop_loss:.1f}% do caixa "
+        f"(para se perder R$ {loss_valor:.2f})",
+        style="green",
+    )
+
+    # Acao ao atingir stop loss
+    console.print()
+    console.print("  O que fazer ao atingir o stop loss?", style="dim")
+    console.print("  [1] Encerrar sessao", style="white")
+    console.print(
+        "  [2] Suspender apostas por X horas e retomar", style="white"
+    )
+    console.print()
+
+    loss_action = "encerrar"
+    loss_suspend_hours = 0.0
+
+    while True:
+        choice = console.input(
+            "[green]Acao stop loss (1-2): [/green]"
+        ).strip()
+        if choice == "1":
+            loss_action = "encerrar"
+            console.print("  Acao: encerrar sessao", style="green")
+            break
+        elif choice == "2":
+            loss_action = "suspender"
+            loss_suspend_hours = _input_horas(
+                console,
+                "[green]Suspender por quantas horas? [/green]",
+            )
+            console.print(
+                f"  Acao: suspender {loss_suspend_hours:.1f}h e retomar",
+                style="green",
+            )
+            break
+        console.print("Opcao invalida. Digite 1 ou 2.", style="red")
+
+    # ══════════════════════════════════════════════════════════════
+    # 3. DURACAO DA SESSAO
+    # ══════════════════════════════════════════════════════════════
+    console.print()
+    console.print("=" * 55, style="cyan")
+    console.print("DURACAO DA SESSAO", style="bold cyan")
+    console.print("=" * 55, style="cyan")
+    console.print()
+    console.print(
+        "  Quantas horas o sistema deve jogar?",
+        style="dim",
+    )
+    console.print(
+        "  Digite 0 para sem limite (encerre manualmente com F10).",
+        style="dim",
+    )
+    console.print()
+
+    horas = _input_horas(
+        console, "[green]Duracao em horas (0 = sem limite): [/green]",
+    )
+    if horas == 0:
+        console.print(
+            "\n  Duracao: sem limite (encerre com F10)", style="green"
+        )
+    else:
+        console.print(f"\n  Duracao: {horas:.1f} horas", style="green")
+
+    return {
+        "stop_gain_pct": stop_gain,
+        "gain_action": gain_action,
+        "gain_suspend_hours": gain_suspend_hours,
+        "gain_reinvest_pct": gain_reinvest_pct,
+        "stop_loss_pct": stop_loss,
+        "loss_action": loss_action,
+        "loss_suspend_hours": loss_suspend_hours,
+        "session_hours": horas,
+    }
 
 
 def selecionar_horario(console: Console) -> bool:
@@ -248,30 +444,30 @@ def selecionar_horario(console: Console) -> bool:
     console.print("=" * 55, style="cyan")
     console.print()
     console.print(
-        "  [P] Premium apenas  (opera so em horarios favoraveis)",
+        "  [1] Apenas horarios recomendados",
         style="white",
     )
     console.print(
-        "  [T] 24/7            (opera em todos os horarios)",
+        "  [2] Todos os horarios",
         style="white",
     )
     console.print()
 
     while True:
         choice = console.input(
-            "[green]Escolha (P/T): [/green]"
-        ).strip().upper()
-        if choice == "P":
+            "[green]Escolha (1/2): [/green]"
+        ).strip()
+        if choice == "1":
             console.print(
-                "\n  Modo: PREMIUM (horarios favoraveis)", style="green"
+                "\n  Modo: apenas horarios recomendados", style="green"
             )
             return True
-        if choice in ("T", ""):
+        if choice in ("2", ""):
             console.print(
-                "\n  Modo: 24/7 (todos os horarios)", style="green"
+                "\n  Modo: todos os horarios", style="green"
             )
             return False
-        console.print("Opcao invalida. Digite P ou T.", style="red")
+        console.print("Opcao invalida. Digite 1 ou 2.", style="red")
 
 
 def exibir_resumo_config(
@@ -279,7 +475,7 @@ def exibir_resumo_config(
     caixa: float,
     banca: float,
     setup: BaseSetup,
-    meta_pct: int,
+    meta_config: dict,
     premium_only: bool,
 ) -> bool:
     """Exibe resumo da configuracao antes de iniciar."""
@@ -290,18 +486,60 @@ def exibir_resumo_config(
     console.print()
 
     n_bancas = caixa / banca
-    meta_valor = banca * meta_pct / 100
-    horario_str = "PREMIUM (horarios favoraveis)" if premium_only else "24/7"
+    stop_gain = meta_config["stop_gain_pct"]
+    stop_loss = meta_config["stop_loss_pct"]
+    session_hours = meta_config["session_hours"]
+    gain_valor = caixa * stop_gain / 100
+    loss_valor = caixa * stop_loss / 100
+    horario_str = (
+        "Apenas horarios recomendados" if premium_only
+        else "Todos os horarios"
+    )
+    duracao_str = (
+        f"{session_hours:.1f}h" if session_hours > 0 else "sem limite"
+    )
+
+    # Descricao das acoes
+    gain_act = meta_config.get("gain_action", "encerrar")
+    if gain_act == "suspender":
+        gain_act_str = (
+            f"suspender {meta_config.get('gain_suspend_hours', 0):.1f}h"
+        )
+    elif gain_act == "reinvestir":
+        gain_act_str = (
+            f"reinvestir {meta_config.get('gain_reinvest_pct', 0):.0f}%"
+        )
+    else:
+        gain_act_str = "encerrar"
+
+    loss_act = meta_config.get("loss_action", "encerrar")
+    if loss_act == "suspender":
+        loss_act_str = (
+            f"suspender {meta_config.get('loss_suspend_hours', 0):.1f}h"
+        )
+    else:
+        loss_act_str = "encerrar"
 
     console.print(f"  Caixa:      R$ {caixa:.2f}", style="white")
     console.print(
         f"  Banca:      R$ {banca:.2f} ({n_bancas:.1f} bancas)",
         style="white",
     )
-    console.print(f"  Setup:      {setup.get_description()}", style="white")
+    display = get_display_name(setup.name)
     console.print(
-        f"  Meta:       {meta_pct}% (R$ {meta_valor:.2f})", style="white"
+        f"  Estrategia: {display} ({setup.name})", style="white"
     )
+    console.print(
+        f"  Stop Gain:  {stop_gain:.1f}% do caixa "
+        f"(R$ {gain_valor:.2f}) -> {gain_act_str}",
+        style="white",
+    )
+    console.print(
+        f"  Stop Loss:  {stop_loss:.1f}% do caixa "
+        f"(R$ {loss_valor:.2f}) -> {loss_act_str}",
+        style="white",
+    )
+    console.print(f"  Duracao:    {duracao_str}", style="white")
     console.print(f"  Horarios:   {horario_str}", style="white")
     console.print()
 
@@ -347,22 +585,29 @@ def exibir_resumo_config(
 def menu_configuracao_completo(console: Console) -> dict:
     """
     Fluxo completo de configuracao inicial.
-    Retorna dict com caixa, banca, setup, meta_pct, premium_only.
+    Retorna dict com caixa, banca, setup, meta config, premium_only.
     """
     while True:
         caixa, banca = selecionar_caixa_banca(console)
         setup = selecionar_setup(console, banca)
-        meta_pct = selecionar_meta(console, banca)
+        meta_config = selecionar_meta(console, caixa, banca)
         premium_only = selecionar_horario(console)
 
         if exibir_resumo_config(
-            console, caixa, banca, setup, meta_pct, premium_only
+            console, caixa, banca, setup, meta_config, premium_only
         ):
             return {
                 "caixa": caixa,
                 "banca": banca,
                 "setup": setup,
-                "meta_pct": meta_pct,
+                "stop_gain_pct": meta_config["stop_gain_pct"],
+                "gain_action": meta_config["gain_action"],
+                "gain_suspend_hours": meta_config["gain_suspend_hours"],
+                "gain_reinvest_pct": meta_config["gain_reinvest_pct"],
+                "stop_loss_pct": meta_config["stop_loss_pct"],
+                "loss_action": meta_config["loss_action"],
+                "loss_suspend_hours": meta_config["loss_suspend_hours"],
+                "session_hours": meta_config["session_hours"],
                 "premium_only": premium_only,
             }
 

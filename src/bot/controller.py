@@ -27,7 +27,7 @@ import threading
 import time
 import tkinter as tk
 import winsound
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import Enum
 from typing import Dict, Optional
 
@@ -60,8 +60,8 @@ from src.data.manager import (
 )
 from src.security.hwid import get_hwid
 from src.bot.strategy import StrategyEngine
-from src.bot.setups import BaseSetup, SetupInteligente, SETUP_LIST, get_setup
-from src.bot.bankroll import BankrollManager, METAS_DISPONIVEIS
+from src.bot.setups import BaseSetup, SetupInteligente, SETUP_LIST, get_setup, get_display_name
+from src.bot.bankroll import BankrollManager
 from src.bot.schedule import ScheduleManager
 from src.bot.menu import (
     HotKeyListener,
@@ -94,7 +94,14 @@ class BotController:
         caixa: float = None,
         banca_inicial: float = None,
         setup: BaseSetup = None,
-        meta_pct: int = 20,
+        meta_pct: float = 20,
+        stop_loss_pct: float = 100,
+        session_hours: float = 0,
+        gain_action: str = "encerrar",
+        gain_suspend_hours: float = 0,
+        gain_reinvest_pct: float = 0,
+        loss_action: str = "encerrar",
+        loss_suspend_hours: float = 0,
         premium_only: bool = False,
     ):
         self.console = Console()
@@ -140,8 +147,22 @@ class BotController:
             caixa=self.caixa,
             banca=banca_inicial or 500.0,
             meta_percent=meta_pct,
+            stop_loss_percent=stop_loss_pct,
         )
         self.schedule = ScheduleManager(premium_only=premium_only)
+
+        # Duracao da sessao (0 = sem limite)
+        self.session_hours = session_hours
+
+        # Acoes ao atingir stop gain/loss
+        self.gain_action = gain_action              # encerrar/suspender/reinvestir
+        self.gain_suspend_hours = gain_suspend_hours
+        self.gain_reinvest_pct = gain_reinvest_pct
+        self.loss_action = loss_action              # encerrar/suspender
+        self.loss_suspend_hours = loss_suspend_hours
+
+        # Controle de suspensao
+        self._suspended_until: Optional[datetime] = None
 
         # Pausado
         self.paused = False
@@ -162,6 +183,11 @@ class BotController:
         self.executed_bet_pending: Optional[Dict] = None
         self.last_round_id: Optional[int] = None
 
+        # Controle de apostas da sessao
+        self.session_hits = 0
+        self.session_misses = 0
+        self.session_profit = 0.0  # lucro/prejuizo acumulado em R$
+
         # Thread-Safety
         self.balance_lock = threading.Lock()
 
@@ -177,8 +203,8 @@ class BotController:
         # Logger
         self.logger = logging.getLogger(__name__)
         logging.basicConfig(
-            level=logging.ERROR,
-            format="%(asctime)s - %(levelname)s - %(message)s"
+            level=logging.WARNING,
+            format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
         )
 
         self.last_balance_alert_time = time.time()
@@ -190,11 +216,22 @@ class BotController:
         # Configurar áreas de aposta (opcional - só se quiser executar apostas)
         self.selected_profile = self.setup_screen_areas()
 
-        setup_name = self.active_setup.name if self.active_setup else "N/A"
-        self.console.print("✅ BotController inicializado!", style="green")
-        self.console.print(f"📊 Sessão: {self.db_manager.session_id}", style="cyan")
-        self.console.print(f"🎯 Setup: {setup_name}", style="yellow")
-        self.console.print(f"📈 Meta: {meta_pct}%", style="yellow")
+        setup_raw = self.active_setup.name if self.active_setup else "N/A"
+        setup_display = get_display_name(setup_raw)
+        self.console.print("BotController inicializado!", style="green")
+        self.console.print(f"Sessao: {self.db_manager.session_id}", style="cyan")
+        self.console.print(f"Estrategia: {setup_display} ({setup_raw})", style="yellow")
+        gain_val = self.caixa * meta_pct / 100
+        loss_val = self.caixa * stop_loss_pct / 100
+        self.console.print(
+            f"📈 Stop Gain: {meta_pct:.1f}% do caixa (R$ {gain_val:.2f}) | "
+            f"Stop Loss: {stop_loss_pct:.1f}% do caixa (R$ {loss_val:.2f})",
+            style="yellow",
+        )
+        if session_hours > 0:
+            self.console.print(
+                f"⏱️ Sessao: {session_hours:.1f}h", style="yellow"
+            )
         if self.can_execute_bets():
             self.console.print("🎮 Modo: APOSTAS ATIVAS", style="green")
         else:
@@ -236,17 +273,20 @@ class BotController:
             new_setup = get_setup(setup_name)
             self.strategy.request_swap(new_setup)
             self.active_setup = new_setup
-            self.last_action = f"🔄 Troca solicitada → {setup_name}"
+            display = get_display_name(setup_name)
+            self.last_action = f"Troca: {display} ({setup_name})"
         except ValueError as e:
             self.logger.error(f"Setup inválido: {e}")
 
     def _on_meta_cycle(self):
-        """Callback do hot-key para ciclar meta."""
+        """Callback do hot-key para ciclar meta (+10% a cada F8)."""
         current = self.bankroll.meta_percent
-        idx = METAS_DISPONIVEIS.index(current) if current in METAS_DISPONIVEIS else -1
-        next_pct = METAS_DISPONIVEIS[(idx + 1) % len(METAS_DISPONIVEIS)]
+        next_pct = current + 10
+        if next_pct > 100:
+            next_pct = 10
         self.bankroll.set_meta(next_pct)
-        self.last_action = f"📈 Meta alterada → {next_pct}%"
+        valor = self.bankroll.meta_value
+        self.last_action = f"Meta alterada → {next_pct:.0f}% (R$ {valor:.2f})"
 
     def _on_premium_toggle(self):
         """Callback do hot-key para toggle premium."""
@@ -269,16 +309,22 @@ class BotController:
 
     def select_profile(self):
         profiles = self.config.get("profiles", {})
-        self.console.print("\nPerfis disponíveis:", style="cyan")
-        self.console.print("  [bold yellow]0. 🛠️ CRIAR NOVO PERFIL[/bold yellow]")
+        self.console.print("\nPerfis disponiveis:", style="cyan")
+        self.console.print("  [bold yellow]0. NOVA CALIBRAGEM[/bold yellow]")
 
         profile_keys = list(profiles.keys())
         for i, profile in enumerate(profile_keys, 1):
-            self.console.print(f"  {i}. {profile}", style="white")
+            dados = profiles[profile]
+            campos = len([v for v in dados.values() if v])
+            self.console.print(
+                f"  {i}. {profile} ({campos} campos)", style="white"
+            )
 
         while True:
             try:
-                choice = int(self.console.input("\n[green]Selecione o perfil: [/green]"))
+                choice = int(
+                    self.console.input("\n[green]Selecione o perfil: [/green]")
+                )
                 if choice == 0:
                     name, data = self.run_calibration_wizard()
                     if name and data:
@@ -286,44 +332,68 @@ class BotController:
                     continue
                 if 1 <= choice <= len(profiles):
                     selected = profile_keys[choice - 1]
-                    self.console.print(f"✅ Perfil '{selected}' selecionado", style="green")
+                    self.console.print(
+                        f"Perfil '{selected}' selecionado", style="green"
+                    )
                     return selected, profiles[selected]
-                self.console.print("Número inválido.", style="red")
+                self.console.print("Numero invalido.", style="red")
             except ValueError:
-                self.console.print("Digite um número válido.", style="red")
+                self.console.print("Digite um numero valido.", style="red")
 
     def setup_screen_areas(self):
-        """Configura áreas de tela para apostas (opcional).
+        """Configura areas de tela para apostas (opcional).
 
-        Com WebSocket, só precisamos das áreas de aposta (bet fields + button).
-        Se não houver perfil, o bot opera em modo observação (conta LOWs, não aposta).
+        Com WebSocket, so precisamos de 3 areas:
+          - Campo valor da aposta
+          - Campo multiplicador alvo
+          - Botao apostar
+
+        Se nao houver perfil, o bot opera em modo observacao.
         """
         if not self.config:
             return ""
 
         profiles = self.config.get("profiles", {})
-        if not profiles:
-            self.console.print(
-                "⚠️ Nenhum perfil de tela. Modo observação ativo.",
-                style="yellow",
-            )
-            return ""
 
         self.console.print(
-            "\n[cyan]Deseja configurar perfil de aposta?[/cyan]"
+            "\n[cyan]Configurar perfil de aposta:[/cyan]"
         )
-        self.console.print("  [yellow]0. Pular (modo observação)[/yellow]")
+        self.console.print("  [yellow]0. Pular (modo observacao)[/yellow]")
+        self.console.print("  [bold yellow]N. NOVA CALIBRAGEM[/bold yellow]")
 
         profile_keys = list(profiles.keys())
         for i, profile in enumerate(profile_keys, 1):
-            self.console.print(f"  {i}. {profile}", style="white")
+            dados = profiles[profile]
+            campos = len([v for v in dados.values() if v])
+            self.console.print(
+                f"  {i}. {profile} ({campos} campos)", style="white"
+            )
 
         try:
-            choice = int(self.console.input("\n[green]Selecione: [/green]"))
-            if choice == 0:
-                self.console.print("👁️ Modo observação", style="yellow")
+            entrada = self.console.input(
+                "\n[green]Selecione (numero ou N): [/green]"
+            ).strip().upper()
+
+            if entrada == "N":
+                name, data = self.run_calibration_wizard()
+                if name and data:
+                    self.screen_areas = {
+                        "bet_value_1": data.get("bet_value_area_1"),
+                        "target_1": data.get("target_area_1"),
+                        "bet_button_1": data.get("bet_button_area_1"),
+                    }
+                    self.console.print(
+                        f"Perfil '{name}' criado e carregado!", style="green"
+                    )
+                    return name
+                self.console.print("Modo observacao", style="yellow")
                 return ""
-            if 1 <= choice <= len(profiles):
+
+            choice = int(entrada)
+            if choice == 0:
+                self.console.print("Modo observacao", style="yellow")
+                return ""
+            if 1 <= choice <= len(profile_keys):
                 selected = profile_keys[choice - 1]
                 profile_data = profiles[selected]
 
@@ -334,13 +404,13 @@ class BotController:
                 }
 
                 self.console.print(
-                    f"✅ Perfil '{selected}' carregado (apostas)", style="green"
+                    f"Perfil '{selected}' carregado", style="green"
                 )
                 return selected
         except (ValueError, IndexError):
             pass
 
-        self.console.print("👁️ Modo observação", style="yellow")
+        self.console.print("Modo observacao", style="yellow")
         return ""
 
     # ── WebSocket Event Callbacks ────────────────────────────────────────
@@ -408,12 +478,23 @@ class BotController:
     def _on_betting_phase(self, data: Dict):
         """Callback: fase de apostas iniciou.
 
+        Este é o momento correto para executar apostas preparadas,
+        pois o formulário de aposta está ativo na tela.
+
         Args:
             data: {bet_left_seconds}
         """
         try:
             seconds = data.get("bet_left_seconds", 0)
             self.last_action = f"🎰 Fase apostas: {seconds}s"
+
+            # Executar aposta preparada (se houver e nao suspenso)
+            rec = self.strategy.get_prepared_bets()
+            if rec and rec.ready and self.can_execute_bets() and not self.paused:
+                # Pequeno delay para garantir que o formulario esta renderizado
+                time.sleep(0.5)
+                self.execute_prepared_bets()
+
         except Exception as e:
             self.logger.error(f"Erro _on_betting_phase: {e}")
 
@@ -499,9 +580,7 @@ class BotController:
 
             rec = self.strategy.prepare_bets_for_balance(current_balance)
             if rec:
-                self.last_action = f"🎯 {rec.strategy_name}"
-                if self.can_execute_bets():
-                    self.execute_prepared_bets()
+                self.last_action = f"🎯 {rec.strategy_name} (aguardando fase apostas)"
 
         except Exception as e:
             self.logger.error(f"Erro ao processar explosão: {e}")
@@ -514,25 +593,43 @@ class BotController:
             with self.balance_lock:
                 balance = self.current_balance or 0.0
 
-            if result["recommendation_hit"]:
-                msg = f"✅ HIT! Alvo: {result['target_1']}x | Saldo: R${balance:.2f}"
+            bet_amount = result.get("bet_1", 0.0)
+            target = result.get("target_1", 0.0)
+            is_hit = result["recommendation_hit"]
+
+            # Calcular lucro/prejuizo real da aposta
+            if is_hit:
+                # HIT: ganho = valor apostado * (multiplicador - 1)
+                bet_profit = bet_amount * (target - 1)
+                self.session_hits += 1
+                msg = (
+                    f"HIT! {target}x | "
+                    f"+R${bet_profit:.2f} | Saldo: R${balance:.2f}"
+                )
                 self.trigger_alert("hit", msg)
             else:
-                msg = f"❌ MISS! Alvo: {result['target_1']}x | Saldo: R${balance:.2f}"
+                # MISS: perda = valor apostado
+                bet_profit = -bet_amount
+                self.session_misses += 1
+                msg = (
+                    f"MISS! {target}x | "
+                    f"-R${bet_amount:.2f} | Saldo: R${balance:.2f}"
+                )
                 self.trigger_alert("miss", msg)
 
+            self.session_profit += bet_profit
+
             if self.last_round_id:
-                is_hit = result["recommendation_hit"]
                 dados_aposta = BetData(
                     rodada_id=self.last_round_id,
                     estrategia=result.get("strategy", ""),
-                    aposta_1=result.get("bet_1", 0.0),
-                    target_1=result.get("target_1", 0.0),
+                    aposta_1=bet_amount,
+                    target_1=target,
                     aposta_2=0.0,
                     target_2=0.0,
                     resultado_1=RESULTADO_HIT if is_hit else RESULTADO_MISS,
                     resultado_2=RESULTADO_MISS,
-                    lucro_liquido=0.0,
+                    lucro_liquido=bet_profit,
                     timestamp=datetime.now().isoformat(),
                 )
                 self.db_manager.save_bet(dados_aposta)
@@ -665,7 +762,8 @@ class BotController:
     def _build_header_panel(self) -> Panel:
         hora_brasilia = datetime.now(BRASILIA_TZ).strftime("%H:%M:%S")
         analysis = self.strategy.get_current_analysis()
-        setup_name = analysis.get("setup_name", "N/A")
+        setup_raw = analysis.get("setup_name", "N/A")
+        setup_name = get_display_name(setup_raw)
         meta_pct = self.bankroll.meta_percent
         progress = self.bankroll.get_meta_progress()
 
@@ -716,57 +814,94 @@ class BotController:
     def _build_info_panel(self) -> Panel:
         with self.balance_lock:
             balance = self.current_balance or 0.0
-            initial = self.initial_balance or 0.0
 
-        profit = balance - initial if initial > 0 else 0.0
-        profit_color = "green" if profit >= 0 else "red"
+        # Relacao caixa/banca
+        ratio = self.bankroll.n_bancas
 
-        # Bankroll info
-        net_profit = self.bankroll.get_net_profit()
-        net_color = "green" if net_profit >= 0 else "red"
+        # Controle de apostas
+        total_bets = self.session_hits + self.session_misses
+        win_rate = (
+            (self.session_hits / total_bets * 100) if total_bets > 0 else 0.0
+        )
+
+        # Lucro baseado em apostas reais
+        profit_color = "green" if self.session_profit >= 0 else "red"
 
         text = Text()
         text.append(
             f"Caixa: R$ {self.bankroll.caixa:.2f} | "
             f"Banca: R$ {self.bankroll.banca:.2f} "
-            f"({self.bankroll.n_bancas:.1f}x)\n",
+            f"({ratio:.1f}x)\n",
             style="cyan",
         )
         text.append(f"Saldo: R$ {balance:.2f}\n", style="bold white")
-        text.append(
-            f"Lucro sessao: R$ {profit:+.2f}\n", style=profit_color
-        )
-        text.append(
-            f"Lucro liquido: R$ {net_profit:+.2f}\n", style=net_color
-        )
         text.append(f"Rodadas: {self.round_count}\n", style="dim")
 
         elapsed = (datetime.now() - self.session_start).total_seconds()
         hours = int(elapsed // 3600)
         mins = int((elapsed % 3600) // 60)
-        text.append(f"Tempo: {hours}h {mins}m\n", style="dim")
+        if self.session_hours > 0:
+            remaining = max(0, self.session_hours * 3600 - elapsed)
+            rh = int(remaining // 3600)
+            rm = int((remaining % 3600) // 60)
+            text.append(
+                f"Tempo: {hours}h {mins}m (resta {rh}h {rm}m)\n",
+                style="dim",
+            )
+        else:
+            text.append(f"Tempo: {hours}h {mins}m\n", style="dim")
 
+        # Stop gain / stop loss progress
+        gain_pct = self.bankroll.meta_percent
+        loss_pct = self.bankroll.stop_loss_percent
+        gain_progress = self.bankroll.get_meta_progress() * 100
+        loss_current = max(
+            0, self.bankroll.bankroll_base - self.bankroll.current_bankroll
+        )
+        loss_progress = (
+            (loss_current / self.bankroll.stop_loss_value * 100)
+            if self.bankroll.stop_loss_value > 0 else 0
+        )
+        gain_valor = self.bankroll.caixa * gain_pct / 100
+        loss_valor = self.bankroll.caixa * loss_pct / 100
         text.append(
-            f"Saques: {self.bankroll.n_withdrawals} "
-            f"(R$ {self.bankroll.total_withdrawn:.2f})\n",
+            f"SG: {gain_pct:.0f}% caixa "
+            f"R${gain_valor:.0f} ({gain_progress:.0f}%) | "
+            f"SL: {loss_pct:.0f}% caixa "
+            f"R${loss_valor:.0f} ({loss_progress:.0f}%)\n",
             style="dim",
         )
+
+        # Separador
+        text.append("\n", style="dim")
+
+        # Controle de apostas
+        text.append("Apostas: ", style="bold white")
+        if total_bets > 0:
+            text.append(f"{self.session_hits}", style="green")
+            text.append(" hits / ", style="dim")
+            text.append(f"{self.session_misses}", style="red")
+            text.append(f" misses ({win_rate:.0f}%)\n", style="dim")
+        else:
+            text.append("nenhuma ainda\n", style="dim")
+
+        # Balanco financeiro (baseado em apostas)
+        text.append("Balanco: ", style="bold white")
         text.append(
-            f"Depositos: {self.bankroll.n_deposits} "
-            f"(R$ {self.bankroll.total_deposited:.2f})",
-            style="dim",
+            f"R$ {self.session_profit:+.2f}\n", style=profit_color
         )
 
         return Panel(text, title="Status Financeiro")
 
     def _build_strategy_panel(self) -> Panel:
         analysis = self.strategy.get_current_analysis()
-        setup_name = analysis.get("setup_name", "N/A")
+        setup_raw = analysis.get("setup_name", "N/A")
+        setup_display = get_display_name(setup_raw)
         max_d = analysis.get("max_dobras", 0)
         n_cycles = analysis.get("n_cycles", 1)
 
         text = Text()
-        text.append(f"Setup: {setup_name}\n", style="bold yellow")
+        text.append(f"Estrategia: {setup_display}\n", style="bold yellow")
         text.append(
             f"Baixas: {analysis['baixos_consecutivos']}\n", style="white"
         )
@@ -869,11 +1004,25 @@ class BotController:
             "🎮 WS Rounds",
             str(ws_stats.get("rounds_captured", 0)),
         )
+        ws_errors = ws_stats.get("errors", 0)
+        if ws_errors > 0:
+            table.add_row(
+                "⚠️ WS Erros",
+                f"[red]{ws_errors}[/red]",
+            )
         uptime = ws_stats.get("uptime_seconds", 0)
         table.add_row(
             "⏱️ WS Uptime",
             f"{int(uptime // 60)}m {int(uptime % 60)}s",
         )
+        # Tempo desde ultimo frame
+        last_frame = ws_stats.get("last_frame_time", 0)
+        if last_frame > 0:
+            ago = time.time() - last_frame
+            table.add_row(
+                "📡 Ultimo frame",
+                f"{ago:.0f}s atras",
+            )
 
         return Panel(table, title="📈 Estatísticas")
 
@@ -910,8 +1059,8 @@ class BotController:
         text = Text()
         text.append(self.last_action + "\n", style="bold white")
         text.append(
-            "F1:1/2  F2:1/2+1/2  F3:1/2+1/2+1/2  "
-            "F4:1/2/4  F5:1/2/4+1/2/4  F6:1/2/4/8  F7:1/2/4/8/16\n",
+            "F1:Conservador  F2:Moderado  F3:Resistente  "
+            "F4:Equilibrado  F5:Duplo  F6:Agressivo  F7:Ultra\n",
             style="dim",
         )
         text.append(
@@ -919,11 +1068,13 @@ class BotController:
             style="dim",
         )
 
-        # Horários premium de hoje
+        # Horarios recomendados de hoje
         today_hours = self.schedule.get_hours_for_today()
         if today_hours:
             hours_str = ", ".join(f"{h}h" for h in today_hours[:12])
-            text.append(f"\nPremium hoje: {hours_str}", style="dim")
+            text.append(
+                f"\nHorarios recomendados: {hours_str}", style="dim"
+            )
 
         return Panel(text, style="bold white")
 
@@ -952,13 +1103,17 @@ class BotController:
     def _run_main_loop(self):
         self.console.print("🚀 Iniciando Bot...", style="cyan")
 
-        # Conectar ao Chrome DevTools via WebSocket
+        # Conectar ao Chrome DevTools via WebSocket (auto-launch se necessario)
         self.console.print("🔌 Conectando ao Chrome DevTools...", style="cyan")
+        self.console.print(
+            "   (Chrome será aberto automaticamente se necessário)",
+            style="dim",
+        )
         if not self.ws_capture.connect():
             self.console.print(
                 "❌ Falha ao conectar ao Chrome!\n"
-                "   Verifique se o Chrome está aberto com:\n"
-                '   --remote-debugging-port=9222 --remote-allow-origins=*',
+                "   Chrome não encontrado ou não respondeu.\n"
+                "   Instale o Google Chrome e tente novamente.",
                 style="red",
             )
             return
@@ -991,11 +1146,112 @@ class BotController:
         )
         self.live_display.start()
 
-        setup_name = self.active_setup.name if self.active_setup else "N/A"
-        self.last_action = f"✅ INICIADO! Setup: {setup_name}"
+        setup_raw = self.active_setup.name if self.active_setup else "N/A"
+        setup_display = get_display_name(setup_raw)
+        self.last_action = f"INICIADO! Estrategia: {setup_display}"
 
         while self.running:
             time.sleep(1)
+            self._check_session_limits()
+
+    def _check_session_limits(self):
+        """Verifica limites de sessao: tempo, stop gain, stop loss, suspensao."""
+
+        # Se esta suspenso, verifica se ja pode retomar
+        if self._suspended_until:
+            if datetime.now() >= self._suspended_until:
+                self._suspended_until = None
+                self.paused = False
+                self.last_action = "Suspensao encerrada - retomando!"
+                self.logger.info("Suspensao encerrada, retomando apostas")
+            else:
+                remaining = (
+                    self._suspended_until - datetime.now()
+                ).total_seconds()
+                rm = int(remaining // 60)
+                self.last_action = (
+                    f"SUSPENSO (retoma em {rm} min)"
+                )
+            return
+
+        # Tempo limite da sessao
+        if self.session_hours > 0:
+            elapsed = (datetime.now() - self.session_start).total_seconds()
+            limit_seconds = self.session_hours * 3600
+            if elapsed >= limit_seconds:
+                self.last_action = (
+                    f"TEMPO LIMITE ({self.session_hours:.1f}h) - "
+                    "Encerrando..."
+                )
+                self.running = False
+                return
+
+        # Stop gain (meta de lucro)
+        if self.bankroll.check_meta_reached():
+            self._handle_stop_gain()
+            return
+
+        # Stop loss (perda maxima)
+        if self.bankroll.check_stop_loss():
+            self._handle_stop_loss()
+            return
+
+    def _handle_stop_gain(self):
+        """Executa a acao configurada para stop gain."""
+        lucro = self.bankroll.current_bankroll - self.bankroll.bankroll_base
+        self.logger.info(
+            f"STOP GAIN atingido! Lucro: R$ {lucro:.2f} | "
+            f"Acao: {self.gain_action}"
+        )
+
+        if self.gain_action == "suspender":
+            hrs = self.gain_suspend_hours
+            self._suspended_until = datetime.now() + timedelta(hours=hrs)
+            self.paused = True
+            self.last_action = (
+                f"STOP GAIN! Suspenso por {hrs:.1f}h"
+            )
+
+        elif self.gain_action == "reinvestir":
+            pct = self.gain_reinvest_pct
+            reinvest = round(lucro * pct / 100, 2)
+            # Saca o lucro, reinveste parte
+            self.bankroll.execute_withdrawal()
+            self.bankroll.update_balance(reinvest)
+            self.last_action = (
+                f"STOP GAIN! Reinvestindo {pct:.0f}% = "
+                f"R$ {reinvest:.2f}"
+            )
+            self.logger.info(
+                f"Reinvestido R$ {reinvest:.2f} ({pct:.0f}% do lucro)"
+            )
+
+        else:  # encerrar
+            self.last_action = "STOP GAIN atingido! Encerrando..."
+            self.running = False
+
+    def _handle_stop_loss(self):
+        """Executa a acao configurada para stop loss."""
+        perda = self.bankroll.bankroll_base - self.bankroll.current_bankroll
+        self.logger.info(
+            f"STOP LOSS atingido! Perda: R$ {perda:.2f} | "
+            f"Acao: {self.loss_action}"
+        )
+
+        if self.loss_action == "suspender":
+            hrs = self.loss_suspend_hours
+            self._suspended_until = datetime.now() + timedelta(hours=hrs)
+            self.paused = True
+            self.last_action = (
+                f"STOP LOSS! Suspenso por {hrs:.1f}h"
+            )
+
+        else:  # encerrar
+            self.last_action = (
+                f"STOP LOSS ({self.bankroll.stop_loss_percent:.0f}%) - "
+                "Encerrando..."
+            )
+            self.running = False
 
     def start(self):
         try:
@@ -1055,34 +1311,51 @@ class BotController:
         text.append("📊 RESUMO FINAL DA SESSÃO\n", style="bold cyan")
         text.append("=" * 55 + "\n", style="cyan")
 
-        text.append(f"\n⏱️ Duração: {int(duration.total_seconds() // 60)} minutos\n")
+        mins_total = int(duration.total_seconds() // 60)
+        if self.session_hours > 0:
+            text.append(
+                f"\n⏱️ Duração: {mins_total} min "
+                f"(limite: {self.session_hours}h)\n",
+            )
+        else:
+            text.append(f"\n⏱️ Duração: {mins_total} minutos\n")
         text.append(f"💥 Explosões: {len(self.explosions)}\n")
-        text.append(f"🎯 Setup: {analysis.get('setup_name', 'N/A')}\n")
+        sr = analysis.get("setup_name", "N/A")
+        text.append(f"Estrategia: {get_display_name(sr)} ({sr})\n")
+        text.append(
+            f"Stop Gain: {self.bankroll.meta_percent:.1f}% do caixa "
+            f"(R$ {self.bankroll.meta_value:.2f}) | "
+            f"Stop Loss: {self.bankroll.stop_loss_percent:.1f}% do caixa "
+            f"(R$ {self.bankroll.stop_loss_value:.2f})\n",
+            style="dim",
+        )
 
         with self.balance_lock:
-            inicial = self.initial_balance or 0
-            final = self.current_balance or 0
+            balance = self.current_balance or 0
 
-        profit = final - inicial
-        color = "green" if profit >= 0 else "red"
-        text.append(f"\n💰 Saldo Inicial: R$ {inicial:.2f}\n")
-        text.append(f"💰 Saldo Final: R$ {final:.2f}\n")
-        text.append("📈 Lucro Sessão: ", style="white")
-        text.append(f"R$ {profit:+.2f}\n", style=color)
+        # Controle de apostas
+        total_bets = self.session_hits + self.session_misses
+        win_rate = (
+            (self.session_hits / total_bets * 100) if total_bets > 0 else 0.0
+        )
+        profit_color = "green" if self.session_profit >= 0 else "red"
 
-        net = bank_summary["net_profit"]
-        net_color = "green" if net >= 0 else "red"
-        text.append("📊 Lucro Líquido: ", style="white")
-        text.append(f"R$ {net:+.2f}\n", style=net_color)
+        text.append(f"\nCaixa: R$ {self.bankroll.caixa:.2f} | ", style="cyan")
+        text.append(f"Banca: R$ {self.bankroll.banca:.2f} ", style="cyan")
+        text.append(f"({self.bankroll.n_bancas:.1f}x)\n", style="cyan")
+        text.append(f"Saldo: R$ {balance:.2f}\n", style="bold white")
 
-        text.append(f"\n💳 Total Sacado: R$ {bank_summary['total_withdrawn']:.2f}\n")
-        text.append(f"💳 Total Depositado: R$ {bank_summary['total_deposited']:.2f}\n")
-        text.append(f"💳 Saques: {bank_summary['n_withdrawals']}\n")
-        text.append(f"💳 Depósitos: {bank_summary['n_deposits']}\n")
+        text.append("\nApostas: ", style="bold white")
+        text.append(f"{self.session_hits}", style="green")
+        text.append(" hits / ", style="dim")
+        text.append(f"{self.session_misses}", style="red")
+        text.append(f" misses", style="dim")
+        if total_bets > 0:
+            text.append(f" ({win_rate:.0f}%)", style="dim")
+        text.append("\n")
 
-        if bank_summary["total_deposited"] > 0:
-            roi = bank_summary["roi"]
-            text.append(f"📊 ROI: {roi:+.1f}%\n", style=net_color)
+        text.append("Balanco: ", style="bold white")
+        text.append(f"R$ {self.session_profit:+.2f}\n", style=profit_color)
 
         text.append("\n" + "=" * 55 + "\n", style="yellow")
         text.append("🎯 ESTATÍSTICAS\n", style="bold yellow")
@@ -1113,8 +1386,8 @@ class BotController:
         self.console.clear()
         self.console.print(
             Panel(
-                "[bold yellow]CALIBRAÇÃO VISUAL[/bold yellow]\n"
-                "[white]Arraste o mouse para selecionar as áreas[/white]",
+                "[bold yellow]CALIBRAGEM DE TELA[/bold yellow]\n"
+                "[white]Arraste o mouse para selecionar cada campo[/white]",
                 border_style="yellow"
             )
         )
@@ -1123,15 +1396,19 @@ class BotController:
             "\n[cyan]Nome do perfil: [/cyan]"
         ) or f"Perfil_{int(time.time())}"
 
-        self.console.print("\n[green]Instruções:[/green]")
-        self.console.print("  • Uma tela escura vai aparecer")
-        self.console.print("  • CLIQUE e ARRASTE para selecionar a área")
-        self.console.print("  • ESC para cancelar")
+        self.console.print("\n[green]Como funciona:[/green]")
+        self.console.print("  1. Uma tela escura semi-transparente vai aparecer")
+        self.console.print("  2. CLIQUE e ARRASTE para selecionar o campo")
+        self.console.print("  3. ESC para cancelar")
+        self.console.print("\n[yellow]Campos a calibrar:[/yellow]")
+        self.console.print("  • Campo de VALOR DA APOSTA (onde digitar R$)")
+        self.console.print("  • Campo de MULTIPLICADOR ALVO (onde digitar 2.00x)")
+        self.console.print("  • BOTÃO APOSTAR (onde clicar para confirmar)")
         self.console.input("\n[yellow]Pressione ENTER para começar...[/yellow]")
 
         items = [
-            ("bet_value_area_1", "CAMPO VALOR DA APOSTA"),
-            ("target_area_1", "CAMPO TARGET (multiplicador alvo)"),
+            ("bet_value_area_1", "CAMPO VALOR DA APOSTA (R$)"),
+            ("target_area_1", "CAMPO MULTIPLICADOR ALVO (2.00x)"),
             ("bet_button_area_1", "BOTÃO APOSTAR"),
         ]
 
@@ -1231,7 +1508,7 @@ class BotController:
         )
         canvas.create_text(
             screen_w // 2, 80,
-            text="CLIQUE e ARRASTE para selecionar | ESC = cancelar",
+            text="CLIQUE e ARRASTE para selecionar a area | ESC = cancelar",
             font=('Arial', 16), fill='yellow'
         )
 
@@ -1278,7 +1555,14 @@ def main():
             caixa=config["caixa"],
             banca_inicial=config["banca"],
             setup=config["setup"],
-            meta_pct=config["meta_pct"],
+            meta_pct=config["stop_gain_pct"],
+            stop_loss_pct=config["stop_loss_pct"],
+            session_hours=config["session_hours"],
+            gain_action=config["gain_action"],
+            gain_suspend_hours=config["gain_suspend_hours"],
+            gain_reinvest_pct=config["gain_reinvest_pct"],
+            loss_action=config["loss_action"],
+            loss_suspend_hours=config["loss_suspend_hours"],
             premium_only=config["premium_only"],
         )
         bot.start()

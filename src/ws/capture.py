@@ -25,6 +25,10 @@ Uso:
 import base64
 import json
 import logging
+import os
+import platform
+import shutil
+import subprocess
 import threading
 import time
 import zlib
@@ -32,6 +36,7 @@ from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
+from pathlib import Path
 from typing import Callable, Dict, List, Optional, Tuple
 
 import requests
@@ -135,6 +140,131 @@ class CrashWSCapture:
         self._stats = CaptureStats()
         self._start_time: float = 0.0
 
+    # ── Chrome auto-launch ──────────────────────────────────────────────
+
+    def _is_chrome_debug_running(self) -> bool:
+        """Verifica se Chrome com debug port esta acessivel."""
+        try:
+            resp = requests.get(
+                f"http://localhost:{self.port}/json/version",
+                timeout=2,
+            )
+            return resp.status_code == 200
+        except Exception:
+            return False
+
+    def _find_chrome_path(self) -> Optional[str]:
+        """Encontra o executavel do Chrome no sistema."""
+        system = platform.system()
+
+        if system == "Windows":
+            candidates = [
+                Path(os.environ.get("PROGRAMFILES", ""))
+                / "Google/Chrome/Application/chrome.exe",
+                Path(os.environ.get("PROGRAMFILES(X86)", ""))
+                / "Google/Chrome/Application/chrome.exe",
+                Path(os.environ.get("LOCALAPPDATA", ""))
+                / "Google/Chrome/Application/chrome.exe",
+            ]
+        elif system == "Darwin":  # macOS
+            candidates = [
+                Path("/Applications/Google Chrome.app"
+                     "/Contents/MacOS/Google Chrome"),
+            ]
+        else:  # Linux
+            candidates = [
+                Path("/usr/bin/google-chrome"),
+                Path("/usr/bin/google-chrome-stable"),
+                Path("/usr/bin/chromium-browser"),
+            ]
+
+        for path in candidates:
+            if path.exists():
+                return str(path)
+
+        # Fallback: procurar no PATH
+        chrome = shutil.which("chrome") or shutil.which(
+            "google-chrome"
+        )
+        return chrome
+
+    def ensure_chrome_running(
+        self, game_url: str = ""
+    ) -> bool:
+        """Garante que Chrome esta rodando com debug port.
+
+        Se Chrome com debug ja esta ativo, nao faz nada.
+        Senao, lanca Chrome com as flags necessarias.
+
+        Args:
+            game_url: URL para abrir (ex: site do jogo).
+
+        Returns:
+            True se Chrome esta pronto para conexao.
+        """
+        if self._is_chrome_debug_running():
+            logger.info("Chrome debug ja esta rodando")
+            return True
+
+        chrome_path = self._find_chrome_path()
+        if not chrome_path:
+            logger.error(
+                "Chrome nao encontrado no sistema! "
+                "Instale o Google Chrome."
+            )
+            return False
+
+        # User data dir separado para nao conflitar
+        system = platform.system()
+        if system == "Windows":
+            data_dir = Path(os.environ.get("TEMP", "C:/temp"))
+            data_dir = data_dir / "tucunarebot-chrome"
+        elif system == "Darwin":
+            data_dir = (
+                Path.home() / "Library/Application Support"
+                / "TucunareBot/chrome-debug"
+            )
+        else:
+            data_dir = Path.home() / ".tucunarebot/chrome-debug"
+
+        data_dir.mkdir(parents=True, exist_ok=True)
+
+        cmd = [
+            chrome_path,
+            f"--remote-debugging-port={self.port}",
+            "--remote-allow-origins=*",
+            f"--user-data-dir={data_dir}",
+            "--no-first-run",
+            "--no-default-browser-check",
+        ]
+
+        if game_url:
+            cmd.append(game_url)
+
+        logger.info(f"Lancando Chrome na porta {self.port}...")
+
+        try:
+            subprocess.Popen(
+                cmd,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except Exception as e:
+            logger.error(f"Erro ao lancar Chrome: {e}")
+            return False
+
+        # Aguardar Chrome ficar pronto (max 15s)
+        for i in range(30):
+            time.sleep(0.5)
+            if self._is_chrome_debug_running():
+                logger.info(
+                    f"Chrome pronto ({(i+1)*0.5:.1f}s)"
+                )
+                return True
+
+        logger.error("Chrome lancado mas nao respondeu")
+        return False
+
     # ── Conexao ─────────────────────────────────────────────────────────
 
     def _find_game_tab(self) -> Optional[str]:
@@ -189,9 +319,21 @@ class CrashWSCapture:
     def connect(self) -> bool:
         """Conecta ao Chrome DevTools e habilita interceptacao de rede.
 
+        Se Chrome nao esta rodando com debug port, tenta lanca-lo
+        automaticamente.
+
         Returns:
             True se conectou com sucesso.
         """
+        # Garantir que Chrome esta rodando com debug port
+        if not self._is_chrome_debug_running():
+            logger.info("Chrome debug nao detectado, tentando lancar...")
+            if not self.ensure_chrome_running():
+                logger.error(
+                    "Nao foi possivel lancar Chrome com debug port"
+                )
+                return False
+
         self._devtools_url = self._find_game_tab()
         if not self._devtools_url:
             return False
@@ -357,16 +499,20 @@ class CrashWSCapture:
         # Frame WebSocket recebido do servidor do jogo
         elif method == "Network.webSocketFrameReceived":
             params = data.get("params", {})
-            payload = params.get("response", {}).get("payloadData", "")
+            response = params.get("response", {})
+            payload = response.get("payloadData", "")
+            opcode = response.get("opcode", 1)
             if payload:
-                self._process_game_frame(payload, "RECV")
+                self._process_game_frame(payload, opcode)
 
         # Frame enviado ao servidor
         elif method == "Network.webSocketFrameSent":
             params = data.get("params", {})
-            payload = params.get("response", {}).get("payloadData", "")
+            response = params.get("response", {})
+            payload = response.get("payloadData", "")
+            opcode = response.get("opcode", 1)
             if payload:
-                self._process_game_frame(payload, "SENT")
+                self._process_game_frame(payload, opcode)
 
         # WebSocket fechado
         elif method == "Network.webSocketClosed":
@@ -375,25 +521,60 @@ class CrashWSCapture:
             url = self._ws_connections.pop(req_id, "unknown")
             logger.debug(f"WS fechado: {url[:80]}")
 
-    def _process_game_frame(self, payload: str, direction: str):
-        """Decodifica e processa frame do jogo (base64 + zlib)."""
+    def _process_game_frame(self, payload: str, opcode: int = 1):
+        """Decodifica e processa frame do jogo.
+
+        Chrome DevTools Protocol:
+          - opcode 1 (text): payloadData é string UTF-8
+          - opcode 2 (binary): payloadData é base64-encoded
+        """
         self._stats.frames_received += 1
         self._stats.last_frame_time = time.time()
 
-        try:
-            raw = base64.b64decode(payload)
-            try:
-                decoded_str = zlib.decompress(raw).decode("utf-8", errors="replace")
-            except zlib.error:
-                try:
-                    decoded_str = zlib.decompress(
-                        raw, -zlib.MAX_WBITS
-                    ).decode("utf-8", errors="replace")
-                except zlib.error:
-                    decoded_str = raw.decode("utf-8", errors="replace")
+        msg = None
 
-            msg = json.loads(decoded_str)
-        except Exception:
+        # Estrategia 1: texto direto (opcode 1 ou fallback)
+        if opcode == 1 or msg is None:
+            try:
+                msg = json.loads(payload)
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+        # Estrategia 2: base64 + zlib (opcode 2 / binary frames)
+        if msg is None:
+            try:
+                raw = base64.b64decode(payload)
+                try:
+                    decoded_str = zlib.decompress(raw).decode(
+                        "utf-8", errors="replace"
+                    )
+                except zlib.error:
+                    try:
+                        decoded_str = zlib.decompress(
+                            raw, -zlib.MAX_WBITS
+                        ).decode("utf-8", errors="replace")
+                    except zlib.error:
+                        decoded_str = raw.decode("utf-8", errors="replace")
+                msg = json.loads(decoded_str)
+            except Exception:
+                pass
+
+        # Log amostral dos primeiros frames para diagnostico
+        if self._stats.frames_received <= 5:
+            sample = payload[:200] if len(payload) > 200 else payload
+            if msg:
+                cmd = msg.get("Head", {}).get("Cmd", "?")
+                logger.warning(
+                    f"[WS SAMPLE #{self._stats.frames_received}] "
+                    f"opcode={opcode} cmd={cmd} keys={list(msg.keys())[:5]}"
+                )
+            else:
+                logger.warning(
+                    f"[WS SAMPLE #{self._stats.frames_received}] "
+                    f"opcode={opcode} PARSE_FAILED payload={sample}"
+                )
+
+        if msg is None:
             return
 
         outer_cmd = msg.get("Head", {}).get("Cmd", 0)
@@ -410,6 +591,11 @@ class CrashWSCapture:
             pass  # Join/leave - ignorar por enquanto
         elif outer_cmd == CMD_TICK:
             pass  # Heartbeat - ignorar
+        elif outer_cmd != 0:
+            # Comando desconhecido - log para analise
+            logger.debug(
+                f"Cmd desconhecido: {outer_cmd} body_keys={list(body.keys())[:5]}"
+            )
 
     def _handle_game_pkg(self, body: Dict):
         """Processa GameJsonPkg (wrapper para comandos do jogo)."""

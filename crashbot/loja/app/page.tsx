@@ -550,7 +550,7 @@ export default function Home() {
                     <CardContent className="flex-1 flex flex-col">
                       <div className="mb-2">
                         <span className="text-5xl font-bold text-white">
-                          R$ 497
+                          R$ 249
                         </span>
                         <span className="text-slate-500">/mês</span>
                       </div>
@@ -598,7 +598,7 @@ export default function Home() {
                   </CardHeader>
                   <CardContent className="flex-1 flex flex-col">
                     <div className="text-3xl font-bold text-white mb-6">
-                      R$ 147{' '}
+                      R$ 69{' '}
                       <span className="text-sm text-slate-500">/sem</span>
                     </div>
                     <ul className="space-y-4 text-sm text-slate-300 flex-1">

@@ -50,17 +50,14 @@ def _get_base_filters(
     return filters
 
 
-def _get_valor_plano(plano: str, primeira_adesao: bool) -> float:
+def _get_valor_plano(plano: str) -> float:
     """Retorna valor do plano para cálculos de receita."""
     precos = {
-        "semanal": {"normal": 149.90, "primeira": 49.90},
-        "quinzenal": {"normal": 249.90, "primeira": 89.90},
-        "mensal": {"normal": 449.90, "primeira": 149.90},
-        "trial": {"normal": 0.0, "primeira": 0.0},
+        "semanal": 69.00,
+        "mensal": 249.00,
+        "trial": 0.0,
     }
-    key = plano if plano in precos else "trial"
-    plano_info = precos[key]
-    return plano_info["primeira"] if primeira_adesao else plano_info["normal"]
+    return precos.get(plano, 0.0)
 
 
 # ============================================================================
@@ -174,7 +171,7 @@ async def _get_dados_conversao(db: AsyncSession) -> Dict[str, Any]:
             select(func.count(func.distinct(Licenca.email_cliente))).where(
                 and_(
                     Licenca.is_trial.is_(False),
-                    Licenca.is_primeira_adesao.is_(True),
+                    Licenca.plano_tipo.isnot(None),
                 )
             )
         )
@@ -199,16 +196,7 @@ async def _get_ultimas_vendas(db: AsyncSession) -> List[Dict]:
 
     vendas = []
     for lic in result.scalars():
-        # Type Safety: Usar 'is not None' resolve o erro do Pylance sobre Column[str]
         plano = cast(str, lic.plano_tipo) if lic.plano_tipo is not None else "trial"
-
-        is_primeira = (
-            cast(bool, lic.is_primeira_adesao)
-            if lic.is_primeira_adesao is not None
-            else False
-        )
-
-        # Type Safety: Usar 'is not None' para Column[datetime]
         data_str = lic.created_at.isoformat() if lic.created_at is not None else None
 
         vendas.append(
@@ -218,7 +206,7 @@ async def _get_ultimas_vendas(db: AsyncSession) -> List[Dict]:
                 "email": lic.email_cliente,
                 "plano": plano,
                 "data": data_str,
-                "valor": _get_valor_plano(plano, is_primeira),
+                "valor": _get_valor_plano(plano),
             }
         )
     return vendas
@@ -227,7 +215,7 @@ async def _get_ultimas_vendas(db: AsyncSession) -> List[Dict]:
 async def _calcular_receita_mensal(db: AsyncSession) -> float:
     """Calcula receita recorrente mensal estimada."""
     result = await db.execute(
-        select(Licenca.plano_tipo, Licenca.is_primeira_adesao).where(
+        select(Licenca.plano_tipo).where(
             and_(Licenca.ativa.is_(True), Licenca.is_trial.is_(False))
         )
     )
@@ -235,13 +223,10 @@ async def _calcular_receita_mensal(db: AsyncSession) -> float:
     total = 0.0
     for row in result:
         p_tipo = row.plano_tipo or "trial"
-        p_primeira = row.is_primeira_adesao or False
-        valor = _get_valor_plano(p_tipo, p_primeira)
+        valor = _get_valor_plano(p_tipo)
 
         if p_tipo == "semanal":
             total += valor * 4
-        elif p_tipo == "quinzenal":
-            total += valor * 2
         else:
             total += valor
 
