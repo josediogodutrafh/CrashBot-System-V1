@@ -103,7 +103,7 @@ app.include_router(notify_router)
 # ============================================================================
 
 
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 async def root():
     """Rota raiz - Informações da API."""
     return {
@@ -114,7 +114,7 @@ async def root():
     }
 
 
-@app.get("/health")
+@app.api_route("/health", methods=["GET", "HEAD"])
 async def health_check():
     """Health check - Verifica se a API está funcionando."""
     return {
