@@ -40,12 +40,12 @@ class BankrollManager:
         meta_percent: float = 20,
         stop_loss_percent: float = 100,
     ):
-        # Caixa = reserva total | Banca = alocacao para apostas
+        # Caixa = saldo real na plataforma | Banca = alocacao por sessao
         self.caixa = caixa if caixa > 0 else banca
         self.banca = banca
-        self.bankroll_base = banca  # alias para compatibilidade
+        self.bankroll_base = self.caixa  # referencia para meta/stop = CAIXA
 
-        self.current_bankroll = banca
+        self.current_bankroll = self.caixa  # inicia no caixa (WS sincroniza)
 
         # Meta de lucro (% do CAIXA)
         self.meta_percent = meta_percent
@@ -56,7 +56,7 @@ class BankrollManager:
         self.stop_loss_value = self.caixa * stop_loss_percent / 100
 
         # Contadores financeiros
-        self.total_deposited = banca
+        self.total_deposited = self.caixa
         self.total_withdrawn = 0.0
         self.n_deposits = 1
         self.n_withdrawals = 0
@@ -66,7 +66,7 @@ class BankrollManager:
 
         # Sessao
         self.session_start = datetime.now()
-        self.session_start_balance = banca
+        self.session_start_balance = self.caixa
 
         logger.info(
             f"BankrollManager: caixa=R${self.caixa:.2f}, "
@@ -114,7 +114,7 @@ class BankrollManager:
     # ── Saque e Depósito ──────────────────────────────────────────────
 
     def execute_withdrawal(self) -> float:
-        """Saca o excedente acima da banca base. Retorna valor sacado."""
+        """Saca o lucro acima do caixa inicial. Retorna valor sacado."""
         if self.current_bankroll <= self.bankroll_base:
             return 0.0
 
@@ -134,23 +134,23 @@ class BankrollManager:
         return withdraw
 
     def execute_deposit(self) -> float:
-        """Repõe a banca base após bust. Retorna valor depositado."""
-        self.total_deposited += self.bankroll_base
+        """Repõe a banca após bust. Retorna valor depositado."""
+        self.total_deposited += self.banca
         self.n_deposits += 1
-        self.current_bankroll = self.bankroll_base
+        self.current_bankroll += self.banca
 
         self.transactions.append(Transaction(
             timestamp=datetime.now(),
             tipo="deposito",
-            valor=self.bankroll_base,
+            valor=self.banca,
             saldo_apos=self.current_bankroll,
         ))
 
         logger.info(
-            f"DEPÓSITO: R${self.bankroll_base:.2f} | "
+            f"DEPÓSITO: R${self.banca:.2f} | "
             f"Total depositado: R${self.total_deposited:.2f}"
         )
-        return self.bankroll_base
+        return self.banca
 
     def check_bust(self) -> bool:
         """Verifica se a banca zerou."""
