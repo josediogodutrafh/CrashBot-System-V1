@@ -8,8 +8,8 @@ interface Licenca {
   chave: string;
   hwid: string | null;
   ativa: boolean;
-  created_at: string;
-  data_expiracao: string;
+  created_at: string | null;
+  data_expiracao: string | null;
   cliente_nome: string;
   email_cliente: string;
   whatsapp: string;
@@ -201,14 +201,21 @@ export default function AdminLicencas() {
     }
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('pt-BR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+  const formatDate = (dateString: string | null | undefined): string => {
+    if (!dateString) return '-';
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return '-';
+      return date.toLocaleDateString('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch {
+      return '-';
+    }
   };
 
   const filteredLicencas = licencas.filter((l) => {

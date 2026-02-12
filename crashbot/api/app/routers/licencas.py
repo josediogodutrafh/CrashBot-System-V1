@@ -229,6 +229,7 @@ async def criar_licenca(
         whatsapp=payload.whatsapp or "Nao informado",
         plano_tipo=payload.plano_tipo,
         ativa=True,
+        created_at=datetime.now(timezone.utc),
         data_expiracao=data_expiracao,
     )
 

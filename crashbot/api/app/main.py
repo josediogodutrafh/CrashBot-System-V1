@@ -7,7 +7,7 @@ API para gestão de licenças, pagamentos, telemetria e análise IA.
 
 from contextlib import asynccontextmanager
 
-from app.database import get_db
+from app.database import engine, get_db
 from app.routers.auth import router as auth_router
 from app.routers.calendar import router as calendar_router
 from app.routers.licencas import router as licencas_router
@@ -41,6 +41,57 @@ async def lifespan(app: FastAPI):
     """Startup e shutdown da API."""
     print("TucunaréBot API iniciando...")
     print("Documentação: http://localhost:8000/api/docs")
+
+    # Migração: preencher created_at NULL nas licenças
+    try:
+        from sqlalchemy import text as sql_text
+
+        async with engine.begin() as conn:
+            result = await conn.execute(
+                sql_text(
+                    """
+                    UPDATE licenca
+                    SET created_at = data_expiracao - INTERVAL '30 days'
+                    WHERE created_at IS NULL
+                      AND data_expiracao IS NOT NULL
+                      AND plano_tipo = 'mensal'
+                    """
+                )
+            )
+            count_mensal = result.rowcount
+
+            result = await conn.execute(
+                sql_text(
+                    """
+                    UPDATE licenca
+                    SET created_at = data_expiracao - INTERVAL '7 days'
+                    WHERE created_at IS NULL
+                      AND data_expiracao IS NOT NULL
+                      AND plano_tipo IN ('trial', 'semanal', 'experimental')
+                    """
+                )
+            )
+            count_other = result.rowcount
+
+            # Fallback: qualquer restante com NULL
+            result = await conn.execute(
+                sql_text(
+                    """
+                    UPDATE licenca
+                    SET created_at = data_expiracao - INTERVAL '7 days'
+                    WHERE created_at IS NULL
+                      AND data_expiracao IS NOT NULL
+                    """
+                )
+            )
+            count_fallback = result.rowcount
+
+            total = count_mensal + count_other + count_fallback
+            if total > 0:
+                print(f"  Migração: {total} licenças com created_at corrigido")
+    except Exception as e:
+        print(f"  Aviso migração created_at: {e}")
+
     yield
     print("TucunaréBot API encerrando...")
 

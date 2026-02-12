@@ -3,7 +3,7 @@ Modelo: Licenca
 Tabela que armazena as licenças dos clientes.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional, cast
 
 from app.database import Base
@@ -106,6 +106,12 @@ class Licenca(Base):
         created = (
             cast(datetime, self.created_at) if self.created_at is not None else None
         )
+
+        # Fallback: se created_at for None, derivar de data_expiracao
+        if created is None and data_exp is not None:
+            plano = self.plano_tipo or "mensal"
+            dias = 30 if plano == "mensal" else 7
+            created = data_exp - timedelta(days=dias)
 
         return {
             "id": self.id,

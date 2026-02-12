@@ -13,7 +13,7 @@ interface Licenca {
   ativa: boolean;
   esta_expirada: boolean;
   dias_restantes: number;
-  created_at: string;
+  created_at: string | null;
 }
 
 interface Usuario {
@@ -171,12 +171,19 @@ export default function AdminClientes() {
     }
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('pt-BR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-    });
+  const formatDate = (dateString: string | null | undefined): string => {
+    if (!dateString) return '-';
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return '-';
+      return date.toLocaleDateString('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+      });
+    } catch {
+      return '-';
+    }
   };
 
   const filteredClientes = clientes.filter(

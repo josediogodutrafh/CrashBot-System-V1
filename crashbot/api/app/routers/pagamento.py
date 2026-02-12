@@ -405,6 +405,7 @@ async def confirmar_trial(
     nova_licenca = Licenca(
         chave=chave,
         ativa=True,
+        created_at=datetime.now(timezone.utc),
         data_expiracao=data_expiracao,
         cliente_nome=dados.nome,
         email_cliente=dados.email,
@@ -547,6 +548,7 @@ async def criar_trial(
     nova_licenca = Licenca(
         chave=chave,
         ativa=True,
+        created_at=datetime.now(timezone.utc),
         data_expiracao=data_expiracao,
         cliente_nome=dados.nome,
         email_cliente=dados.email,
@@ -765,6 +767,7 @@ async def webhook_mercadopago(
     nova_licenca = Licenca(
         chave=chave,
         ativa=True,
+        created_at=datetime.now(timezone.utc),
         data_expiracao=data_expiracao,
         cliente_nome=nome,
         email_cliente=email,
