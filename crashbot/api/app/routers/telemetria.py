@@ -244,7 +244,7 @@ async def _get_clientes_por_dia(db: AsyncSession, dias: int) -> List[Dict]:
             dia_truncado.label("dia"),
             func.count(Licenca.id).label("quantidade"),
         )
-        .where(Licenca.created_at >= inicio)
+        .where(and_(Licenca.created_at.isnot(None), Licenca.created_at >= inicio))
         .group_by(dia_truncado)
         .order_by(dia_truncado)
     )
@@ -298,7 +298,7 @@ async def _get_vendas_por_dia(
 ) -> List[Dict]:
     """Vendas por dia (não-trial)."""
     dia_trunc = func.date_trunc("day", Licenca.created_at)
-    filters = [Licenca.is_trial.is_(False)]
+    filters = [Licenca.is_trial.is_(False), Licenca.created_at.isnot(None)]
     if data_inicio:
         filters.append(Licenca.created_at >= data_inicio)
 
@@ -519,7 +519,7 @@ async def _get_aquisicao_diaria(
 ) -> List[Dict]:
     """Aquisição diária: trials vs pagos."""
     dia_trunc = func.date_trunc("day", Licenca.created_at)
-    filters = []
+    filters = [Licenca.created_at.isnot(None)]
     if data_inicio:
         filters.append(Licenca.created_at >= data_inicio)
 

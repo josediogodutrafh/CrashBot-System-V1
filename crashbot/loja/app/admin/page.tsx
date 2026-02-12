@@ -7,18 +7,25 @@ import { apiFetch } from "@/lib/api";
 type Periodo = "7d" | "30d" | "all";
 
 interface NegocioData {
-  receita_mensal_estimada: number;
-  total_clientes: number;
-  clientes_ativos: number;
-  clientes_trial: number;
-  clientes_pagos: number;
-  clientes_expirados: number;
-  taxa_conversao: number;
-  novos_ultimos_7d: number;
-  expirando_3d: number;
+  periodo: string;
+  clientes: {
+    total: number;
+    ativos: number;
+    novos_7d: number;
+    expirando_3d: number;
+    trials_ativos: number;
+    pagos_ativos: number;
+  };
+  conversao: {
+    total_trials: number;
+    convertidos: number;
+    taxa_conversao: number;
+  };
   distribuicao_planos: Record<string, number>;
+  receita_mensal_estimada: number;
   ultimas_vendas: Array<{
-    nome: string;
+    id: number;
+    cliente: string;
     email: string;
     plano: string;
     data: string;
@@ -92,12 +99,12 @@ export default function AdminDashboard() {
   }
 
   const kpis = [
-    { label: "Receita Estimada", value: fmt(negocio.receita_mensal_estimada), color: "emerald" },
-    { label: "Clientes Ativos", value: negocio.clientes_ativos, color: "green" },
-    { label: "Pagos", value: negocio.clientes_pagos, color: "purple" },
-    { label: "Trials", value: negocio.clientes_trial, color: "blue" },
-    { label: "Conversao", value: `${negocio.taxa_conversao.toFixed(1)}%`, color: "yellow" },
-    { label: "Expirando 3d", value: negocio.expirando_3d, color: "red" },
+    { label: "Receita Estimada", value: fmt(negocio.receita_mensal_estimada || 0), color: "emerald" },
+    { label: "Clientes Ativos", value: negocio.clientes.ativos, color: "green" },
+    { label: "Pagos", value: negocio.clientes.pagos_ativos, color: "purple" },
+    { label: "Trials", value: negocio.clientes.trials_ativos, color: "blue" },
+    { label: "Conversao", value: `${(negocio.conversao.taxa_conversao ?? 0).toFixed(1)}%`, color: "yellow" },
+    { label: "Expirando 3d", value: negocio.clientes.expirando_3d, color: "red" },
   ];
 
   const colorMap: Record<string, { border: string; iconBg: string; text: string; hoverBorder: string }> = {
@@ -157,7 +164,7 @@ export default function AdminDashboard() {
           <h2 className="text-lg font-bold text-white mb-4">Planos</h2>
           <div className="space-y-3">
             {Object.entries(negocio.distribuicao_planos).map(([plano, qtd]) => {
-              const total = negocio.total_clientes || 1;
+              const total = negocio.clientes.total || 1;
               const pct = ((qtd / total) * 100).toFixed(0);
               const planoColor =
                 plano === "mensal" ? "bg-purple-500" :
@@ -256,7 +263,7 @@ export default function AdminDashboard() {
                 {negocio.ultimas_vendas.slice(0, 5).map((v, i) => (
                   <tr key={i} className="hover:bg-white/5 transition-colors">
                     <td className="px-5 py-3">
-                      <p className="text-white text-sm">{v.nome}</p>
+                      <p className="text-white text-sm">{v.cliente}</p>
                       <p className="text-xs text-gray-500">{v.email}</p>
                     </td>
                     <td className="px-5 py-3">

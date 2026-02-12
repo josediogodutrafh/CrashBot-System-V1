@@ -14,7 +14,8 @@ interface FaturamentoData {
   churn_rate: number;
   distribuicao_planos: Record<string, number>;
   ultimas_vendas: Array<{
-    nome: string;
+    id: number;
+    cliente: string;
     email: string;
     plano: string;
     data: string;
@@ -226,7 +227,7 @@ export default function FaturamentoPage() {
                 {data.ultimas_vendas.map((v, i) => (
                   <tr key={i} className="hover:bg-white/5 transition-colors">
                     <td className="px-5 py-3">
-                      <p className="text-white text-sm">{v.nome}</p>
+                      <p className="text-white text-sm">{v.cliente}</p>
                       <p className="text-xs text-gray-500">{v.email}</p>
                     </td>
                     <td className="px-5 py-3">
