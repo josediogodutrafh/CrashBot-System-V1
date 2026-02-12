@@ -48,6 +48,7 @@ class CriarPagamentoRequest(BaseModel):
     email: EmailStr
     whatsapp: str
     cpf: str  # Formato: 000.000.000-00
+    senha: str  # Senha escolhida pelo cliente
     hwid: Optional[str] = None  # Hardware ID (opcional no momento da compra)
 
 
@@ -247,6 +248,7 @@ async def criar_pagamento(
             "whatsapp": dados.whatsapp,
             "cpf": dados.cpf,
             "hwid": dados.hwid,
+            "senha": dados.senha,
             "is_primeira_adesao": False,
         },
         "payment_methods": {
@@ -296,6 +298,7 @@ class SolicitarTrialRequest(BaseModel):
     email: EmailStr
     whatsapp: str
     cpf: str
+    senha: str
 
 
 class SolicitarTrialResponse(BaseModel):
@@ -311,6 +314,7 @@ class ConfirmarTrialRequest(BaseModel):
     email: EmailStr
     whatsapp: str
     cpf: str
+    senha: str
     codigo: str
 
 
@@ -426,10 +430,9 @@ async def confirmar_trial(
     result_user = await db.execute(select(Usuario).where(Usuario.email == dados.email))
     usuario_existente = result_user.scalar_one_or_none()
 
-    senha_temporaria = None
+    senha_para_email = dados.senha
     if not usuario_existente:
-        senha_temporaria = gerar_senha_temporaria()
-        senha_hash = pwd_context.hash(senha_temporaria)
+        senha_hash = pwd_context.hash(dados.senha)
 
         novo_usuario = Usuario(
             email=dados.email,
@@ -443,14 +446,14 @@ async def confirmar_trial(
         await db.commit()
         print(f" Usuário criado: {dados.email}")
     else:
-        senha_temporaria = "(sua senha atual)"
+        senha_para_email = "(sua senha atual)"
 
     # 5. Enviar email com licença
     try:
         html_email = template_licenca_criada(
             nome=dados.nome or "Cliente",
             email=dados.email,
-            senha=senha_temporaria,
+            senha=senha_para_email,
             chave_licenca=chave,
             plano="trial",
             dias=7,
@@ -497,6 +500,7 @@ class CriarTrialRequest(BaseModel):
     email: EmailStr
     whatsapp: str
     cpf: str
+    senha: str
     hwid: Optional[str] = None
 
 
@@ -569,10 +573,9 @@ async def criar_trial(
     result_user = await db.execute(select(Usuario).where(Usuario.email == dados.email))
     usuario_existente = result_user.scalar_one_or_none()
 
-    senha_temporaria = None
+    senha_para_email = dados.senha
     if not usuario_existente:
-        senha_temporaria = gerar_senha_temporaria()
-        senha_hash = pwd_context.hash(senha_temporaria)
+        senha_hash = pwd_context.hash(dados.senha)
 
         novo_usuario = Usuario(
             email=dados.email,
@@ -586,14 +589,14 @@ async def criar_trial(
         await db.commit()
         print(f" Usuário criado: {dados.email}")
     else:
-        senha_temporaria = "(sua senha atual)"
+        senha_para_email = "(sua senha atual)"
 
     # Enviar email
     try:
         html_email = template_licenca_criada(
             nome=dados.nome or "Cliente",
             email=dados.email,
-            senha=senha_temporaria,
+            senha=senha_para_email,
             chave_licenca=chave,
             plano="trial",
             dias=7,
@@ -759,6 +762,7 @@ async def webhook_mercadopago(
     # Extrair dados adicionais dos metadados
     cpf = metadata.get("cpf")
     hwid = metadata.get("hwid")
+    senha_cliente = metadata.get("senha")
 
     # Criar nova licença
     chave = gerar_chave_licenca()
@@ -786,13 +790,12 @@ async def webhook_mercadopago(
     print(f" Licença criada: {chave} para {email}")
 
     # Criar conta do cliente (se não existir)
-    senha_temporaria = None
+    senha_para_email = senha_cliente or gerar_senha_temporaria()
     result_user = await db.execute(select(Usuario).where(Usuario.email == email))
     usuario_existente = result_user.scalar_one_or_none()
 
     if not usuario_existente:
-        senha_temporaria = gerar_senha_temporaria()
-        senha_hash = pwd_context.hash(senha_temporaria)
+        senha_hash = pwd_context.hash(senha_para_email)
 
         novo_usuario = Usuario(
             email=email,
@@ -807,14 +810,14 @@ async def webhook_mercadopago(
         print(f" Usuário criado: {email}")
     else:
         print(f"ℹ Usuário já existe: {email}")
-        senha_temporaria = "(sua senha atual)"
+        senha_para_email = "(sua senha atual)"
 
     # Enviar email com licença
     try:
         html_email = template_licenca_criada(
             nome=nome or "Cliente",
             email=email,
-            senha=senha_temporaria,
+            senha=senha_para_email,
             chave_licenca=chave,
             plano=plano,
             dias=int(dias),

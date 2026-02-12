@@ -90,6 +90,8 @@ export default function CheckoutPage() {
     email: '',
     whatsapp: '',
     cpf: '',
+    senha: '',
+    confirmarSenha: '',
   });
   const [aceitouTermos, setAceitouTermos] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -154,6 +156,18 @@ export default function CheckoutPage() {
     setLoading(true);
     setError('');
 
+    // Validar senha
+    if (formData.senha.length < 6) {
+      setError('A senha deve ter no mínimo 6 caracteres.');
+      setLoading(false);
+      return;
+    }
+    if (formData.senha !== formData.confirmarSenha) {
+      setError('As senhas não coincidem.');
+      setLoading(false);
+      return;
+    }
+
     try {
       // Lógica de Trial
       if (planoBase.isTrial) {
@@ -165,6 +179,7 @@ export default function CheckoutPage() {
             email: formData.email,
             whatsapp: formData.whatsapp,
             cpf: formData.cpf,
+            senha: formData.senha,
           }),
         });
 
@@ -188,6 +203,7 @@ export default function CheckoutPage() {
           email: formData.email,
           whatsapp: formData.whatsapp,
           cpf: formData.cpf,
+          senha: formData.senha,
         }),
       });
 
@@ -426,6 +442,44 @@ export default function CheckoutPage() {
                         className="bg-slate-950 border-slate-700 text-white focus:border-purple-500 h-11"
                       />
                     </div>
+
+                    <div className="grid md:grid-cols-2 gap-5">
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-slate-300">
+                          Criar Senha
+                        </label>
+                        <Input
+                          type="password"
+                          placeholder="Mínimo 6 caracteres"
+                          required
+                          minLength={6}
+                          value={formData.senha}
+                          onChange={(e) =>
+                            setFormData({ ...formData, senha: e.target.value })
+                          }
+                          className="bg-slate-950 border-slate-700 text-white focus:border-purple-500 h-11"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-slate-300">
+                          Confirmar Senha
+                        </label>
+                        <Input
+                          type="password"
+                          placeholder="Repita a senha"
+                          required
+                          minLength={6}
+                          value={formData.confirmarSenha}
+                          onChange={(e) =>
+                            setFormData({ ...formData, confirmarSenha: e.target.value })
+                          }
+                          className="bg-slate-950 border-slate-700 text-white focus:border-purple-500 h-11"
+                        />
+                      </div>
+                    </div>
+                    <p className="text-xs text-slate-500">
+                      Esta senha será usada para acessar o painel do cliente.
+                    </p>
 
                     <div className="pt-4 border-t border-white/5">
                       <div className="flex items-start gap-3">

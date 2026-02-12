@@ -241,7 +241,7 @@ def template_licenca_criada(
                     <span class="info-value">{senha}</span>
                 </div>
                 <p style="color: #f59e0b; font-size: 12px; margin-top: 10px;">
-                    ⚠️ Recomendamos alterar sua senha após o primeiro acesso.
+                    🔒 Guarde sua senha em local seguro.
                 </p>
             </div>
 
