@@ -31,15 +31,15 @@ const customStyles = `
   .animate-blob { animation: blob 7s infinite; }
   .animation-delay-2000 { animation-delay: 2s; }
   .animation-delay-4000 { animation-delay: 4s; }
-  .glass-panel { background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.05); }
+  .glass-panel { background: rgba(255, 255, 255, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(0,0,0,0.08); }
 `;
 
 // --- 1. TICKER DE DADOS ---
 function MarketTicker() {
   return (
-    <div className="bg-[#020617] border-b border-purple-500/20 overflow-hidden h-9 flex items-center relative z-50">
-      <div className="absolute left-0 top-0 bottom-0 w-10 bg-gradient-to-r from-[#020617] to-transparent z-10"></div>
-      <div className="absolute right-0 top-0 bottom-0 w-10 bg-gradient-to-l from-[#020617] to-transparent z-10"></div>
+    <div className="bg-slate-900 border-b border-purple-500/20 overflow-hidden h-9 flex items-center relative z-50">
+      <div className="absolute left-0 top-0 bottom-0 w-10 bg-gradient-to-r from-slate-900 to-transparent z-10"></div>
+      <div className="absolute right-0 top-0 bottom-0 w-10 bg-gradient-to-l from-slate-900 to-transparent z-10"></div>
 
       <div className="flex items-center px-3 bg-purple-900/20 border-r border-purple-500/30 h-full z-20 shrink-0">
         <Activity className="w-3 h-3 text-green-400 mr-2 animate-pulse" />
@@ -143,14 +143,14 @@ function LivingTerminal() {
 // --- CONFIGURAÇÃO DA LIVE (KICK) ---
 const LIVE_CONFIG = {
   status: 'ONLINE',
-  kickChannel: 'crashbot-tucunare', // Seu usuário exato
+  kickChannel: 'crashbot-tucunare',
   titulo: '🔴 AO VIVO: Operação TucunaréBot Sem Cortes',
 };
 
 // --- CONFIGURAÇÃO DOS TUTORIAIS (ARQUIVOS LOCAIS) ---
 const TUTORIAL_VIDEOS = [
   {
-    path: '/videos/tuto_01.mp4', // Caminho do arquivo na pasta public
+    path: '/videos/tuto_01.mp4',
     titulo: '1. Instalação e Login',
     desc: 'Passo a passo para baixar, instalar e ativar sua licença no Windows.',
   },
@@ -169,7 +169,7 @@ const TUTORIAL_VIDEOS = [
 function VideoShowcase() {
   return (
     <div className="mt-12 max-w-5xl mx-auto">
-      <Card className="bg-slate-900 border-slate-800 overflow-hidden relative shadow-2xl">
+      <Card className="bg-slate-900 border-slate-700 overflow-hidden relative shadow-2xl">
         {/* HEADER DO MONITOR */}
         <div className="bg-[#0f172a] px-4 py-3 flex items-center justify-between border-b border-slate-700">
           <div className="flex items-center gap-3">
@@ -186,7 +186,7 @@ function VideoShowcase() {
           </Badge>
         </div>
 
-        {/* ÁREA DO PLAYER KICK (SEM CÓDIGO ANTIGO) */}
+        {/* ÁREA DO PLAYER KICK */}
         <div className="aspect-video bg-black relative flex items-center justify-center overflow-hidden">
           <iframe
             src={`https://player.kick.com/${LIVE_CONFIG.kickChannel}?autoplay=true&muted=true`}
@@ -218,13 +218,13 @@ function TutorialGallery() {
   return (
     <div className="mt-20 max-w-6xl mx-auto">
       <div className="text-center mb-10">
-        <Badge className="bg-blue-500/20 text-blue-300 border-blue-500/30 px-3 py-1 mb-4">
+        <Badge className="bg-blue-500/20 text-blue-600 border-blue-500/30 px-3 py-1 mb-4">
           ACADEMIA CRASHBOT
         </Badge>
-        <h3 className="text-2xl md:text-3xl font-bold text-white">
+        <h3 className="text-2xl md:text-3xl font-bold text-slate-900">
           Domine a Ferramenta
         </h3>
-        <p className="text-slate-400 mt-2">
+        <p className="text-slate-500 mt-2">
           Tutoriais rápidos para você começar a operar em menos de 10 minutos.
         </p>
       </div>
@@ -233,7 +233,7 @@ function TutorialGallery() {
         {TUTORIAL_VIDEOS.map((video, index) => (
           <Card
             key={index}
-            className="bg-slate-900/50 border-slate-800 overflow-hidden hover:border-purple-500/50 transition-all group flex flex-col"
+            className="bg-white border-slate-200 overflow-hidden hover:border-purple-400 transition-all group flex flex-col shadow-sm hover:shadow-lg"
           >
             {/* Player de Vídeo Nativo */}
             <div className="aspect-video bg-black relative">
@@ -241,7 +241,6 @@ function TutorialGallery() {
                 controls
                 preload="metadata"
                 className="w-full h-full object-cover"
-                poster="/logo.png" // Opcional: mostra seu logo antes do play
               >
                 <source src={video.path} type="video/mp4" />
                 Seu navegador não suporta a tag de vídeo.
@@ -250,10 +249,10 @@ function TutorialGallery() {
 
             {/* Conteúdo do Card */}
             <CardContent className="p-5 flex-1">
-              <h4 className="text-lg font-bold text-white mb-2 group-hover:text-purple-400 transition-colors">
+              <h4 className="text-lg font-bold text-slate-900 mb-2 group-hover:text-purple-600 transition-colors">
                 {video.titulo}
               </h4>
-              <p className="text-sm text-slate-400 leading-relaxed">
+              <p className="text-sm text-slate-500 leading-relaxed">
                 {video.desc}
               </p>
             </CardContent>
@@ -271,51 +270,50 @@ export default function Home() {
         {customStyles}
       </style>
 
-      <div className="min-h-screen bg-[#020617] text-white overflow-x-hidden font-sans selection:bg-purple-500/30">
+      <div className="min-h-screen bg-gradient-to-b from-white via-slate-50 to-slate-100 text-slate-900 overflow-x-hidden font-sans selection:bg-purple-500/30">
         {/* BACKGROUND AURORA */}
         <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
-          <div className="absolute top-0 -left-4 w-72 h-72 bg-purple-500 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob"></div>
-          <div className="absolute top-0 -right-4 w-72 h-72 bg-blue-500 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob animation-delay-2000"></div>
-          <div className="absolute -bottom-8 left-20 w-72 h-72 bg-pink-500 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob animation-delay-4000"></div>
-          <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-10"></div>
+          <div className="absolute top-0 -left-4 w-72 h-72 bg-purple-300 rounded-full mix-blend-multiply filter blur-xl opacity-15 animate-blob"></div>
+          <div className="absolute top-0 -right-4 w-72 h-72 bg-blue-300 rounded-full mix-blend-multiply filter blur-xl opacity-15 animate-blob animation-delay-2000"></div>
+          <div className="absolute -bottom-8 left-20 w-72 h-72 bg-pink-300 rounded-full mix-blend-multiply filter blur-xl opacity-15 animate-blob animation-delay-4000"></div>
         </div>
 
         <div className="relative z-10">
           <MarketTicker />
 
           {/* HEADER */}
-          <header className="container mx-auto px-6 h-20 flex items-center justify-between border-b border-white/5 backdrop-blur-md sticky top-0 z-40 bg-[#020617]/80">
+          <header className="container mx-auto px-6 h-20 flex items-center justify-between border-b border-slate-200 backdrop-blur-md sticky top-0 z-40 bg-white/80">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 bg-gradient-to-br from-purple-600 to-indigo-600 rounded flex items-center justify-center shadow-lg shadow-purple-500/30">
                 <Terminal className="w-4 h-4 text-white" />
               </div>
-              <span className="text-lg font-bold tracking-tight">
-                CrashBot<span className="text-purple-400">.AI</span>
+              <span className="text-lg font-bold tracking-tight text-slate-900">
+                CrashBot<span className="text-purple-600">.AI</span>
               </span>
             </div>
 
-            <nav className="hidden md:flex gap-8 text-sm font-medium text-slate-400">
+            <nav className="hidden md:flex gap-8 text-sm font-medium text-slate-500">
               <Link
                 href="#demonstracao"
-                className="hover:text-white transition-colors"
+                className="hover:text-purple-600 transition-colors"
               >
                 Demonstração
               </Link>
               <Link
                 href="#plataforma"
-                className="hover:text-white transition-colors"
+                className="hover:text-purple-600 transition-colors"
               >
                 Plataforma
               </Link>
               <Link
                 href="#planos"
-                className="hover:text-white transition-colors"
+                className="hover:text-purple-600 transition-colors"
               >
                 Licenciamento
               </Link>
               <Link
                 href="/agendar"
-                className="hover:text-white transition-colors flex items-center gap-1"
+                className="hover:text-purple-600 transition-colors flex items-center gap-1"
               >
                 <CalendarDays className="w-4 h-4" />
                 Agendar Treinamento
@@ -326,13 +324,13 @@ export default function Home() {
               <Link href="/login">
                 <Button
                   variant="ghost"
-                  className="text-slate-300 hover:text-white hover:bg-white/5"
+                  className="text-slate-600 hover:text-slate-900 hover:bg-slate-100"
                 >
                   Login
                 </Button>
               </Link>
               <Link href="#planos">
-                <Button className="bg-white text-slate-900 font-bold hover:bg-slate-200 transition-all shadow-[0_0_20px_-5px_rgba(255,255,255,0.4)]">
+                <Button className="bg-purple-600 text-white font-bold hover:bg-purple-700 transition-all shadow-lg shadow-purple-500/30">
                   Começar Agora
                 </Button>
               </Link>
@@ -343,20 +341,22 @@ export default function Home() {
           <section className="pt-20 pb-20 container mx-auto px-6">
             <div className="grid lg:grid-cols-2 gap-12 items-center">
               <div className="space-y-8 relative">
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-purple-500/30 bg-purple-500/10 text-purple-300 text-[10px] font-bold uppercase tracking-widest">
-                  <span className="w-2 h-2 rounded-full bg-purple-400 animate-pulse"></span>
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-purple-300 bg-purple-50 text-purple-600 text-[10px] font-bold uppercase tracking-widest">
+                  <span className="w-2 h-2 rounded-full bg-purple-500 animate-pulse"></span>
                   Nova Versão v2.0 Disponível
                 </div>
                 <h1 className="text-5xl md:text-7xl font-bold leading-tight tracking-tight">
-                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-pink-400 to-blue-400 animate-gradient-x">
+                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-600 via-pink-500 to-blue-500 animate-gradient-x">
                     Crash Bot
                   </span>
                   <br />
-                  Automatize suas apostas com Inteligência.
+                  <span className="text-slate-800">
+                    Automatize suas apostas com Inteligência.
+                  </span>
                 </h1>
-                <p className="text-lg text-slate-400 max-w-xl leading-relaxed">
-                  Sistema de automação com <strong>Interceptação WebSocket</strong> e{' '}
-                  <strong>Inteligência Artificial</strong> para análise de padrões
+                <p className="text-lg text-slate-500 max-w-xl leading-relaxed">
+                  Sistema de automação com <strong className="text-slate-700">Interceptação WebSocket</strong> e{' '}
+                  <strong className="text-slate-700">Inteligência Artificial</strong> para análise de padrões
                   e execução estratégica em tempo real.
                 </p>
                 <div className="flex flex-col sm:flex-row gap-4">
@@ -372,7 +372,7 @@ export default function Home() {
                     <Button
                       size="lg"
                       variant="outline"
-                      className="w-full h-14 border-slate-700 hover:bg-slate-800 text-slate-300 font-medium"
+                      className="w-full h-14 border-slate-300 hover:bg-slate-100 text-slate-600 font-medium"
                     >
                       Saiba Mais
                     </Button>
@@ -381,7 +381,7 @@ export default function Home() {
               </div>
               <div className="relative group">
                 <div className="absolute -inset-1 bg-gradient-to-r from-purple-600 to-blue-600 rounded-xl blur opacity-30 group-hover:opacity-60 transition duration-1000"></div>
-                <div className="relative rounded-xl overflow-hidden border border-slate-700 bg-[#09090b] shadow-2xl h-80">
+                <div className="relative rounded-xl overflow-hidden border border-slate-300 bg-[#09090b] shadow-2xl h-80">
                   <div className="bg-[#1e293b] px-4 py-2 flex items-center gap-2 border-b border-slate-700">
                     <div className="flex gap-1.5">
                       <div className="w-3 h-3 rounded-full bg-red-500/50"></div>
@@ -400,11 +400,11 @@ export default function Home() {
             {/* VÍDEOS */}
             <div
               id="demonstracao"
-              className="mt-24 pt-12 border-t border-white/5"
+              className="mt-24 pt-12 border-t border-slate-200"
             >
               <div className="text-center mb-8">
-                <h2 className="text-3xl font-bold">Sala de Controle</h2>
-                <p className="text-slate-400">
+                <h2 className="text-3xl font-bold text-slate-900">Sala de Controle</h2>
+                <p className="text-slate-500">
                   Veja a tecnologia operando em tempo real.
                 </p>
               </div>
@@ -413,34 +413,34 @@ export default function Home() {
             </div>
           </section>
 
-          {/* --- NOVA SEÇÃO DESTAQUE: PLATAFORMA BRABET --- */}
+          {/* --- SEÇÃO DESTAQUE: PLATAFORMA BRABET --- */}
           <section
             id="plataforma"
-            className="py-24 bg-gradient-to-r from-[#0B0F19] via-[#101624] to-[#0B0F19] border-y border-white/5 relative overflow-hidden"
+            className="py-24 bg-gradient-to-r from-slate-100 via-white to-slate-100 border-y border-slate-200 relative overflow-hidden"
           >
             {/* Efeitos de Fundo */}
-            <div className="absolute top-0 right-0 p-64 bg-purple-500/5 blur-[100px] rounded-full pointer-events-none"></div>
+            <div className="absolute top-0 right-0 p-64 bg-purple-200/30 blur-[100px] rounded-full pointer-events-none"></div>
 
             <div className="container mx-auto px-6 relative z-10">
               <div className="grid lg:grid-cols-2 gap-16 items-center">
                 {/* Texto e Botão */}
                 <div className="space-y-8">
-                  <Badge className="bg-purple-500/20 text-purple-300 border-purple-500/30 px-3 py-1">
+                  <Badge className="bg-purple-100 text-purple-700 border-purple-300 px-3 py-1">
                     PARCERIA OFICIAL
                   </Badge>
-                  <h2 className="text-4xl md:text-5xl font-bold text-white leading-tight">
+                  <h2 className="text-4xl md:text-5xl font-bold text-slate-900 leading-tight">
                     Otimizado para <br />
-                    <span className="text-purple-400">BRABET</span>
+                    <span className="text-purple-600">BRABET</span>
                   </h2>
-                  <p className="text-lg text-slate-300 leading-relaxed">
+                  <p className="text-lg text-slate-600 leading-relaxed">
                     Atualmente, nosso sistema disponibilizado opera
                     exclusivamente para a interface do site de apostas da
                     Brabet.
                   </p>
 
-                  <div className="bg-yellow-500/10 border border-yellow-500/20 p-4 rounded-lg flex gap-4 items-start">
-                    <AlertTriangle className="w-6 h-6 text-yellow-500 shrink-0 mt-1" />
-                    <div className="text-sm text-yellow-200">
+                  <div className="bg-yellow-50 border border-yellow-300 p-4 rounded-lg flex gap-4 items-start">
+                    <AlertTriangle className="w-6 h-6 text-yellow-600 shrink-0 mt-1" />
+                    <div className="text-sm text-yellow-800">
                       <strong>Atenção:</strong> Acesse com um clique na caixa
                       verde abaixo ou aponte sua câmera para o QR Code ao lado!!
                     </div>
@@ -462,8 +462,8 @@ export default function Home() {
 
                 {/* QR Code Gigante em Destaque */}
                 <div className="flex justify-center lg:justify-end">
-                  <div className="bg-white p-6 rounded-3xl shadow-2xl rotate-2 hover:rotate-0 transition-transform duration-500 relative group max-w-sm">
-                    <div className="absolute -inset-4 bg-gradient-to-br from-purple-500 to-blue-500 rounded-[2rem] blur opacity-30 group-hover:opacity-50 transition duration-500 -z-10"></div>
+                  <div className="bg-white p-6 rounded-3xl shadow-2xl rotate-2 hover:rotate-0 transition-transform duration-500 relative group max-w-sm border border-slate-200">
+                    <div className="absolute -inset-4 bg-gradient-to-br from-purple-400 to-blue-400 rounded-[2rem] blur opacity-20 group-hover:opacity-40 transition duration-500 -z-10"></div>
 
                     <div className="text-center mb-4">
                       <p className="text-slate-900 font-bold text-xl mb-1">
@@ -482,7 +482,7 @@ export default function Home() {
                       className="object-contain mx-auto"
                     />
 
-                    <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-center gap-2 text-slate-400 text-sm">
+                    <div className="mt-4 pt-4 border-t border-slate-200 flex items-center justify-center gap-2 text-slate-400 text-sm">
                       <Lock className="w-4 h-4" /> Link Seguro SSL
                     </div>
                   </div>
@@ -495,39 +495,39 @@ export default function Home() {
           <section id="planos" className="py-24 relative">
             <div className="container mx-auto px-6">
               <div className="text-center mb-16">
-                <h2 className="text-4xl font-bold text-white mb-4">
+                <h2 className="text-4xl font-bold text-slate-900 mb-4">
                   Licenciamento de Software
                 </h2>
-                <p className="text-slate-400">
+                <p className="text-slate-500">
                   Escolha o nível de acesso adequado à sua banca.
                 </p>
               </div>
 
               <div className="grid lg:grid-cols-3 gap-6 max-w-6xl mx-auto items-end">
                 {/* TRIAL */}
-                <Card className="bg-slate-900/40 border-slate-800 h-[420px] flex flex-col hover:border-slate-600 transition-all">
+                <Card className="bg-white border-slate-200 h-[420px] flex flex-col hover:border-purple-300 transition-all shadow-sm hover:shadow-lg">
                   <CardHeader>
-                    <CardTitle className="text-white">Trial Gratuito</CardTitle>
-                    <p className="text-sm text-slate-400">Para testar</p>
+                    <CardTitle className="text-slate-900">Trial Gratuito</CardTitle>
+                    <p className="text-sm text-slate-500">Para testar</p>
                   </CardHeader>
                   <CardContent className="flex-1 flex flex-col">
-                    <div className="text-3xl font-bold text-white mb-6">
+                    <div className="text-3xl font-bold text-slate-900 mb-6">
                       R$ 0,00
                     </div>
-                    <ul className="space-y-4 text-sm text-slate-300 flex-1">
+                    <ul className="space-y-4 text-sm text-slate-600 flex-1">
                       <li className="flex gap-2">
-                        <Check className="w-4 h-4 text-slate-500" /> 7 Dias de
+                        <Check className="w-4 h-4 text-slate-400" /> 7 Dias de
                         Acesso
                       </li>
                       <li className="flex gap-2">
-                        <Check className="w-4 h-4 text-slate-500" /> 100%
+                        <Check className="w-4 h-4 text-slate-400" /> 100%
                         Funcional
                       </li>
                     </ul>
                     <Link href="/checkout/trial" className="mt-auto">
                       <Button
                         variant="outline"
-                        className="w-full border-slate-700 text-slate-300 hover:bg-slate-800"
+                        className="w-full border-slate-300 text-slate-600 hover:bg-slate-50"
                       >
                         Baixar Trial
                       </Button>
@@ -537,8 +537,8 @@ export default function Home() {
 
                 {/* MENSAL PRO */}
                 <div className="relative transform lg:-translate-y-4 z-10">
-                  <div className="absolute -inset-[2px] bg-gradient-to-b from-purple-500 to-pink-500 rounded-xl blur-sm opacity-50"></div>
-                  <Card className="bg-[#0f172a] border-0 h-[500px] flex flex-col relative">
+                  <div className="absolute -inset-[2px] bg-gradient-to-b from-purple-500 to-pink-500 rounded-xl blur-sm opacity-60"></div>
+                  <Card className="bg-slate-900 border-0 h-[500px] flex flex-col relative">
                     <div className="absolute top-0 right-4 top-4">
                       <Badge className="bg-purple-600">POPULAR</Badge>
                     </div>
@@ -552,7 +552,7 @@ export default function Home() {
                         <span className="text-5xl font-bold text-white">
                           R$ 249
                         </span>
-                        <span className="text-slate-500">/mês</span>
+                        <span className="text-slate-400">/mês</span>
                       </div>
                       <ul className="space-y-4 text-sm text-white flex-1 mt-8">
                         <li className="flex gap-3">
@@ -591,34 +591,34 @@ export default function Home() {
                 </div>
 
                 {/* SEMANAL */}
-                <Card className="bg-slate-900/40 border-slate-800 h-[420px] flex flex-col hover:border-slate-600 transition-all">
+                <Card className="bg-white border-slate-200 h-[420px] flex flex-col hover:border-purple-300 transition-all shadow-sm hover:shadow-lg">
                   <CardHeader>
-                    <CardTitle className="text-white">Semanal</CardTitle>
-                    <p className="text-sm text-slate-400">Curto Prazo</p>
+                    <CardTitle className="text-slate-900">Semanal</CardTitle>
+                    <p className="text-sm text-slate-500">Curto Prazo</p>
                   </CardHeader>
                   <CardContent className="flex-1 flex flex-col">
-                    <div className="text-3xl font-bold text-white mb-6">
+                    <div className="text-3xl font-bold text-slate-900 mb-6">
                       R$ 69{' '}
-                      <span className="text-sm text-slate-500">/sem</span>
+                      <span className="text-sm text-slate-400">/sem</span>
                     </div>
-                    <ul className="space-y-4 text-sm text-slate-300 flex-1">
+                    <ul className="space-y-4 text-sm text-slate-600 flex-1">
                       <li className="flex gap-2">
-                        <Check className="w-4 h-4 text-purple-400" /> Setup
+                        <Check className="w-4 h-4 text-purple-500" /> Setup
                         Flexível estruturado em curto prazo
                       </li>
                       <li className="flex gap-2">
-                        <Check className="w-4 h-4 text-purple-400" /> Controle
+                        <Check className="w-4 h-4 text-purple-500" /> Controle
                         risco/retorno
                       </li>
                       <li className="flex gap-2">
-                        <Check className="w-4 h-4 text-purple-400" /> Suporte de
+                        <Check className="w-4 h-4 text-purple-500" /> Suporte de
                         instalação via WhatsApp/Telegram
                       </li>
                     </ul>
                     <Link href="/checkout/semanal" className="mt-auto">
                       <Button
                         variant="secondary"
-                        className="w-full bg-slate-800 text-white border border-slate-700"
+                        className="w-full bg-slate-100 text-slate-700 border border-slate-300 hover:bg-slate-200"
                       >
                         Comprar Semanal
                       </Button>
@@ -629,40 +629,40 @@ export default function Home() {
             </div>
           </section>
 
-          {/* --- NOVA SEÇÃO: AGENDAR TREINAMENTO --- */}
-          <section className="py-20 bg-gradient-to-r from-purple-900/20 via-[#0B0F19] to-purple-900/20 border-y border-purple-500/10">
+          {/* --- SEÇÃO: AGENDAR TREINAMENTO --- */}
+          <section className="py-20 bg-gradient-to-r from-purple-50 via-white to-purple-50 border-y border-purple-200">
             <div className="container mx-auto px-6">
               <div className="max-w-4xl mx-auto">
-                <Card className="bg-gradient-to-br from-purple-900/40 to-slate-900/60 border-purple-500/30 overflow-hidden relative">
-                  <div className="absolute top-0 right-0 w-64 h-64 bg-purple-500/10 blur-[80px] rounded-full pointer-events-none"></div>
+                <Card className="bg-gradient-to-br from-purple-50 to-white border-purple-200 overflow-hidden relative shadow-lg">
+                  <div className="absolute top-0 right-0 w-64 h-64 bg-purple-200/30 blur-[80px] rounded-full pointer-events-none"></div>
 
                   <CardContent className="p-8 md:p-12">
                     <div className="grid md:grid-cols-2 gap-8 items-center">
                       {/* Texto */}
                       <div className="space-y-6">
-                        <Badge className="bg-green-500/20 text-green-300 border-green-500/30 px-3 py-1">
+                        <Badge className="bg-green-100 text-green-700 border-green-300 px-3 py-1">
                           GRATUITO
                         </Badge>
-                        <h2 className="text-3xl md:text-4xl font-bold text-white leading-tight">
+                        <h2 className="text-3xl md:text-4xl font-bold text-slate-900 leading-tight">
                           Agende seu{' '}
-                          <span className="text-purple-400">Treinamento</span>
+                          <span className="text-purple-600">Treinamento</span>
                         </h2>
-                        <p className="text-slate-300 leading-relaxed">
+                        <p className="text-slate-600 leading-relaxed">
                           Marque uma sessão de <strong>30 minutos</strong> com
                           nossa equipe para aprender a configurar e operar o
                           CrashBot da melhor forma.
                         </p>
-                        <ul className="space-y-3 text-sm text-slate-300">
+                        <ul className="space-y-3 text-sm text-slate-600">
                           <li className="flex items-center gap-3">
-                            <Video className="w-5 h-5 text-purple-400" />
+                            <Video className="w-5 h-5 text-purple-500" />
                             Reunião via Google Meet
                           </li>
                           <li className="flex items-center gap-3">
-                            <CalendarDays className="w-5 h-5 text-purple-400" />
+                            <CalendarDays className="w-5 h-5 text-purple-500" />
                             Seg a Sex, 10h às 18h
                           </li>
                           <li className="flex items-center gap-3">
-                            <Check className="w-5 h-5 text-green-400" />
+                            <Check className="w-5 h-5 text-green-500" />
                             Configuração inicial incluída
                           </li>
                         </ul>
@@ -670,19 +670,19 @@ export default function Home() {
 
                       {/* Botão */}
                       <div className="flex flex-col items-center justify-center space-y-4">
-                        <div className="w-24 h-24 bg-purple-500/20 rounded-full flex items-center justify-center border border-purple-500/30">
-                          <CalendarDays className="w-12 h-12 text-purple-400" />
+                        <div className="w-24 h-24 bg-purple-100 rounded-full flex items-center justify-center border border-purple-200">
+                          <CalendarDays className="w-12 h-12 text-purple-500" />
                         </div>
                         <Link href="/agendar" className="w-full">
                           <Button
                             size="lg"
-                            className="w-full h-14 bg-gradient-to-r from-purple-600 to-pink-600 font-bold text-lg shadow-[0_0_30px_-5px_rgba(147,51,234,0.5)] hover:scale-[1.02] transition-transform"
+                            className="w-full h-14 bg-gradient-to-r from-purple-600 to-pink-600 font-bold text-lg shadow-[0_0_30px_-5px_rgba(147,51,234,0.3)] hover:scale-[1.02] transition-transform"
                           >
                             <CalendarDays className="w-5 h-5 mr-2" />
                             Agendar Agora
                           </Button>
                         </Link>
-                        <p className="text-xs text-slate-500 text-center">
+                        <p className="text-xs text-slate-400 text-center">
                           Escolha o melhor horário para você
                         </p>
                       </div>
@@ -693,12 +693,12 @@ export default function Home() {
             </div>
           </section>
 
-          {/* --- NOVA SEÇÃO: REQUISITOS TÉCNICOS (RODAPÉ) --- */}
-          <section className="py-16 border-t border-white/5 bg-[#05080f]">
+          {/* --- REQUISITOS TÉCNICOS --- */}
+          <section className="py-16 border-t border-slate-200 bg-slate-50">
             <div className="container mx-auto px-6">
               <div className="flex flex-col md:flex-row items-center justify-between gap-8 mb-8">
-                <h3 className="text-xl font-bold text-white flex items-center gap-2">
-                  <Terminal className="text-slate-500" /> Requisitos de
+                <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                  <Terminal className="text-slate-400" /> Requisitos de
                   Instalação
                 </h3>
                 <p className="text-sm text-slate-500">
@@ -707,64 +707,64 @@ export default function Home() {
               </div>
 
               <div className="grid md:grid-cols-4 gap-6">
-                <Card className="bg-slate-900/30 border-slate-800 p-4">
+                <Card className="bg-white border-slate-200 p-4 shadow-sm">
                   <div className="flex items-center gap-3 mb-2">
-                    <Monitor className="text-blue-400 w-5 h-5" />
-                    <span className="font-bold text-white text-sm">
+                    <Monitor className="text-blue-500 w-5 h-5" />
+                    <span className="font-bold text-slate-900 text-sm">
                       Sistema
                     </span>
                   </div>
-                  <p className="text-xs text-slate-400">
+                  <p className="text-xs text-slate-500">
                     Windows 10/11 ou macOS (64 bits)
                   </p>
                 </Card>
 
-                <Card className="bg-slate-900/30 border-slate-800 p-4">
+                <Card className="bg-white border-slate-200 p-4 shadow-sm">
                   <div className="flex items-center gap-3 mb-2">
-                    <Cpu className="text-purple-400 w-5 h-5" />
-                    <span className="font-bold text-white text-sm">
+                    <Cpu className="text-purple-500 w-5 h-5" />
+                    <span className="font-bold text-slate-900 text-sm">
                       Processador
                     </span>
                   </div>
-                  <p className="text-xs text-slate-400">
+                  <p className="text-xs text-slate-500">
                     Intel i3 ou superior (min 2.0Ghz)
                   </p>
                 </Card>
 
-                <Card className="bg-slate-900/30 border-slate-800 p-4">
+                <Card className="bg-white border-slate-200 p-4 shadow-sm">
                   <div className="flex items-center gap-3 mb-2">
-                    <Activity className="text-green-400 w-5 h-5" />
-                    <span className="font-bold text-white text-sm">
+                    <Activity className="text-green-500 w-5 h-5" />
+                    <span className="font-bold text-slate-900 text-sm">
                       Resolução
                     </span>
                   </div>
-                  <p className="text-xs text-slate-400">
+                  <p className="text-xs text-slate-500">
                     1366x768 ou superior (Recomendado Full HD)
                   </p>
                 </Card>
 
-                <Card className="bg-slate-900/30 border-slate-800 p-4">
+                <Card className="bg-white border-slate-200 p-4 shadow-sm">
                   <div className="flex items-center gap-3 mb-2">
-                    <Activity className="text-green-400 w-5 h-5" />
-                    <span className="font-bold text-white text-sm">
+                    <Activity className="text-green-500 w-5 h-5" />
+                    <span className="font-bold text-slate-900 text-sm">
                       Devolução do Investimento
                     </span>
                   </div>
-                  <p className="text-xs text-slate-400">
+                  <p className="text-xs text-slate-500">
                     Devolvemos seu investimento em até 7 dias, caso se arrependa
                     ou na hipótese de incompatibilidade do software com a sua
                     máquina.
                   </p>
                 </Card>
 
-                <Card className="bg-red-900/10 border-red-900/30 p-4">
+                <Card className="bg-red-50 border-red-200 p-4 shadow-sm">
                   <div className="flex items-center gap-3 mb-2">
-                    <Smartphone className="text-red-400 w-5 h-5" />
-                    <span className="font-bold text-red-200 text-sm">
+                    <Smartphone className="text-red-500 w-5 h-5" />
+                    <span className="font-bold text-red-700 text-sm">
                       Incompatível
                     </span>
                   </div>
-                  <p className="text-xs text-red-300">
+                  <p className="text-xs text-red-600">
                     Não funciona em Celular ou Tablet.
                   </p>
                 </Card>
@@ -773,22 +773,22 @@ export default function Home() {
           </section>
 
           {/* FOOTER */}
-          <footer className="py-12 text-center text-slate-600 text-sm bg-[#010409]">
+          <footer className="py-12 text-center text-slate-400 text-sm bg-slate-900">
             <div className="mb-4 text-2xl">🤖</div>
-            <p className="mb-4">
+            <p className="mb-4 text-slate-300">
               © 2026 TucunaréBot. Todos os direitos reservados.
             </p>
             <div className="flex justify-center gap-6 text-xs">
-              <Link href="/manual" className="hover:text-purple-400">
+              <Link href="/manual" className="hover:text-purple-400 text-slate-400">
                 Manual
               </Link>
-              <Link href="/termos" className="hover:text-purple-400">
+              <Link href="/termos" className="hover:text-purple-400 text-slate-400">
                 Termos
               </Link>
-              <Link href="/privacidade" className="hover:text-purple-400">
+              <Link href="/privacidade" className="hover:text-purple-400 text-slate-400">
                 Privacidade
               </Link>
-              <Link href="/agendar" className="hover:text-purple-400">
+              <Link href="/agendar" className="hover:text-purple-400 text-slate-400">
                 Agendar Treinamento
               </Link>
             </div>
