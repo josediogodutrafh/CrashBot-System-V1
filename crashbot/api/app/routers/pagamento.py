@@ -426,14 +426,12 @@ async def confirmar_trial(
 
     print(f" Trial criado: {chave} para {dados.email}")
 
-    # 4. Criar conta do usuário se não existir
+    # 4. Criar ou atualizar conta do usuário
     result_user = await db.execute(select(Usuario).where(Usuario.email == dados.email))
     usuario_existente = result_user.scalar_one_or_none()
 
-    senha_para_email = dados.senha
+    senha_hash = pwd_context.hash(dados.senha)
     if not usuario_existente:
-        senha_hash = pwd_context.hash(dados.senha)
-
         novo_usuario = Usuario(
             email=dados.email,
             senha_hash=senha_hash,
@@ -446,14 +444,16 @@ async def confirmar_trial(
         await db.commit()
         print(f" Usuário criado: {dados.email}")
     else:
-        senha_para_email = "(sua senha atual)"
+        usuario_existente.senha_hash = senha_hash
+        await db.commit()
+        print(f" Senha atualizada: {dados.email}")
 
     # 5. Enviar email com licença
     try:
         html_email = template_licenca_criada(
             nome=dados.nome or "Cliente",
             email=dados.email,
-            senha=senha_para_email,
+            senha=dados.senha,
             chave_licenca=chave,
             plano="trial",
             dias=7,
@@ -569,14 +569,12 @@ async def criar_trial(
 
     print(f" Trial criado: {chave} para {dados.email}")
 
-    # Criar conta do usuário se não existir
+    # Criar ou atualizar conta do usuário
     result_user = await db.execute(select(Usuario).where(Usuario.email == dados.email))
     usuario_existente = result_user.scalar_one_or_none()
 
-    senha_para_email = dados.senha
+    senha_hash = pwd_context.hash(dados.senha)
     if not usuario_existente:
-        senha_hash = pwd_context.hash(dados.senha)
-
         novo_usuario = Usuario(
             email=dados.email,
             senha_hash=senha_hash,
@@ -589,14 +587,16 @@ async def criar_trial(
         await db.commit()
         print(f" Usuário criado: {dados.email}")
     else:
-        senha_para_email = "(sua senha atual)"
+        usuario_existente.senha_hash = senha_hash
+        await db.commit()
+        print(f" Senha atualizada: {dados.email}")
 
     # Enviar email
     try:
         html_email = template_licenca_criada(
             nome=dados.nome or "Cliente",
             email=dados.email,
-            senha=senha_para_email,
+            senha=dados.senha,
             chave_licenca=chave,
             plano="trial",
             dias=7,
@@ -789,14 +789,13 @@ async def webhook_mercadopago(
 
     print(f" Licença criada: {chave} para {email}")
 
-    # Criar conta do cliente (se não existir)
+    # Criar ou atualizar conta do cliente
     senha_para_email = senha_cliente or gerar_senha_temporaria()
     result_user = await db.execute(select(Usuario).where(Usuario.email == email))
     usuario_existente = result_user.scalar_one_or_none()
 
+    senha_hash = pwd_context.hash(senha_para_email)
     if not usuario_existente:
-        senha_hash = pwd_context.hash(senha_para_email)
-
         novo_usuario = Usuario(
             email=email,
             senha_hash=senha_hash,
@@ -809,8 +808,9 @@ async def webhook_mercadopago(
         await db.commit()
         print(f" Usuário criado: {email}")
     else:
-        print(f"ℹ Usuário já existe: {email}")
-        senha_para_email = "(sua senha atual)"
+        usuario_existente.senha_hash = senha_hash
+        await db.commit()
+        print(f" Senha atualizada: {email}")
 
     # Enviar email com licença
     try:
