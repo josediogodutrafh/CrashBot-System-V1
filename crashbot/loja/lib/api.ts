@@ -2,7 +2,7 @@
  * Helper compartilhado para chamadas de API do admin panel.
  */
 
-export const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+export const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://crash-api-jose.onrender.com';
 
 export function getToken(): string | null {
   if (typeof window === 'undefined') return null;
