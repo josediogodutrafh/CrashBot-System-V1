@@ -20,7 +20,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from slowapi import Limiter
 from slowapi.util import get_remote_address
-from sqlalchemy import select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 limiter = Limiter(key_func=get_remote_address)
@@ -325,6 +325,53 @@ async def bulk_reset_hwid(
 
     await db.commit()
     return {"success": True, "resetadas": resetadas, "total_solicitadas": len(payload.licenca_ids)}
+
+
+# ============================================================================
+# ENDPOINT: DELETE LICENCA (Admin)
+# ============================================================================
+
+
+@router.delete("/licencas/{licenca_id}")
+async def deletar_licenca(
+    licenca_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_admin: Usuario = Depends(get_current_admin),
+):
+    """Deleta uma licenca permanentemente."""
+    result = await db.execute(select(Licenca).where(Licenca.id == licenca_id))
+    licenca = result.scalar_one_or_none()
+
+    if not licenca:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Licenca nao encontrada",
+        )
+
+    await db.delete(licenca)
+    await db.commit()
+
+    return {"success": True, "message": f"Licenca {licenca_id} deletada"}
+
+
+# ============================================================================
+# ENDPOINT: PURGE ALL LICENCAS (Admin)
+# ============================================================================
+
+
+@router.delete("/licencas")
+async def purge_licencas(
+    db: AsyncSession = Depends(get_db),
+    current_admin: Usuario = Depends(get_current_admin),
+):
+    """Deleta TODAS as licencas. Operacao irreversivel."""
+    result = await db.execute(select(func.count(Licenca.id)))
+    total = result.scalar() or 0
+
+    await db.execute(delete(Licenca))
+    await db.commit()
+
+    return {"success": True, "deletadas": total}
 
 
 # ============================================================================
