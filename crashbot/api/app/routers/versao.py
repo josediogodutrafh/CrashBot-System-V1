@@ -231,7 +231,7 @@ async def cleanup_versoes(
     current_admin: Usuario = Depends(get_current_admin),
 ):
     """
-    Desativa todas as versões antigas e registra a v3.0.0 como atual.
+    Desativa todas as versões antigas e registra a v3.1.0 como atual.
     Uso único após o deploy da nova versão.
     """
     # Desativar todas as versões existentes
@@ -243,9 +243,9 @@ async def cleanup_versoes(
         v.ativa = False  # type: ignore
         desativadas.append(str(v.versao))
 
-    # Verificar se v3.0.0 já existe
+    # Verificar se v3.1.0 já existe
     result_v3 = await db.execute(
-        select(VersaoBot).where(VersaoBot.versao == "3.0.0")
+        select(VersaoBot).where(VersaoBot.versao == "3.1.0")
     )
     v3 = result_v3.scalar_one_or_none()
 
@@ -253,16 +253,19 @@ async def cleanup_versoes(
         v3.ativa = True  # type: ignore
         v3.obrigatoria = True  # type: ignore
         v3.changelog = (  # type: ignore
-            "v3.0 - WebSocket capture, novo sistema de precos, "
-            "Telegram stateless, deploy Render"
+            "v3.1 - Validacao de licenca obrigatoria, "
+            "HWID binding, interface Flet, fix headless mode"
+        )
+        v3.download_url = (  # type: ignore
+            "https://github.com/josediogodutrafh/CrashBot-System-V1/releases/download/v3.1.0/TucunareBot.exe"
         )
     else:
         v3 = VersaoBot(
-            versao="3.0.0",
-            download_url="https://tucunarebot.com.br/download/v3",
+            versao="3.1.0",
+            download_url="https://github.com/josediogodutrafh/CrashBot-System-V1/releases/download/v3.1.0/TucunareBot.exe",
             changelog=(
-                "v3.0 - WebSocket capture, novo sistema de precos, "
-                "Telegram stateless, deploy Render"
+                "v3.1 - Validacao de licenca obrigatoria, "
+                "HWID binding, interface Flet, fix headless mode"
             ),
             obrigatoria=True,
             ativa=True,
@@ -274,6 +277,6 @@ async def cleanup_versoes(
     return {
         "success": True,
         "desativadas": desativadas,
-        "versao_atual": "3.0.0",
+        "versao_atual": "3.1.0",
         "obrigatoria": True,
     }
