@@ -1,8 +1,7 @@
 ﻿'use client';
 
 import { useEffect, useState } from 'react';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+import { API_URL } from '@/lib/api';
 
 interface Licenca {
   id: number;
@@ -31,6 +30,8 @@ export default function AdminLicencas() {
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkResetting, setBulkResetting] = useState(false);
   const [formData, setFormData] = useState({
     cliente_nome: '',
     email_cliente: '',
@@ -155,6 +156,51 @@ export default function AdminLicencas() {
     setTimeout(() => setCopiedKey(null), 2000);
   };
 
+  const toggleSelect = (id: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    const withHwid = filteredLicencas.filter((l) => l.hwid);
+    if (selectedIds.size === withHwid.length && withHwid.length > 0) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(withHwid.map((l) => l.id)));
+    }
+  };
+
+  const handleBulkResetHwid = async () => {
+    if (selectedIds.size === 0) return;
+    if (!confirm(`Resetar HWID de ${selectedIds.size} licenca(s)?`)) return;
+    setBulkResetting(true);
+    const token = localStorage.getItem('token');
+    try {
+      const response = await fetch(`${API_URL}/api/v1/licencas/bulk-reset-hwid`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ licenca_ids: Array.from(selectedIds) }),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setMessage({ type: 'success', text: `${data.resetadas} HWID(s) resetado(s)` });
+        setSelectedIds(new Set());
+        fetchLicencas();
+      }
+    } catch {
+      setMessage({ type: 'error', text: 'Erro ao resetar HWIDs' });
+    } finally {
+      setBulkResetting(false);
+    }
+  };
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('pt-BR', {
       day: '2-digit',
@@ -194,25 +240,26 @@ export default function AdminLicencas() {
             Gerenciar todas as licencas do sistema
           </p>
         </div>
-        <button
-          onClick={() => setShowModal(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl transition-colors"
-        >
-          <svg
-            className="w-5 h-5"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
+        <div className="flex gap-2">
+          {selectedIds.size > 0 && (
+            <button
+              onClick={handleBulkResetHwid}
+              disabled={bulkResetting}
+              className="flex items-center gap-2 px-4 py-2 bg-yellow-600/20 text-yellow-400 border border-yellow-500/30 hover:bg-yellow-600/30 rounded-xl transition-colors disabled:opacity-50"
+            >
+              {bulkResetting ? 'Resetando...' : `Reset HWID (${selectedIds.size})`}
+            </button>
+          )}
+          <button
+            onClick={() => setShowModal(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl transition-colors"
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M12 4v16m8-8H4"
-            />
-          </svg>
-          Nova Licenca
-        </button>
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Nova Licenca
+          </button>
+        </div>
       </div>
 
       {message && (
@@ -276,6 +323,14 @@ export default function AdminLicencas() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-purple-900/30">
+                <th className="p-4 w-10">
+                  <input
+                    type="checkbox"
+                    onChange={toggleSelectAll}
+                    checked={selectedIds.size > 0 && selectedIds.size === filteredLicencas.filter((l) => l.hwid).length}
+                    className="w-4 h-4 rounded"
+                  />
+                </th>
                 <th className="text-left p-4 text-gray-400 font-medium">
                   Cliente
                 </th>
@@ -305,6 +360,16 @@ export default function AdminLicencas() {
                   key={licenca.id}
                   className="border-b border-purple-900/20 hover:bg-white/5 transition-colors"
                 >
+                  <td className="p-4 w-10">
+                    {licenca.hwid && (
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(licenca.id)}
+                        onChange={() => toggleSelect(licenca.id)}
+                        className="w-4 h-4 rounded"
+                      />
+                    )}
+                  </td>
                   <td className="p-4">
                     <div>
                       <p className="text-white font-medium">

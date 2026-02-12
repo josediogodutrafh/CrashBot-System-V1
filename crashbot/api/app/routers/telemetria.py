@@ -259,6 +259,354 @@ async def _get_clientes_por_dia(db: AsyncSession, dias: int) -> List[Dict]:
 
 
 # ============================================================================
+# ABA FATURAMENTO - Métricas financeiras dedicadas
+# ============================================================================
+
+
+@router.get("/faturamento")
+async def dashboard_faturamento(
+    periodo: str = Query("30d", description="Período: 7d, 30d, 90d, all"),
+    db: AsyncSession = Depends(get_db),
+    current_admin: Usuario = Depends(get_current_admin),
+):
+    """Dashboard de FATURAMENTO: receita, vendas, ticket médio, churn."""
+    agora = datetime.now(timezone.utc)
+    data_inicio = _calcular_data_inicio(periodo)
+
+    receita = await _calcular_receita_mensal(db)
+    distribuicao = await _get_distribuicao_planos(db)
+    ultimas = await _get_ultimas_vendas(db)
+    vendas_dia = await _get_vendas_por_dia(db, data_inicio)
+    vendas_plano = await _get_vendas_por_plano(db, data_inicio)
+    ticket = await _calcular_ticket_medio(db, data_inicio)
+    churn = await _calcular_churn(db, agora)
+
+    return {
+        "periodo": periodo,
+        "receita_estimada_mensal": receita,
+        "vendas_por_dia": vendas_dia,
+        "vendas_por_plano": vendas_plano,
+        "ticket_medio": ticket,
+        "churn_rate": churn,
+        "distribuicao_planos": distribuicao,
+        "ultimas_vendas": ultimas,
+    }
+
+
+async def _get_vendas_por_dia(
+    db: AsyncSession, data_inicio: Optional[datetime]
+) -> List[Dict]:
+    """Vendas por dia (não-trial)."""
+    dia_trunc = func.date_trunc("day", Licenca.created_at)
+    filters = [Licenca.is_trial.is_(False)]
+    if data_inicio:
+        filters.append(Licenca.created_at >= data_inicio)
+
+    result = await db.execute(
+        select(
+            dia_trunc.label("dia"),
+            func.count(Licenca.id).label("quantidade"),
+        )
+        .where(and_(*filters))
+        .group_by(dia_trunc)
+        .order_by(dia_trunc)
+    )
+
+    vendas = []
+    for row in result:
+        plano_q = await db.execute(
+            select(Licenca.plano_tipo)
+            .where(
+                and_(
+                    Licenca.is_trial.is_(False),
+                    func.date_trunc("day", Licenca.created_at) == row.dia,
+                )
+            )
+        )
+        receita_dia = sum(_get_valor_plano(r.plano_tipo or "trial") for r in plano_q)
+        vendas.append({
+            "dia": row.dia.strftime("%d/%m") if row.dia else None,
+            "quantidade": row.quantidade,
+            "receita": round(receita_dia, 2),
+        })
+    return vendas
+
+
+async def _get_vendas_por_plano(
+    db: AsyncSession, data_inicio: Optional[datetime]
+) -> Dict[str, Dict]:
+    """Vendas agrupadas por tipo de plano."""
+    filters = [Licenca.is_trial.is_(False)]
+    if data_inicio:
+        filters.append(Licenca.created_at >= data_inicio)
+
+    result = await db.execute(
+        select(
+            Licenca.plano_tipo,
+            func.count(Licenca.id).label("qtd"),
+        )
+        .where(and_(*filters))
+        .group_by(Licenca.plano_tipo)
+    )
+
+    return {
+        (row.plano_tipo or "indefinido"): {
+            "quantidade": row.qtd,
+            "receita": round(row.qtd * _get_valor_plano(row.plano_tipo or "trial"), 2),
+        }
+        for row in result
+    }
+
+
+async def _calcular_ticket_medio(
+    db: AsyncSession, data_inicio: Optional[datetime]
+) -> float:
+    """Ticket médio das vendas pagas."""
+    filters = [Licenca.is_trial.is_(False)]
+    if data_inicio:
+        filters.append(Licenca.created_at >= data_inicio)
+
+    result = await db.execute(
+        select(Licenca.plano_tipo).where(and_(*filters))
+    )
+    valores = [_get_valor_plano(r.plano_tipo or "trial") for r in result]
+    if not valores:
+        return 0.0
+    return round(sum(valores) / len(valores), 2)
+
+
+async def _calcular_churn(db: AsyncSession, agora: datetime) -> float:
+    """Taxa de churn: licenças que expiraram nos últimos 30d sem renovação."""
+    inicio_30d = agora - timedelta(days=30)
+
+    # Licenças que expiraram nos últimos 30 dias
+    expiradas = await db.execute(
+        select(Licenca.email_cliente)
+        .where(
+            and_(
+                Licenca.data_expiracao >= inicio_30d,
+                Licenca.data_expiracao < agora,
+                Licenca.is_trial.is_(False),
+            )
+        )
+    )
+    emails_expirados = {r.email_cliente for r in expiradas if r.email_cliente}
+
+    if not emails_expirados:
+        return 0.0
+
+    # Desses, quantos NÃO renovaram (não têm licença ativa)
+    nao_renovaram = 0
+    for email in emails_expirados:
+        ativa = (
+            await db.execute(
+                select(func.count(Licenca.id)).where(
+                    and_(
+                        Licenca.email_cliente == email,
+                        Licenca.ativa.is_(True),
+                        Licenca.data_expiracao > agora,
+                    )
+                )
+            )
+        ).scalar() or 0
+        if ativa == 0:
+            nao_renovaram += 1
+
+    return round(nao_renovaram / len(emails_expirados) * 100, 1)
+
+
+# ============================================================================
+# ABA MARKETING - Funil de conversão e aquisição
+# ============================================================================
+
+
+@router.get("/marketing")
+async def dashboard_marketing(
+    periodo: str = Query("30d", description="Período: 7d, 30d, 90d, all"),
+    db: AsyncSession = Depends(get_db),
+    current_admin: Usuario = Depends(get_current_admin),
+):
+    """Dashboard de MARKETING: funil, aquisição, trials, expiração."""
+    agora = datetime.now(timezone.utc)
+    data_inicio = _calcular_data_inicio(periodo)
+
+    funil = await _get_funil_conversao(db, data_inicio)
+    aquisicao = await _get_aquisicao_diaria(db, data_inicio)
+    trials_ativos = await _get_trials_ativos(db, agora)
+    expirando = await _get_expirando_sem_renovar(db, agora)
+
+    return {
+        "periodo": periodo,
+        "funil": funil,
+        "aquisicao_diaria": aquisicao,
+        "trials_ativos": trials_ativos,
+        "expirando_sem_renovar": expirando,
+    }
+
+
+async def _get_funil_conversao(
+    db: AsyncSession, data_inicio: Optional[datetime]
+) -> Dict[str, Any]:
+    """Funil: trials criados -> trials ativos -> convertidos."""
+    agora = datetime.now(timezone.utc)
+    filters_trial = [Licenca.is_trial.is_(True)]
+    if data_inicio:
+        filters_trial.append(Licenca.created_at >= data_inicio)
+
+    total_trials = (
+        await db.execute(
+            select(func.count(Licenca.id)).where(and_(*filters_trial))
+        )
+    ).scalar() or 0
+
+    trials_ativos = (
+        await db.execute(
+            select(func.count(Licenca.id)).where(
+                and_(
+                    Licenca.is_trial.is_(True),
+                    Licenca.ativa.is_(True),
+                    Licenca.data_expiracao > agora,
+                )
+            )
+        )
+    ).scalar() or 0
+
+    trials_expirados = (
+        await db.execute(
+            select(func.count(Licenca.id)).where(
+                and_(
+                    Licenca.is_trial.is_(True),
+                    Licenca.data_expiracao < agora,
+                )
+            )
+        )
+    ).scalar() or 0
+
+    # Emails que fizeram trial E depois compraram plano pago
+    emails_trial = await db.execute(
+        select(func.distinct(Licenca.email_cliente)).where(
+            Licenca.is_trial.is_(True)
+        )
+    )
+    emails_t = {r[0] for r in emails_trial if r[0]}
+
+    convertidos = 0
+    if emails_t:
+        convertidos = (
+            await db.execute(
+                select(func.count(func.distinct(Licenca.email_cliente))).where(
+                    and_(
+                        Licenca.is_trial.is_(False),
+                        Licenca.email_cliente.in_(emails_t),
+                    )
+                )
+            )
+        ).scalar() or 0
+
+    taxa = (convertidos / len(emails_t) * 100) if emails_t else 0.0
+
+    return {
+        "trials_criados": total_trials,
+        "trials_ativos": trials_ativos,
+        "trials_expirados": trials_expirados,
+        "convertidos": convertidos,
+        "taxa_conversao": round(taxa, 1),
+    }
+
+
+async def _get_aquisicao_diaria(
+    db: AsyncSession, data_inicio: Optional[datetime]
+) -> List[Dict]:
+    """Aquisição diária: trials vs pagos."""
+    dia_trunc = func.date_trunc("day", Licenca.created_at)
+    filters = []
+    if data_inicio:
+        filters.append(Licenca.created_at >= data_inicio)
+
+    result = await db.execute(
+        select(
+            dia_trunc.label("dia"),
+            func.count(case((Licenca.is_trial.is_(True), 1))).label("trials"),
+            func.count(case((Licenca.is_trial.is_(False), 1))).label("pagos"),
+        )
+        .where(and_(*filters) if filters else true())
+        .group_by(dia_trunc)
+        .order_by(dia_trunc)
+    )
+
+    return [
+        {
+            "dia": row.dia.strftime("%d/%m") if row.dia else None,
+            "trials": row.trials,
+            "pagos": row.pagos,
+        }
+        for row in result
+    ]
+
+
+async def _get_trials_ativos(db: AsyncSession, agora: datetime) -> List[Dict]:
+    """Lista de trials ativos com dias restantes."""
+    result = await db.execute(
+        select(Licenca)
+        .where(
+            and_(
+                Licenca.is_trial.is_(True),
+                Licenca.ativa.is_(True),
+                Licenca.data_expiracao > agora,
+            )
+        )
+        .order_by(Licenca.data_expiracao)
+    )
+
+    trials = []
+    for lic in result.scalars():
+        dias = 0
+        if lic.data_expiracao is not None:
+            dias = (lic.data_expiracao - agora).days
+
+        trials.append({
+            "id": lic.id,
+            "nome": lic.cliente_nome or "N/A",
+            "email": lic.email_cliente or "N/A",
+            "whatsapp": lic.whatsapp or "N/A",
+            "dias_restantes": dias,
+            "hwid_vinculado": lic.hwid is not None,
+        })
+    return trials
+
+
+async def _get_expirando_sem_renovar(db: AsyncSession, agora: datetime) -> List[Dict]:
+    """Licenças pagas expirando em 3 dias sem renovação."""
+    result = await db.execute(
+        select(Licenca)
+        .where(
+            and_(
+                Licenca.ativa.is_(True),
+                Licenca.is_trial.is_(False),
+                Licenca.data_expiracao <= agora + timedelta(days=3),
+                Licenca.data_expiracao > agora,
+            )
+        )
+        .order_by(Licenca.data_expiracao)
+    )
+
+    expirando = []
+    for lic in result.scalars():
+        dias = 0
+        if lic.data_expiracao is not None:
+            dias = (lic.data_expiracao - agora).days
+
+        expirando.append({
+            "id": lic.id,
+            "nome": lic.cliente_nome or "N/A",
+            "email": lic.email_cliente or "N/A",
+            "plano": lic.plano_tipo or "N/A",
+            "dias_restantes": dias,
+        })
+    return expirando
+
+
+# ============================================================================
 # ABA 2: OPERAÇÃO - Bots, apostas, performance em tempo real
 # ============================================================================
 

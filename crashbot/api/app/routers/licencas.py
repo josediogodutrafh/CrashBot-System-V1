@@ -299,6 +299,34 @@ async def reset_hwid(
 
 
 # ============================================================================
+# ENDPOINT: BULK RESET HWID (Admin)
+# ============================================================================
+
+
+class BulkResetHwidRequest(BaseModel):
+    licenca_ids: list[int]
+
+
+@router.patch("/licencas/bulk-reset-hwid")
+async def bulk_reset_hwid(
+    payload: BulkResetHwidRequest,
+    db: AsyncSession = Depends(get_db),
+    current_admin: Usuario = Depends(get_current_admin),
+):
+    """Reseta o HWID de múltiplas licenças de uma vez."""
+    resetadas = 0
+    for lid in payload.licenca_ids:
+        result = await db.execute(select(Licenca).where(Licenca.id == lid))
+        licenca = result.scalar_one_or_none()
+        if licenca and licenca.hwid is not None:
+            licenca.hwid = None  # type: ignore
+            resetadas += 1
+
+    await db.commit()
+    return {"success": True, "resetadas": resetadas, "total_solicitadas": len(payload.licenca_ids)}
+
+
+# ============================================================================
 # ENDPOINT: LISTAR LOGS TELEMETRIA (Admin)
 # ============================================================================
 

@@ -1,8 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+import { API_URL } from '@/lib/api';
 
 interface Versao {
   id: number;
@@ -25,6 +24,9 @@ export default function AdminVersoes() {
     obrigatoria: false,
   });
   const [saving, setSaving] = useState(false);
+  const [editingVersao, setEditingVersao] = useState<Versao | null>(null);
+  const [editForm, setEditForm] = useState({ download_url: '', changelog: '', obrigatoria: false });
+  const [editSaving, setEditSaving] = useState(false);
 
   useEffect(() => {
     fetchVersoes();
@@ -84,6 +86,40 @@ export default function AdminVersoes() {
       console.error('Erro ao criar versao:', error);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const openEdit = (v: Versao) => {
+    setEditingVersao(v);
+    setEditForm({
+      download_url: v.download_url,
+      changelog: v.changelog || '',
+      obrigatoria: v.obrigatoria,
+    });
+  };
+
+  const handleEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingVersao) return;
+    setEditSaving(true);
+    const token = localStorage.getItem('token');
+    try {
+      const response = await fetch(`${API_URL}/api/v1/bot/versao/${editingVersao.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(editForm),
+      });
+      if (response.ok) {
+        setEditingVersao(null);
+        fetchVersoes();
+      } else {
+        const error = await response.json();
+        alert(error.detail || 'Erro ao atualizar versao');
+      }
+    } catch {
+      alert('Erro ao atualizar versao');
+    } finally {
+      setEditSaving(false);
     }
   };
 
@@ -239,17 +275,26 @@ export default function AdminVersoes() {
                     {formatDate(versao.created_at)}
                   </td>
                   <td className="p-4">
-                    <button
-                      onClick={() => toggleVersao(versao.id)}
-                      className={`p-2 rounded-lg transition-colors ${
-                        versao.ativa
-                          ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
-                          : 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
-                      }`}
-                      title={versao.ativa ? 'Desativar' : 'Ativar'}
-                    >
-                      {versao.ativa ? 'Desativar' : 'Ativar'}
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => openEdit(versao)}
+                        className="p-2 rounded-lg bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 transition-colors"
+                        title="Editar"
+                      >
+                        Editar
+                      </button>
+                      <button
+                        onClick={() => toggleVersao(versao.id)}
+                        className={`p-2 rounded-lg transition-colors ${
+                          versao.ativa
+                            ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
+                            : 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
+                        }`}
+                        title={versao.ativa ? 'Desativar' : 'Ativar'}
+                      >
+                        {versao.ativa ? 'Desativar' : 'Ativar'}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -359,6 +404,69 @@ export default function AdminVersoes() {
                   className="flex-1 px-4 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-xl transition-colors disabled:opacity-50"
                 >
                   {saving ? 'Salvando...' : 'Criar Versão'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {editingVersao && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-[#12121a] rounded-2xl border border-purple-900/30 w-full max-w-lg">
+            <div className="p-6 border-b border-purple-900/30 flex items-center justify-between">
+              <h2 className="text-xl font-bold text-white">
+                Editar v{editingVersao.versao}
+              </h2>
+              <button onClick={() => setEditingVersao(null)} className="text-gray-400 hover:text-white">
+                X
+              </button>
+            </div>
+            <form onSubmit={handleEdit} className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm text-gray-400 mb-2">URL de Download</label>
+                <input
+                  type="url"
+                  value={editForm.download_url}
+                  onChange={(e) => setEditForm({ ...editForm, download_url: e.target.value })}
+                  className="w-full px-4 py-3 bg-[#0a0a0f] border border-purple-900/30 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-purple-500/50"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-400 mb-2">Changelog</label>
+                <textarea
+                  value={editForm.changelog}
+                  onChange={(e) => setEditForm({ ...editForm, changelog: e.target.value })}
+                  rows={3}
+                  className="w-full px-4 py-3 bg-[#0a0a0f] border border-purple-900/30 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-purple-500/50 resize-none"
+                />
+              </div>
+              <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  id="edit-obrigatoria"
+                  checked={editForm.obrigatoria}
+                  onChange={(e) => setEditForm({ ...editForm, obrigatoria: e.target.checked })}
+                  className="w-5 h-5 rounded"
+                />
+                <label htmlFor="edit-obrigatoria" className="text-gray-300">
+                  Atualização obrigatória
+                </label>
+              </div>
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setEditingVersao(null)}
+                  className="flex-1 px-4 py-3 text-gray-400 hover:text-white border border-purple-900/30 rounded-xl transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={editSaving}
+                  className="flex-1 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-colors disabled:opacity-50"
+                >
+                  {editSaving ? 'Salvando...' : 'Salvar'}
                 </button>
               </div>
             </form>

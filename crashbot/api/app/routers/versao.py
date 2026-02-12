@@ -35,6 +35,12 @@ class VersaoCreateRequest(BaseModel):
     obrigatoria: bool = False
 
 
+class VersaoUpdateRequest(BaseModel):
+    download_url: Optional[str] = None
+    changelog: Optional[str] = None
+    obrigatoria: Optional[bool] = None
+
+
 # ============================================================================
 # ENDPOINT PÚBLICO: Verificar versão atual
 # ============================================================================
@@ -121,6 +127,41 @@ async def criar_versao(
     await db.refresh(nova_versao)
 
     return nova_versao.to_dict()
+
+
+# ============================================================================
+# ENDPOINT ADMIN: Atualizar versão
+# ============================================================================
+
+
+@router.patch("/versao/{versao_id}")
+async def atualizar_versao(
+    versao_id: int,
+    payload: VersaoUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_admin: Usuario = Depends(get_current_admin),
+):
+    """Atualiza campos de uma versão existente (admin)."""
+    result = await db.execute(select(VersaoBot).where(VersaoBot.id == versao_id))
+    versao: Optional[VersaoBot] = result.scalar_one_or_none()
+
+    if not versao:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Versao nao encontrada",
+        )
+
+    if payload.download_url is not None:
+        versao.download_url = payload.download_url  # type: ignore
+    if payload.changelog is not None:
+        versao.changelog = payload.changelog  # type: ignore
+    if payload.obrigatoria is not None:
+        versao.obrigatoria = payload.obrigatoria  # type: ignore
+
+    await db.commit()
+    await db.refresh(versao)
+
+    return versao.to_dict()
 
 
 # ============================================================================
