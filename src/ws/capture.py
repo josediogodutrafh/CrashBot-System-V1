@@ -39,6 +39,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Tuple
 
+import sys
+
 import requests
 import websocket
 
@@ -140,6 +142,9 @@ class CrashWSCapture:
         self._stats = CaptureStats()
         self._start_time: float = 0.0
 
+        # Last connection error (for UI display)
+        self.last_error: str = ""
+
     # ── Chrome auto-launch ──────────────────────────────────────────────
 
     def _is_chrome_debug_running(self) -> bool:
@@ -150,7 +155,41 @@ class CrashWSCapture:
                 timeout=2,
             )
             return resp.status_code == 200
+        except requests.ConnectionError:
+            return False
+        except Exception as e:
+            logger.debug("_is_chrome_debug_running erro: %s", e)
+            return False
+
+    def _is_any_chrome_running(self) -> bool:
+        """Verifica se qualquer processo Chrome esta rodando (Windows)."""
+        try:
+            result = subprocess.run(
+                ["tasklist", "/FI", "IMAGENAME eq chrome.exe",
+                 "/NH", "/FO", "CSV"],
+                capture_output=True, text=True, timeout=5,
+            )
+            return "chrome.exe" in result.stdout.lower()
         except Exception:
+            return False
+
+    def _kill_chrome(self) -> bool:
+        """Fecha todos os processos Chrome (Windows)."""
+        try:
+            logger.info("Fechando processos Chrome...")
+            subprocess.run(
+                ["taskkill", "/F", "/IM", "chrome.exe"],
+                capture_output=True, timeout=10,
+            )
+            # Matar crashpad handler tambem (impede lock de perfil)
+            subprocess.run(
+                ["taskkill", "/F", "/IM", "chrome_crashpad_handler.exe"],
+                capture_output=True, timeout=5,
+            )
+            time.sleep(3)  # Esperar processos e lock files liberarem
+            return not self._is_any_chrome_running()
+        except Exception as e:
+            logger.error(f"Erro ao fechar Chrome: {e}")
             return False
 
     def _find_chrome_path(self) -> Optional[str]:
@@ -188,60 +227,88 @@ class CrashWSCapture:
         )
         return chrome
 
+    def _get_bot_profile_dir(self) -> Path:
+        """Return a dedicated Chrome profile directory for the bot.
+
+        Uses a persistent directory next to the .exe (or project root in dev),
+        so cookies/login persist between sessions. A separate profile avoids
+        lock conflicts with the user's normal Chrome.
+        """
+        if getattr(sys, "frozen", False):
+            base = Path(sys.executable).parent
+        else:
+            base = Path(__file__).parent.parent.parent
+        profile = base / "crashbot_chrome_data"
+        profile.mkdir(parents=True, exist_ok=True)
+        return profile
+
+    def _clean_profile_locks(self, profile_dir: Path):
+        """Remove stale lock files from a Chrome profile directory."""
+        for name in ("SingletonLock", "SingletonSocket", "SingletonCookie"):
+            lock = profile_dir / name
+            if lock.exists():
+                try:
+                    lock.unlink()
+                    logger.info("Removido lock antigo: %s", name)
+                except Exception as e:
+                    logger.warning("Nao conseguiu remover %s: %s", name, e)
+
     def ensure_chrome_running(
         self, game_url: str = ""
     ) -> bool:
         """Garante que Chrome esta rodando com debug port.
 
-        Se Chrome com debug ja esta ativo, nao faz nada.
-        Senao, lanca Chrome com as flags necessarias.
+        Estrategia:
+        1. Se Chrome com debug port ja esta ativo → usa direto
+        2. Senao → lanca Chrome com perfil dedicado do bot
+           (coexiste com Chrome normal do usuario)
 
-        Args:
-            game_url: URL para abrir (ex: site do jogo).
+        Usa um --user-data-dir separado (crashbot_chrome_data/) para
+        evitar conflitos de lock com o Chrome normal do usuario.
+        Cookies/login do jogo persistem entre sessoes neste perfil.
 
         Returns:
             True se Chrome esta pronto para conexao.
         """
+        # 1. Ja esta com debug port? Usar direto
         if self._is_chrome_debug_running():
-            logger.info("Chrome debug ja esta rodando")
+            logger.info("Chrome debug ja esta rodando na porta %d", self.port)
             return True
 
         chrome_path = self._find_chrome_path()
         if not chrome_path:
-            logger.error(
-                "Chrome nao encontrado no sistema! "
+            self.last_error = (
+                "Chrome nao encontrado! "
                 "Instale o Google Chrome."
             )
+            logger.error(self.last_error)
             return False
 
-        # User data dir separado para nao conflitar
-        system = platform.system()
-        if system == "Windows":
-            data_dir = Path(os.environ.get("TEMP", "C:/temp"))
-            data_dir = data_dir / "tucunarebot-chrome"
-        elif system == "Darwin":
-            data_dir = (
-                Path.home() / "Library/Application Support"
-                / "TucunareBot/chrome-debug"
-            )
-        else:
-            data_dir = Path.home() / ".tucunarebot/chrome-debug"
+        # 2. Preparar perfil dedicado do bot
+        profile_dir = self._get_bot_profile_dir()
+        self._clean_profile_locks(profile_dir)
+        logger.info("Perfil do bot: %s", profile_dir)
 
-        data_dir.mkdir(parents=True, exist_ok=True)
-
+        # 3. Lancar Chrome com debug port e perfil dedicado
         cmd = [
             chrome_path,
             f"--remote-debugging-port={self.port}",
             "--remote-allow-origins=*",
-            f"--user-data-dir={data_dir}",
+            f"--user-data-dir={profile_dir}",
             "--no-first-run",
             "--no-default-browser-check",
+            "--disable-session-crashed-bubble",
+            "--disable-infobars",
         ]
 
         if game_url:
             cmd.append(game_url)
 
-        logger.info(f"Lancando Chrome na porta {self.port}...")
+        logger.info(
+            "Lancando Chrome com debug port %d (perfil dedicado)...",
+            self.port,
+        )
+        logger.info("Comando: %s", " ".join(cmd))
 
         try:
             subprocess.Popen(
@@ -250,115 +317,217 @@ class CrashWSCapture:
                 stderr=subprocess.DEVNULL,
             )
         except Exception as e:
-            logger.error(f"Erro ao lancar Chrome: {e}")
+            self.last_error = f"Erro ao lancar Chrome: {e}"
+            logger.error(self.last_error)
             return False
 
-        # Aguardar Chrome ficar pronto (max 15s)
-        for i in range(30):
+        # Aguardar Chrome ficar pronto (max 30s)
+        logger.info("Aguardando Chrome responder na porta %d...", self.port)
+        for i in range(60):
             time.sleep(0.5)
             if self._is_chrome_debug_running():
                 logger.info(
-                    f"Chrome pronto ({(i+1)*0.5:.1f}s)"
+                    "Chrome pronto com debug port (%0.1fs)",
+                    (i + 1) * 0.5,
                 )
                 return True
+            # Log a cada 5 segundos para diagnostico
+            if (i + 1) % 10 == 0:
+                secs = (i + 1) * 0.5
+                running = self._is_any_chrome_running()
+                logger.info(
+                    "Aguardando Chrome... %.0fs (chrome.exe rodando: %s)",
+                    secs, running,
+                )
 
-        logger.error("Chrome lancado mas nao respondeu")
+        # Chrome lancou mas sem debug port
+        running = self._is_any_chrome_running()
+        if running:
+            self.last_error = (
+                "Chrome abriu mas sem debug port. "
+                "Feche TODAS as janelas e processos do Chrome "
+                "(inclusive na bandeja) e tente novamente."
+            )
+        else:
+            self.last_error = "Chrome nao iniciou apos 30s."
+
+        logger.error(self.last_error)
         return False
 
     # ── Conexao ─────────────────────────────────────────────────────────
 
     def _find_game_tab(self) -> Optional[str]:
-        """Encontra a aba do jogo no Chrome e retorna o WebSocket URL."""
+        """Encontra a aba do jogo no Chrome e retorna o WebSocket URL.
+
+        Nunca conecta em paginas chrome://, about:blank ou new tab.
+        Procura especificamente por abas com URLs de jogo.
+        """
         try:
             resp = requests.get(
                 f"http://localhost:{self.port}/json", timeout=5
             )
             tabs = resp.json()
 
-            game_tab = None
+            # Filtrar: apenas abas reais (type=page) com WS e URL valida
+            valid_tabs = []
             for tab in tabs:
-                url = tab.get("url", "").lower()
-                title = tab.get("title", "").lower()
+                url = tab.get("url", "")
                 is_page = tab.get("type") == "page"
                 ws_url = tab.get("webSocketDebuggerUrl", "")
 
-                if is_page and ws_url:
-                    if any(kw in url or kw in title for kw in GAME_TAB_KEYWORDS):
-                        game_tab = tab
-                        break
+                if not (is_page and ws_url):
+                    continue
 
-            if game_tab:
-                ws_url = game_tab["webSocketDebuggerUrl"]
-                logger.info(
-                    f"Aba do jogo encontrada: {game_tab.get('title', '')[:50]}"
-                )
-                return ws_url
+                # Ignorar paginas internas do Chrome (nunca funcionam)
+                if url.startswith(("chrome://", "chrome-extension://",
+                                   "about:", "edge://")):
+                    continue
 
-            # Fallback: primeira aba com WS
-            for tab in tabs:
-                if tab.get("type") == "page" and tab.get("webSocketDebuggerUrl"):
+                valid_tabs.append(tab)
+
+            # Primeiro: procurar por keywords do jogo
+            for tab in valid_tabs:
+                url = tab.get("url", "").lower()
+                title = tab.get("title", "").lower()
+                if any(kw in url or kw in title
+                       for kw in GAME_TAB_KEYWORDS):
+                    ws_url = tab["webSocketDebuggerUrl"]
+                    logger.info(
+                        f"Aba do jogo encontrada: "
+                        f"{tab.get('title', '')[:50]} "
+                        f"({tab.get('url', '')[:60]})"
+                    )
+                    return ws_url
+
+            # Fallback: primeira aba real (http/https), NAO chrome://
+            for tab in valid_tabs:
+                url = tab.get("url", "")
+                if url.startswith(("http://", "https://")):
                     logger.warning(
-                        "Aba do jogo nao detectada, usando primeira aba"
+                        f"Aba do jogo nao detectada por keyword. "
+                        f"Usando: {tab.get('url', '')[:60]}"
                     )
                     return tab["webSocketDebuggerUrl"]
 
-            logger.error("Nenhuma aba com WebSocket encontrada")
+            # Nenhuma aba valida encontrada
+            page_count = sum(
+                1 for t in tabs if t.get("type") == "page"
+            )
+            logger.warning(
+                f"Nenhuma aba com site aberto ({page_count} abas, "
+                f"mas todas sao chrome:// ou vazias)"
+            )
             return None
 
         except requests.ConnectionError:
             logger.error(
-                f"Chrome nao acessivel na porta {self.port}. "
-                "Inicie com --remote-debugging-port=9222 "
-                "--remote-allow-origins=*"
+                f"Chrome nao acessivel na porta {self.port}"
             )
             return None
         except Exception as e:
             logger.error(f"Erro ao buscar aba do jogo: {e}")
             return None
 
+    def is_chrome_ready(self) -> bool:
+        """Verifica se Chrome com debug port esta rodando.
+        Se nao, tenta lanca-lo automaticamente.
+
+        Returns:
+            True se Chrome esta pronto.
+        """
+        self.last_error = ""
+
+        if self._is_chrome_debug_running():
+            logger.info("Chrome debug port OK")
+            return True
+
+        logger.info("Chrome debug nao detectado, tentando lancar...")
+        if self.ensure_chrome_running():
+            return True
+
+        # ensure_chrome_running sets self.last_error with details
+        if not self.last_error:
+            self.last_error = (
+                "Chrome nao iniciou com debug port. "
+                "Execute 'abrir_chrome_debug.bat' manualmente."
+            )
+        logger.error(f"is_chrome_ready FALHOU: {self.last_error}")
+        return False
+
+    def has_game_tab(self) -> bool:
+        """Verifica se existe uma aba do jogo no Chrome.
+
+        Returns:
+            True se encontrou aba do jogo.
+        """
+        url = self._find_game_tab()
+        return url is not None
+
     def connect(self) -> bool:
         """Conecta ao Chrome DevTools e habilita interceptacao de rede.
 
-        Se Chrome nao esta rodando com debug port, tenta lanca-lo
-        automaticamente.
+        Requisitos: Chrome rodando com debug port E aba do jogo aberta.
 
         Returns:
             True se conectou com sucesso.
         """
-        # Garantir que Chrome esta rodando com debug port
-        if not self._is_chrome_debug_running():
-            logger.info("Chrome debug nao detectado, tentando lancar...")
-            if not self.ensure_chrome_running():
-                logger.error(
-                    "Nao foi possivel lancar Chrome com debug port"
-                )
-                return False
+        self.last_error = ""
+        logger.info("connect(): iniciando...")
 
-        self._devtools_url = self._find_game_tab()
-        if not self._devtools_url:
+        # Garantir Chrome rodando
+        if not self.is_chrome_ready():
+            logger.error("connect(): Chrome nao esta pronto")
             return False
 
+        # Encontrar aba do jogo
+        self._devtools_url = self._find_game_tab()
+        if not self._devtools_url:
+            self.last_error = (
+                "Abra o site do jogo no Chrome que foi aberto "
+                "(crash/brabet/blaze)"
+            )
+            logger.error(f"connect(): {self.last_error}")
+            return False
+
+        logger.info(
+            f"connect(): aba encontrada, "
+            f"ws_url={self._devtools_url[:80]}"
+        )
+
         try:
+            # Fechar conexao anterior se existir
+            if self._ws:
+                try:
+                    self._ws.close()
+                except Exception:
+                    pass
+
+            logger.info("connect(): criando conexao WebSocket...")
             self._ws = websocket.create_connection(
                 self._devtools_url, timeout=10
             )
+            logger.info("connect(): conexao criada OK")
 
             # Habilitar Network domain
             self._ws.send(json.dumps({
                 "id": 1, "method": "Network.enable"
             }))
             resp = json.loads(self._ws.recv())
+            logger.info(f"connect(): Network.enable resp: {resp}")
 
             if resp.get("id") == 1 and "error" not in resp:
                 self._stats.connected = True
-                logger.info("Conectado ao Chrome DevTools (Network.enable OK)")
+                self.last_error = ""
+                logger.info("connect(): SUCESSO - Network.enable OK")
                 return True
 
-            logger.error(f"Network.enable falhou: {resp}")
+            self.last_error = f"Network.enable falhou: {resp}"
+            logger.error(self.last_error)
             return False
 
         except Exception as e:
-            logger.error(f"Erro ao conectar DevTools: {e}")
+            self.last_error = f"Erro ao conectar DevTools: {e}"
+            logger.error(self.last_error)
             return False
 
     def disconnect(self):
@@ -412,11 +581,17 @@ class CrashWSCapture:
 
     def start(self):
         """Inicia captura em thread daemon."""
+        logger.info(
+            f"start(): _running={self._running}, "
+            f"connected={self._stats.connected}"
+        )
+
         if self._running:
             logger.warning("Captura ja esta rodando")
             return
 
         if not self._stats.connected:
+            logger.info("start(): nao conectado, tentando connect()...")
             if not self.connect():
                 raise ConnectionError(
                     "Nao foi possivel conectar ao Chrome DevTools"
@@ -424,6 +599,7 @@ class CrashWSCapture:
 
         self._running = True
         self._start_time = time.time()
+        logger.info("start(): iniciando _capture_loop thread...")
         self._thread = threading.Thread(
             target=self._capture_loop, daemon=True, name="ws-capture"
         )

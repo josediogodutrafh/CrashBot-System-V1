@@ -84,9 +84,10 @@ def update(state: dict) -> None:
     _stats_column.controls.append(stat_row("Sequencias", str(total_seqs), TEXT_PRIMARY))
     _stats_column.controls.append(stat_row("Vitorias", str(total_wins), NEON_GREEN))
 
+    trigger = state.get("baixos_trigger", 6)
     for dobra_key in sorted(wins_by_dobra.keys()):
         count = wins_by_dobra[dobra_key]
-        baixas = 5 + int(dobra_key)
+        baixas = trigger - 1 + int(dobra_key)
         _stats_column.controls.append(
             stat_row(f"  D{dobra_key} ({baixas}+ baixas)", str(count), TEXT_DIM)
         )

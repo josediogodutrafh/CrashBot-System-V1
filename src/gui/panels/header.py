@@ -1,5 +1,8 @@
 """
 Header Panel - Time, WS status, setup, meta progress, premium (Flet).
+
+Includes a STATUS BAR below the header that shows connection phase,
+last action, and errors - always visible at the top of the dashboard.
 """
 
 from datetime import datetime
@@ -20,11 +23,15 @@ _txt_premium = None
 _txt_pending = None
 _bar_meta = None
 _txt_meta = None
+_txt_status = None      # Status bar (last_action) - always visible
+_icon_status = None
+_container_status = None
 
 
 def create() -> ft.Container:
     global _txt_time, _txt_ws, _txt_setup, _txt_premium
     global _txt_pending, _bar_meta, _txt_meta
+    global _txt_status, _icon_status, _container_status
 
     _txt_time = ft.Text("--:--:--", size=14, color=TEXT_PRIMARY,
                          font_family="Consolas", weight=ft.FontWeight.BOLD)
@@ -34,6 +41,22 @@ def create() -> ft.Container:
     _txt_pending = ft.Text("", size=11, color=NEON_PURPLE)
     _bar_meta = ft.ProgressBar(value=0, bar_height=6, color=NEON_GREEN, bgcolor="#252940", width=200)
     _txt_meta = ft.Text("Meta: 0%", size=11, color=TEXT_SECONDARY)
+
+    # Status bar - shows last_action, connection phase, errors
+    _icon_status = ft.Icon(ft.Icons.INFO_OUTLINE, size=16, color=NEON_BLUE)
+    _txt_status = ft.Text(
+        "Iniciando...", size=13, color=NEON_BLUE,
+        weight=ft.FontWeight.W_500,
+        max_lines=1, overflow=ft.TextOverflow.ELLIPSIS,
+        expand=True,
+    )
+    _container_status = ft.Container(
+        content=ft.Row([_icon_status, _txt_status], spacing=8,
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER),
+        bgcolor="#1a1d35",
+        border_radius=8,
+        padding=ft.padding.symmetric(horizontal=12, vertical=6),
+    )
 
     top_row = ft.Row([
         ft.Row([
@@ -54,7 +77,7 @@ def create() -> ft.Container:
     ], alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.CrossAxisAlignment.CENTER, spacing=12)
 
     return ft.Container(
-        content=top_row,
+        content=ft.Column([top_row, _container_status], spacing=6),
         bgcolor=BG_HEADER,
         border_radius=12,
         padding=ft.padding.symmetric(horizontal=16, vertical=10),
@@ -72,9 +95,9 @@ def update(state: dict) -> None:
 
     # WS status
     connected = state.get("ws_connected", False)
-    phase = state.get("ws_phase", "unknown")
+    ws_phase = state.get("ws_phase", "unknown")
     if connected:
-        _txt_ws.value = f"WS: ON {phase.upper()}"
+        _txt_ws.value = f"WS: ON {ws_phase.upper()}"
         _txt_ws.color = NEON_GREEN
     else:
         _txt_ws.value = "WS: OFF"
@@ -110,3 +133,35 @@ def update(state: dict) -> None:
     else:
         _txt_meta.value = f"Meta: {pct_str}"
         _txt_meta.color = TEXT_SECONDARY
+
+    # ── Status bar (last_action) - always visible ──
+    action = state.get("last_action", "")
+    bot_phase = state.get("phase", "config")
+
+    if action and _txt_status:
+        _txt_status.value = action
+
+        if "ERRO" in action:
+            _txt_status.color = NEON_RED
+            _txt_status.weight = ft.FontWeight.BOLD
+            _icon_status.name = ft.Icons.ERROR_OUTLINE
+            _icon_status.color = NEON_RED
+            _container_status.bgcolor = "#2a1520"
+        elif bot_phase == "connecting" or not connected:
+            _txt_status.color = NEON_YELLOW
+            _txt_status.weight = ft.FontWeight.W_500
+            _icon_status.name = ft.Icons.WIFI_FIND
+            _icon_status.color = NEON_YELLOW
+            _container_status.bgcolor = "#2a2515"
+        elif connected and bot_phase == "running":
+            _txt_status.color = NEON_GREEN
+            _txt_status.weight = ft.FontWeight.NORMAL
+            _icon_status.name = ft.Icons.CHECK_CIRCLE_OUTLINE
+            _icon_status.color = NEON_GREEN
+            _container_status.bgcolor = "#152a1a"
+        else:
+            _txt_status.color = TEXT_SECONDARY
+            _txt_status.weight = ft.FontWeight.NORMAL
+            _icon_status.name = ft.Icons.INFO_OUTLINE
+            _icon_status.color = TEXT_DIM
+            _container_status.bgcolor = "#1a1d35"

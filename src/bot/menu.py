@@ -27,10 +27,15 @@ import threading
 import time
 from typing import Callable, Optional
 
-from rich.console import Console
-from rich.panel import Panel
-from rich.table import Table
-from rich.text import Text
+try:
+    from rich.console import Console
+    from rich.panel import Panel
+    from rich.table import Table
+    from rich.text import Text
+except ImportError:
+    # rich não disponível no .exe (excluído do build)
+    # Funções de menu console não são usadas no modo GUI (Flet)
+    Console = Panel = Table = Text = None
 
 from src.bot.setups import (
     AVAILABLE_SETUPS,
@@ -57,16 +62,23 @@ FKEY_MAP = {
     68: "F10",  # 0x44
 }
 
-# Mapa F-key -> nome do setup
-FKEY_SETUP_MAP = {
-    "F1": "1/2",
-    "F2": "1/2 + 1/2",
-    "F3": "1/2 + 1/2 + 1/2",
-    "F4": "1/2/4",
-    "F5": "1/2/4 + 1/2/4",
-    "F6": "1/2/4/8",
-    "F7": "1/2/4/8/16",
-}
+def _get_fkey_setup_map() -> dict:
+    """Retorna mapa F-key -> nome do setup (dinamico por modo)."""
+    try:
+        from src.gui.app_mode import get_setup_buttons
+        buttons = get_setup_buttons()
+        return {f"F{i+1}": name for i, (_, name) in enumerate(buttons)}
+    except Exception:
+        # Fallback: mapa comercial hardcoded
+        return {
+            "F1": "1/2",
+            "F2": "1/2 + 1/2",
+            "F3": "1/2 + 1/2 + 1/2",
+            "F4": "1/2/4",
+            "F5": "1/2/4 + 1/2/4",
+            "F6": "1/2/4/8",
+            "F7": "1/2/4/8/16",
+        }
 
 
 # ==============================================================================
@@ -682,8 +694,8 @@ class HotKeyListener:
         """Processa tecla de funcao."""
         logger.info(f"Tecla pressionada: {fkey}")
 
-        # F1-F7: troca de setup
-        setup_name = FKEY_SETUP_MAP.get(fkey)
+        # F1-F7: troca de setup (mapa dinamico por modo)
+        setup_name = _get_fkey_setup_map().get(fkey)
         if setup_name:
             self.on_setup_change(setup_name)
             return

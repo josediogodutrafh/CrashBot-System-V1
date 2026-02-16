@@ -1,17 +1,14 @@
 """
-Crash_AI - Build Script (Flet + PyInstaller)
-Empacota o bot em .exe usando PyInstaller com runtime Flet.
+Crash_AI - Build Script ESTATISTICO (Flet + PyInstaller)
+Empacota o bot estatistico em TucunareBotStat.exe.
 
-Replica o que 'flet pack' faz internamente, mas com controle total
-sobre --exclude-module para evitar incluir torch, scipy, etc.
+Identico ao build.py mas usa run_stat.py como entry point
+e inclui os modulos estatisticos.
 
 Uso:
-    python scripts/build.py          # Build completo
-    python scripts/build.py --test   # Apenas testa imports (sem compilar)
-    python scripts/build.py --dist   # Build + cria pacote distribuicao
-
-Requisitos:
-    pip install flet pyinstaller
+    python scripts/build_stat.py          # Build completo
+    python scripts/build_stat.py --test   # Apenas testa imports
+    python scripts/build_stat.py --dist   # Build + distribuicao
 """
 
 import argparse
@@ -29,13 +26,12 @@ PROJECT_ROOT = SCRIPT_DIR.parent
 BUILD_DIR = PROJECT_ROOT / "build"
 DIST_DIR = PROJECT_ROOT / "dist"
 
-ENTRY_POINT = PROJECT_ROOT / "run.py"
+ENTRY_POINT = PROJECT_ROOT / "run_stat.py"
 ICON_PATH = PROJECT_ROOT / "tools" / "icone.ico"
 
-VERSION = "3.1.0"
+VERSION = "3.1.0-stat"
+EXE_NAME = "TucunareBotStat"
 
-# Diretórios/arquivos de dados para incluir no build
-# Formato: (source_relative, dest_relative)
 DATA_INCLUDES = [
     ("config", "config"),
     ("tools/Tesseract-OCR", "tools/Tesseract-OCR"),
@@ -44,7 +40,6 @@ DATA_INCLUDES = [
     ("tools/abrir_chrome_debug.bat", "tools/abrir_chrome_debug.bat"),
 ]
 
-# Hidden imports que o PyInstaller pode nao detectar automaticamente
 HIDDEN_IMPORTS = [
     "src.gui.panels.header",
     "src.gui.panels.financial",
@@ -55,11 +50,13 @@ HIDDEN_IMPORTS = [
     "src.gui.panels.config",
     "src.gui.state",
     "src.gui.theme",
+    "src.gui.app_mode",
     "src.bot.controller",
     "src.bot.calibration",
     "src.bot.strategy",
     "src.bot.bankroll",
     "src.bot.setups",
+    "src.bot.setups_stat",
     "src.bot.schedule",
     "src.bot.menu",
     "src.ws.capture",
@@ -87,7 +84,6 @@ HIDDEN_IMPORTS = [
     "flet_desktop",
 ]
 
-# Módulos pesados a excluir (não usados pelo bot GUI)
 EXCLUDE_MODULES = [
     "torch",
     "torchvision",
@@ -121,18 +117,18 @@ EXCLUDE_MODULES = [
 
 
 def test_imports():
-    """Testa se todos os imports do bot funcionam."""
+    """Testa imports do bot estatistico."""
     print("=" * 60)
-    print("TESTANDO IMPORTS")
+    print("TESTANDO IMPORTS (STAT)")
     print("=" * 60)
 
     tests = [
+        ("App mode", "from src.gui.app_mode import set_mode, get_mode"),
+        ("Setups stat", "from src.bot.setups_stat import STAT_SETUP_LIST, get_stat_setup"),
         ("GUI app", "from src.gui.app import main"),
         ("GUI state", "from src.gui.state import get_state, BotState"),
         ("GUI theme", "from src.gui.theme import BG_MAIN, card_container"),
         ("Flet", "import flet as ft"),
-        ("Flet Canvas", "import flet.canvas as cv"),
-        ("Flet Desktop", "import flet_desktop"),
         ("WebSocket capture", "from src.ws.capture import CrashWSCapture, GamePhase"),
         ("Strategy engine", "from src.bot.strategy import StrategyEngine"),
         ("Bankroll manager", "from src.bot.bankroll import BankrollManager"),
@@ -140,9 +136,8 @@ def test_imports():
         ("Telegram", "from src.notifications.telegram import notify_session_summary"),
         ("HWID", "from src.security.hwid import get_hwid"),
         ("Config", "from src.config import PROJECT_ROOT, API_URL"),
-        ("Setups", "from src.bot.setups import SETUP_LIST, get_setup"),
+        ("Setups", "from src.bot.setups import SETUP_LIST, BaseSetup"),
         ("Schedule", "from src.bot.schedule import ScheduleManager"),
-        ("Menu", "from src.bot.menu import HotKeyListener"),
         ("PyAutoGUI", "import pyautogui"),
         ("Requests", "import requests"),
         ("WebSocket", "import websocket"),
@@ -166,12 +161,11 @@ def test_imports():
 
 
 def build():
-    """Executa o build replicando 'flet pack' com excludes."""
+    """Executa o build do bot estatistico."""
     print("=" * 60)
-    print(f"CRASHBOT v{VERSION} - FLET BUILD")
+    print(f"{EXE_NAME} v{VERSION} - FLET BUILD")
     print("=" * 60)
 
-    # Limpar builds anteriores
     if DIST_DIR.exists():
         print(f"Limpando {DIST_DIR}...")
         shutil.rmtree(DIST_DIR)
@@ -186,19 +180,14 @@ def build():
         print("  pip install flet pyinstaller")
         return False
 
-    # =========================================================================
-    # 1. Copiar flet runtime (replica o que flet pack faz)
-    # =========================================================================
     print("\n[1/4] Copiando Flet runtime...")
     hook_config.temp_bin_dir = copy_flet_bin()
 
     if hook_config.temp_bin_dir is not None:
-        # Remover fletd.exe (servidor, não necessário)
         fletd_path = os.path.join(hook_config.temp_bin_dir, "fletd.exe")
         if os.path.exists(fletd_path):
             os.remove(fletd_path)
 
-        # Atualizar ícone do flet.exe
         exe_path = os.path.join(hook_config.temp_bin_dir, "flet", "flet.exe")
         if os.path.exists(exe_path) and ICON_PATH.exists():
             try:
@@ -207,17 +196,15 @@ def build():
                     update_flet_view_version_info,
                 )
                 update_flet_view_icon(exe_path, str(ICON_PATH))
-
-                version_info_path = update_flet_view_version_info(
+                update_flet_view_version_info(
                     exe_path,
-                    product_name="CrashBot",
-                    file_description="CrashBot - Crash Game Assistant",
+                    product_name=EXE_NAME,
+                    file_description=f"{EXE_NAME} - Statistical Crash Bot",
                     product_version=VERSION,
                     file_version=f"{VERSION}.0",
                     company_name="TucunareBot",
                     copyright="",
                 )
-                print(f"  Flet runtime: {hook_config.temp_bin_dir}")
                 print(f"  Icone atualizado em flet.exe")
             except Exception as e:
                 print(f"  AVISO: Nao foi possivel atualizar icone: {e}")
@@ -225,10 +212,7 @@ def build():
     else:
         print("  AVISO: Flet runtime nao encontrado, continuando...")
 
-    # =========================================================================
-    # 2. Montar argumentos do PyInstaller
-    # =========================================================================
-    print("\n[2/4] Configurando PyInstaller...")
+    print(f"\n[2/4] Configurando PyInstaller...")
 
     sep = ";" if sys.platform == "win32" else ":"
 
@@ -237,42 +221,32 @@ def build():
         "--noconfirm",
         "--noconsole",
         "--onefile",
-        "--name", "TucunareBot",
+        "--name", EXE_NAME,
         "--distpath", str(DIST_DIR),
     ]
 
-    # Ícone
     if ICON_PATH.exists():
         pyi_args.extend(["--icon", str(ICON_PATH)])
 
-    # Dados
     for src_rel, dst_rel in DATA_INCLUDES:
         src_path = PROJECT_ROOT / src_rel
         if src_path.exists():
             pyi_args.extend(["--add-data", f"{src_path}{sep}{dst_rel}"])
             print(f"  + dados: {src_rel}")
 
-    # Hidden imports
     for mod in HIDDEN_IMPORTS:
         pyi_args.extend(["--hidden-import", mod])
     print(f"  + {len(HIDDEN_IMPORTS)} hidden imports")
 
-    # EXCLUIR módulos pesados
     for mod in EXCLUDE_MODULES:
         pyi_args.extend(["--exclude-module", mod])
-    print(f"  - {len(EXCLUDE_MODULES)} modulos excluidos (torch, scipy, etc.)")
+    print(f"  - {len(EXCLUDE_MODULES)} modulos excluidos")
 
-    # Version info (Windows)
-    pyi_args.extend([
-        "--version-file", _create_version_file(),
-    ])
+    pyi_args.extend(["--version-file", _create_version_file()])
 
-    # =========================================================================
-    # 3. Executar PyInstaller
-    # =========================================================================
     print(f"\n[3/4] Compilando... (pode levar 5-15 minutos)")
     print(f"  Entry: {ENTRY_POINT}")
-    print(f"  Output: {DIST_DIR / 'TucunareBot.exe'}")
+    print(f"  Output: {DIST_DIR / f'{EXE_NAME}.exe'}")
 
     try:
         PyInstaller.__main__.run(pyi_args)
@@ -281,15 +255,11 @@ def build():
             print(f"\nBUILD FALHOU (exit code: {e.code})")
             return False
     finally:
-        # Cleanup flet temp dir
         if hook_config.temp_bin_dir and os.path.exists(hook_config.temp_bin_dir):
             shutil.rmtree(hook_config.temp_bin_dir, ignore_errors=True)
 
-    # =========================================================================
-    # 4. Verificar resultado
-    # =========================================================================
     print(f"\n[4/4] Verificando...")
-    exe_path = DIST_DIR / "TucunareBot.exe"
+    exe_path = DIST_DIR / f"{EXE_NAME}.exe"
     if exe_path.exists():
         size_mb = exe_path.stat().st_size / (1024 * 1024)
         print(f"\n  BUILD OK!")
@@ -297,8 +267,7 @@ def build():
         print(f"  Tamanho: {size_mb:.1f} MB")
         return True
     else:
-        # Verificar em subpastas
-        for exe in DIST_DIR.rglob("TucunareBot.exe"):
+        for exe in DIST_DIR.rglob(f"{EXE_NAME}.exe"):
             size_mb = exe.stat().st_size / (1024 * 1024)
             print(f"\n  BUILD OK!")
             print(f"  Encontrado em: {exe} ({size_mb:.1f} MB)")
@@ -310,7 +279,8 @@ def build():
 
 def _create_version_file() -> str:
     """Cria arquivo de version info para o Windows."""
-    parts = VERSION.split(".")
+    ver = VERSION.replace("-stat", "")
+    parts = ver.split(".")
     major = parts[0] if len(parts) > 0 else "0"
     minor = parts[1] if len(parts) > 1 else "0"
     patch = parts[2] if len(parts) > 2 else "0"
@@ -332,60 +302,55 @@ VSVersionInfo(
       StringTable(
         u'040904B0',
         [StringStruct(u'CompanyName', u'TucunareBot'),
-         StringStruct(u'FileDescription', u'CrashBot - Crash Game Assistant'),
+         StringStruct(u'FileDescription', u'{EXE_NAME} - Statistical Crash Bot'),
          StringStruct(u'FileVersion', u'{VERSION}.0'),
-         StringStruct(u'InternalName', u'TucunareBot'),
-         StringStruct(u'OriginalFilename', u'TucunareBot.exe'),
-         StringStruct(u'ProductName', u'CrashBot'),
+         StringStruct(u'InternalName', u'{EXE_NAME}'),
+         StringStruct(u'OriginalFilename', u'{EXE_NAME}.exe'),
+         StringStruct(u'ProductName', u'{EXE_NAME}'),
          StringStruct(u'ProductVersion', u'{VERSION}')])
     ]),
     VarFileInfo([VarStruct(u'Translation', [1033, 1200])])
   ]
 )
 """
-    version_file = BUILD_DIR / "version_info.txt"
+    version_file = BUILD_DIR / "version_info_stat.txt"
     BUILD_DIR.mkdir(parents=True, exist_ok=True)
     version_file.write_text(content, encoding="utf-8")
     return str(version_file)
 
 
 def create_distribution():
-    """Cria pasta de distribuição com .exe + dados necessários."""
+    """Cria pasta de distribuicao com .exe + dados."""
     print("\n" + "=" * 60)
-    print("CRIANDO DISTRIBUICAO")
+    print("CRIANDO DISTRIBUICAO (STAT)")
     print("=" * 60)
 
-    dist_package = DIST_DIR / f"CrashBot-v{VERSION}"
+    dist_package = DIST_DIR / f"{EXE_NAME}-v{VERSION}"
     dist_package.mkdir(parents=True, exist_ok=True)
 
-    # Encontrar o .exe
-    exe_path = DIST_DIR / "TucunareBot.exe"
+    exe_path = DIST_DIR / f"{EXE_NAME}.exe"
     if not exe_path.exists():
-        for exe in DIST_DIR.rglob("TucunareBot.exe"):
+        for exe in DIST_DIR.rglob(f"{EXE_NAME}.exe"):
             exe_path = exe
             break
         else:
-            print("ERRO: TucunareBot.exe nao encontrado. Rode o build primeiro.")
+            print(f"ERRO: {EXE_NAME}.exe nao encontrado.")
             return False
 
-    # Copiar .exe
-    shutil.copy2(exe_path, dist_package / "TucunareBot.exe")
+    shutil.copy2(exe_path, dist_package / f"{EXE_NAME}.exe")
 
-    # Copiar iniciar.bat
-    bat_content = f'@echo off\ntitle CrashBot v{VERSION}\ncd /d "%~dp0"\nTucunareBot.exe\npause\n'
+    bat_content = f'@echo off\ntitle {EXE_NAME} v{VERSION}\ncd /d "%~dp0"\n{EXE_NAME}.exe\npause\n'
     (dist_package / "iniciar.bat").write_text(bat_content)
 
-    # Copiar Chrome debug helper
     chrome_bat = PROJECT_ROOT / "tools" / "abrir_chrome_debug.bat"
     if chrome_bat.exists():
         shutil.copy2(chrome_bat, dist_package / "abrir_chrome_debug.bat")
 
-    # Criar config/ com template
     config_dir = dist_package / "config"
     config_dir.mkdir(exist_ok=True)
 
     env_template = (
-        "# CrashBot - Configuracao\n"
+        "# CrashBot Stat - Configuracao\n"
         "# Preencha com seus dados\n\n"
         "TELEGRAM_BOT_TOKEN=\n"
         "TELEGRAM_CHAT_ID=\n"
@@ -393,7 +358,6 @@ def create_distribution():
     )
     (config_dir / ".env").write_text(env_template)
 
-    # Criar data/db/ vazio
     (dist_package / "data" / "db").mkdir(parents=True, exist_ok=True)
 
     print(f"Distribuicao criada: {dist_package}")
@@ -414,12 +378,11 @@ def create_distribution():
 
 
 def main():
-    parser = argparse.ArgumentParser(description=f"CrashBot v{VERSION} Build Script")
+    parser = argparse.ArgumentParser(description=f"{EXE_NAME} v{VERSION} Build Script")
     parser.add_argument("--test", action="store_true", help="Apenas testa imports")
-    parser.add_argument("--dist", action="store_true", help="Cria pacote de distribuicao apos build")
+    parser.add_argument("--dist", action="store_true", help="Cria pacote de distribuicao")
     args = parser.parse_args()
 
-    # Garantir que estamos na raiz do projeto
     os.chdir(str(PROJECT_ROOT))
     sys.path.insert(0, str(PROJECT_ROOT))
 
@@ -427,7 +390,6 @@ def main():
         success = test_imports()
         sys.exit(0 if success else 1)
 
-    # Build completo
     if not test_imports():
         print("\nIMPORTS FALHARAM - corrija antes de compilar.")
         sys.exit(1)

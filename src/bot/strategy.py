@@ -112,10 +112,10 @@ class MartingalePolicy:
         self.is_active = False
         self.dobra_atual = 0  # 0 = inativo, 1..max_dobras = ativo
         self.target_ativo = 0.0
-        self.threshold = 2.0
+        self.threshold = setup.threshold
 
-        # Gatilho fixo: 6 baixas
-        self.lows_needed = 6
+        # Gatilho: lido do setup (default 6)
+        self.lows_needed = setup.trigger_base
 
         # Alertas
         self.alerta_trick_enviado = False
@@ -126,14 +126,24 @@ class MartingalePolicy:
         # Acumulador de prejuízo no ciclo atual
         self._cycle_loss = 0.0
 
+        # Historico de wins para Kelly fraction
+        self._kelly_wins: deque = deque(maxlen=setup.kelly_window)
+
+        # Historico de %LOW para adaptive trigger
+        self._adaptive_lows: deque = deque(maxlen=setup.adaptive_window)
+
         logger.info(
             f"MartingalePolicy iniciada - Setup: {setup.name} | "
-            f"Banca: R${banca:.2f} | Max dobras: {setup.max_dobras}"
+            f"Banca: R${banca:.2f} | Max dobras: {setup.max_dobras} | "
+            f"Sizing: {setup.sizing_mode} | Target: "
+            f"{'fixo ' + str(setup.target_fixed) if setup.target_fixed > 0 else 'random 1.90-2.05'}"
         )
         logger.info(f"Valores por dobra: {setup.get_all_bets(banca)}")
 
     def _sortear_target(self) -> float:
-        """Sorteia target entre 1.90x e 2.05x (anti-detecção)."""
+        """Retorna target fixo (se configurado) ou aleatorio 1.90-2.05x."""
+        if self.setup.target_fixed > 0:
+            return self.setup.target_fixed
         return round(random.uniform(1.90, 2.05), 2)
 
     def _count_consecutive_lows(self, history: deque) -> int:
@@ -146,18 +156,41 @@ class MartingalePolicy:
                 break
         return count
 
+    def feed_round(self, explosion: float):
+        """Alimenta historicos auxiliares (kelly, adaptive) com cada rodada."""
+        # Kelly: registra se foi win (acima do target) para calcular win-rate
+        target = self.setup.target_fixed if self.setup.target_fixed > 0 else 1.95
+        self._kelly_wins.append(1 if explosion >= target else 0)
+
+        # Adaptive: registra se foi LOW
+        self._adaptive_lows.append(1 if explosion < self.threshold else 0)
+
+        # Ajustar trigger dinamicamente se adaptive
+        if self.setup.adaptive_trigger and len(self._adaptive_lows) >= 50:
+            pct_low = sum(self._adaptive_lows) / len(self._adaptive_lows)
+            # Mais LOWs -> trigger menor (entra mais cedo)
+            # Menos LOWs -> trigger maior (espera mais)
+            if pct_low > 0.58:
+                self.lows_needed = 5
+            elif pct_low > 0.52:
+                self.lows_needed = 6
+            elif pct_low > 0.48:
+                self.lows_needed = 7
+            else:
+                self.lows_needed = 8
+
     def check_trigger(self, history: deque) -> bool:
-        """Verifica se deve ativar a estratégia."""
+        """Verifica se deve ativar a estrategia."""
         if self.is_active:
             return False
 
         lows_count = self._count_consecutive_lows(history)
 
         try:
-            if lows_count == 6 and not self.alerta_trick_enviado:
+            if lows_count == self.lows_needed and not self.alerta_trick_enviado:
                 notify_trick(lows_count, self.setup.name)
                 self.alerta_trick_enviado = True
-            elif lows_count < 6:
+            elif lows_count < self.lows_needed:
                 self.alerta_trick_enviado = False
         except Exception as e:
             logger.error(f"Erro ao enviar alerta: {e}")
@@ -179,24 +212,56 @@ class MartingalePolicy:
             f"🎯 ATIVANDO {self.setup.name} - Dobra 1/{self.setup.max_dobras}"
         )
 
+    def _calculate_kelly_bet(self, base_bet: float) -> float:
+        """Calcula aposta via Kelly fraction baseado em win-rate recente."""
+        if len(self._kelly_wins) < 10:
+            return base_bet  # sem dados suficientes, usa base
+
+        wins = sum(self._kelly_wins)
+        n = len(self._kelly_wins)
+        win_rate = wins / n
+
+        target = self.setup.target_fixed if self.setup.target_fixed > 0 else 1.95
+        odds = target - 1  # payout por R$1 apostado
+
+        # Kelly: f* = (p * b - q) / b  onde p=win_rate, b=odds, q=1-p
+        kelly_f = (win_rate * odds - (1 - win_rate)) / odds
+        kelly_f = max(0.01, min(kelly_f, 0.25))  # clamp 1%-25%
+
+        kelly_bet = round(self.banca * kelly_f, 2)
+        return max(1.0, kelly_bet)
+
     def get_bet_recommendation(self, balance: float) -> Optional[BetRecommendation]:
-        """Retorna recomendação de aposta."""
+        """Retorna recomendacao de aposta."""
         if not self.is_active:
             return None
 
-        bet = self.setup.get_bet(self.dobra_atual - 1, self.banca)
+        sizing = self.setup.sizing_mode
+        if sizing == "flat":
+            # Aposta fixa: sempre unit base (sem dobrar)
+            bet = max(1.0, round(self.banca / self.setup.divisor, 2))
+        elif sizing == "kelly":
+            base = max(1.0, round(self.banca / self.setup.divisor, 2))
+            bet = self._calculate_kelly_bet(base)
+        else:
+            # martingale (default): usa tabela de dobras do setup
+            bet = self.setup.get_bet(self.dobra_atual - 1, self.banca)
+
         target = self._sortear_target()
         self.target_ativo = target
 
+        max_d = self.setup.max_dobras if sizing == "martingale" else 1
+        dobra_display = self.dobra_atual if sizing == "martingale" else 1
+
         return BetRecommendation(
-            strategy_name=f"{self.setup.name} | Dobra {self.dobra_atual}/{self.setup.max_dobras}",
+            strategy_name=f"{self.setup.name} | Dobra {dobra_display}/{max_d}",
             bet_1=bet,
             target_1=target,
             bet_2=0,
             target_2=0,
             justification=(
-                f"Dobra {self.dobra_atual}/{self.setup.max_dobras} - "
-                f"Target {target}x - Aposta R${bet:.2f}"
+                f"Dobra {dobra_display}/{max_d} - "
+                f"Target {target}x - Aposta R${bet:.2f} ({sizing})"
             ),
             confidence=1.0,
             ready=True,
@@ -211,30 +276,53 @@ class MartingalePolicy:
             return False
 
         target = self.target_ativo
-        bet_value = self.setup.get_bet(self.dobra_atual - 1, self.banca)
+        sizing = self.setup.sizing_mode
+
+        # Calcular valor da aposta atual
+        if sizing == "flat":
+            bet_value = max(1.0, round(self.banca / self.setup.divisor, 2))
+        elif sizing == "kelly":
+            base = max(1.0, round(self.banca / self.setup.divisor, 2))
+            bet_value = self._calculate_kelly_bet(base)
+        else:
+            bet_value = self.setup.get_bet(self.dobra_atual - 1, self.banca)
 
         if explosion < target:
             # PERDEU
             self._cycle_loss += bet_value
+
+            # Flat e Kelly: nao dobram, perda unica
+            if sizing in ("flat", "kelly"):
+                self.stats.total_breaks += 1
+                loss = self._cycle_loss
+                self.stats.total_profit -= loss
+                logger.warning(
+                    f"❌ MISS {self.setup.name} ({sizing}) "
+                    f"(explosao {explosion:.2f}x < target {target:.2f}x) "
+                    f"| Perda: -R${loss:.2f}"
+                )
+                notify_miss(1, 1, 0)
+                self._reset()
+                return False
+
+            # Martingale: avanca dobras
             logger.warning(
                 f"❌ PERDEU dobra {self.dobra_atual}/{self.setup.max_dobras} "
-                f"(explosão {explosion:.2f}x < target {target:.2f}x)"
+                f"(explosao {explosion:.2f}x < target {target:.2f}x)"
             )
 
             if self.dobra_atual >= self.setup.max_dobras:
-                # QUEBRA - esgotou todas as dobras
                 self.stats.total_breaks += 1
                 loss = self._cycle_loss
                 self.stats.total_profit -= loss
                 logger.error(
                     f"💀 QUEBRA! {self.setup.name} esgotou {self.setup.max_dobras} dobras "
-                    f"| Prejuízo: -R${loss:.2f}"
+                    f"| Prejuizo: -R${loss:.2f}"
                 )
                 notify_break(self.setup.name, loss)
                 self._reset()
                 return False
             else:
-                # Avança para próxima dobra
                 self.dobra_atual += 1
                 self.stats.current_dobra = self.dobra_atual
                 next_bet = self.setup.get_bet(self.dobra_atual - 1, self.banca)
@@ -244,13 +332,13 @@ class MartingalePolicy:
                     next_bet,
                 )
                 logger.info(
-                    f"Continuando - Próxima dobra: {self.dobra_atual}/{self.setup.max_dobras}"
+                    f"Continuando - Proxima dobra: {self.dobra_atual}/{self.setup.max_dobras}"
                 )
                 return True
 
         else:
             # GANHOU
-            gross_win = bet_value * (explosion - 1)  # lucro bruto da aposta
+            gross_win = bet_value * (explosion - 1)
             net_profit = gross_win - self._cycle_loss
             self.stats.total_profit += net_profit
 
@@ -315,8 +403,13 @@ class StrategyEngine:
         logger.info("=== SESSÃO INICIADA ===")
         logger.info(f"Banca: R$ {banca:.2f}")
         logger.info(f"Setup: {setup.get_description()}")
-        logger.info(f"Gatilho: 6 baixas consecutivas")
-        logger.info(f"Target: 1.90x - 2.05x (randômico)")
+        trigger = setup.trigger_base if setup else 6
+        logger.info(f"Gatilho: {trigger} baixas consecutivas")
+        target_desc = (
+            f"fixo {setup.target_fixed}x" if setup and setup.target_fixed > 0
+            else "1.90x - 2.05x (aleatorio)"
+        )
+        logger.info(f"Target: {target_desc}")
 
     # ── Hot-Swap ──────────────────────────────────────────────────────
 
@@ -377,11 +470,14 @@ class StrategyEngine:
     def add_explosion_value(
         self, value: float
     ) -> Tuple[bool, Optional[BetRecommendation], Optional[str]]:
-        """Processa cada explosão."""
+        """Processa cada explosao."""
         self.explosion_history.append(value)
 
         if self.policy is None:
-            return False, None, "Sessão não iniciada"
+            return False, None, "Sessao nao iniciada"
+
+        # Alimentar historicos auxiliares (kelly, adaptive)
+        self.policy.feed_round(value)
 
         needs_bet = False
         if self.policy.is_active:
@@ -401,7 +497,8 @@ class StrategyEngine:
         lows = self.policy._count_consecutive_lows(self.explosion_history)
         setup_name = self.policy.setup.name
         max_d = self.policy.setup.max_dobras
-        msg = f"Baixas: {lows}/6 | Setup: {setup_name} | Aguardando..."
+        needed = self.policy.lows_needed
+        msg = f"Baixas: {lows}/{needed} | Setup: {setup_name} | Aguardando..."
 
         if self.policy.is_active:
             msg = f"🎯 ATIVO | {setup_name} | Dobra {self.policy.dobra_atual}/{max_d}"
@@ -452,7 +549,7 @@ class StrategyEngine:
                 "martingale_active": False,
                 "dobra_atual": 0,
                 "max_dobras": 0,
-                "baixos_consecutivos": "0/6",
+                "baixos_consecutivos": "0/0",
                 "strategy_name": "N/A",
                 "setup_name": "N/A",
                 "total_sequences": 0,
@@ -493,7 +590,7 @@ class StrategyEngine:
             "martingale_active": active,
             "dobra_atual": dobra,
             "max_dobras": max_d,
-            "baixos_consecutivos": f"{lows}/6",
+            "baixos_consecutivos": f"{lows}/{self.policy.lows_needed}",
             "strategy_name": setup_name,
             "setup_name": setup_name,
             "total_sequences": stats.total_sequences,

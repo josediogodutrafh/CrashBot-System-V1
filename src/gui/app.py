@@ -10,6 +10,8 @@ Entry point: main()
 
 import asyncio
 import logging
+import os
+import sys
 import threading
 import time
 from datetime import datetime
@@ -29,7 +31,66 @@ from src.gui.panels import (
     config,
 )
 
+# Build timestamp (set at import time)
+BUILD_TIME = "2026-02-13 09:30"
+
 logger = logging.getLogger(__name__)
+
+
+def _setup_file_logging():
+    """Configure logging to write to crashbot.log next to the .exe.
+
+    Only logs src.* modules and this module - NOT flet internals.
+    """
+    try:
+        # Determine log path: next to .exe or in project root
+        if getattr(sys, "frozen", False):
+            log_dir = Path(sys.executable).parent
+        else:
+            log_dir = Path(__file__).parent.parent.parent
+
+        log_file = log_dir / "crashbot.log"
+
+        file_handler = logging.FileHandler(
+            str(log_file), mode="w", encoding="utf-8"
+        )
+        file_handler.setLevel(logging.DEBUG)
+        # Force flush after every log line (Windows ignores line_buffering on files)
+        _original_emit = file_handler.emit
+        def _flushing_emit(record, _orig=_original_emit, _fh=file_handler):
+            _orig(record)
+            _fh.flush()
+        file_handler.emit = _flushing_emit
+        file_handler.setFormatter(logging.Formatter(
+            "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+            datefmt="%H:%M:%S",
+        ))
+
+        # Only attach handler to "src" logger (not root!)
+        # This prevents flet_transport, asyncio, websocket etc from flooding
+        # All src.* loggers inherit from "src" via propagation
+        src_logger = logging.getLogger("src")
+        src_logger.setLevel(logging.DEBUG)
+        src_logger.addHandler(file_handler)
+
+        # Also ensure this module (src.gui.app) doesn't duplicate
+        # (it's a child of "src" so propagation handles it)
+
+        # Also add a console handler for critical errors
+        console = logging.StreamHandler()
+        console.setLevel(logging.WARNING)
+        console.setFormatter(logging.Formatter(
+            "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+            datefmt="%H:%M:%S",
+        ))
+        logging.getLogger("src").addHandler(console)
+
+        logger.info(f"=== CrashBot started (build {BUILD_TIME}) ===")
+        logger.info(f"Log file: {log_file}")
+        logger.info(f"Python: {sys.version}")
+        logger.info(f"Frozen: {getattr(sys, 'frozen', False)}")
+    except Exception as e:
+        print(f"Warning: could not setup file logging: {e}")
 
 # Global reference to bot controller
 _bot_controller = None
@@ -42,18 +103,26 @@ _page_ref = None
 # =============================================================================
 
 def _run_bot_in_background(config_dict: dict):
-    """Run the bot controller in a background thread."""
+    """Run the bot controller in a background thread.
+
+    CRITICAL: Everything is inside try/except so import errors
+    don't kill the thread silently.
+    """
     global _bot_controller
-
-    from src.bot.setups import get_setup
-    from src.bot.controller import BotController
-
     state = get_state()
-    state.update("phase", "connecting")
-    state.update("last_action", "Conectando ao Chrome DevTools...")
 
     try:
+        logger.info("Bot thread: importing modules...")
+        state.update("last_action", "Importando modulos...")
+
+        from src.gui.app_mode import get_setup
+        from src.bot.controller import BotController
+
+        logger.info("Bot thread: imports OK, creating BotController...")
+        state.update("last_action", "Inicializando bot...")
+
         setup = get_setup(config_dict["setup_name"])
+        logger.info(f"Bot thread: setup={config_dict['setup_name']}")
 
         _bot_controller = BotController(
             caixa=config_dict["caixa"],
@@ -69,22 +138,33 @@ def _run_bot_in_background(config_dict: dict):
             loss_suspend_hours=config_dict["loss_suspend_hours"],
             premium_only=config_dict["premium_only"],
             headless=True,
+            profile_name=config_dict.get("profile_name", ""),
         )
 
+        logger.info("Bot thread: BotController created OK")
         _bot_controller._gui_state = state
         state.update("phase", "running")
         state.update("running", True)
         state.update("session_start", datetime.now().timestamp())
 
+        logger.info("Bot thread: calling start()...")
         _bot_controller.start()
+        logger.info("Bot thread: start() returned")
 
     except Exception as e:
-        logger.error(f"Bot error: {e}")
+        logger.error(f"Bot thread EXCEPTION: {e}", exc_info=True)
         state.update("last_action", f"ERRO: {e}")
-        state.update("phase", "stopped")
     finally:
+        # Final sync so last_action error is visible
+        if _bot_controller:
+            try:
+                state.update("last_action", _bot_controller.last_action)
+                logger.info(f"Bot thread final last_action: {_bot_controller.last_action}")
+            except Exception:
+                pass
         state.update("running", False)
         state.update("phase", "stopped")
+        logger.info("Bot thread: finished")
 
 
 def _sync_state_from_bot():
@@ -94,6 +174,12 @@ def _sync_state_from_bot():
         return
 
     state = get_state()
+
+    # Always sync last_action (even during connection phases)
+    try:
+        state.update("last_action", bot.last_action)
+    except Exception:
+        pass
 
     try:
         # Financial
@@ -124,7 +210,7 @@ def _sync_state_from_bot():
 
         # Strategy
         analysis = bot.strategy.get_current_analysis()
-        from src.bot.setups import get_display_name
+        from src.gui.app_mode import get_display_name
         setup_raw = analysis.get("setup_name", "N/A")
 
         # Parse "X/Y" format (e.g. "3/6")
@@ -176,7 +262,12 @@ def _sync_state_from_bot():
         # Misc
         state.update("last_action", bot.last_action)
         state.update("paused", bot.paused)
-        state.update("running", bot.running)
+        # Only sync 'running' when bot has actually set it to True.
+        # During connection phases (FASE 1/2/3), bot.running is still False
+        # but we must NOT overwrite state["running"] = True (set by _on_config_start)
+        # because _is_gui_stop_requested() reads it to detect user Stop clicks.
+        if bot.running:
+            state.update("running", True)
 
         # Premium
         premium_info = bot.schedule.get_current_info()
@@ -208,16 +299,36 @@ def _sync_state_from_bot():
 def _on_config_start(config_dict: dict):
     """Called when user clicks 'Iniciar Bot' on config panel."""
     global _bot_thread
+    logger.info("=== INICIAR BOT clicado ===")
+    logger.info(f"Config: caixa={config_dict.get('caixa')}, "
+                f"banca={config_dict.get('banca')}, "
+                f"setup={config_dict.get('setup_name')}")
+
     page = _page_ref
     if page is None:
+        logger.error("_on_config_start: page is None!")
         return
 
     # Switch views
     config.hide(page)
     _show_dashboard(page)
+    logger.info("Dashboard view created")
 
-    # Reset state
+    # Reset state then push config values immediately (main thread)
     reset_state()
+    state = get_state()
+    state.update_many({
+        "caixa": config_dict["caixa"],
+        "banca": config_dict["banca"],
+        "saldo": config_dict["banca"],
+        "stop_gain_pct": config_dict["stop_gain_pct"],
+        "stop_loss_pct": config_dict["stop_loss_pct"],
+        "stop_gain_value": config_dict["caixa"] * config_dict["stop_gain_pct"] / 100,
+        "stop_loss_value": config_dict["caixa"] * config_dict["stop_loss_pct"] / 100,
+        "setup_display": config_dict["setup_name"],
+        "phase": "connecting",
+        "last_action": "Conectando ao Chrome DevTools...",
+    })
 
     # Launch bot in background thread
     _bot_thread = threading.Thread(
@@ -227,9 +338,11 @@ def _on_config_start(config_dict: dict):
         name="bot-main",
     )
     _bot_thread.start()
+    logger.info("Bot thread launched (daemon)")
 
     # Start async update loop
     page.run_task(_update_loop)
+    logger.info("Update loop started")
 
 
 def _on_setup_change(setup_name: str):
@@ -261,11 +374,18 @@ def _on_stop():
 # =============================================================================
 
 async def _update_loop():
-    """Async loop: syncs BotState → panels every 750ms."""
+    """Async loop: syncs BotState → panels every 750ms.
+
+    NEVER exits - keeps running even after bot stops so the user
+    can always see the clock, status messages and error details.
+    """
     page = _page_ref
+    stopped_renders = 0
+
     while True:
         state = get_state()
-        if state.get("phase") in ("running", "connecting"):
+        phase = state.get("phase")
+        if phase in ("running", "connecting"):
             _sync_state_from_bot()
 
         snap = state.snapshot()
@@ -281,7 +401,19 @@ async def _update_loop():
         except Exception:
             break
 
-        await asyncio.sleep(0.75)
+        # After bot stops, slow down updates but KEEP RUNNING
+        # (so the user can see the error message in the header)
+        if phase == "stopped":
+            stopped_renders += 1
+            # First few renders: fast (show error quickly)
+            if stopped_renders <= 3:
+                await asyncio.sleep(0.5)
+            else:
+                # Then slow down to 2s (just keep clock ticking)
+                await asyncio.sleep(2.0)
+        else:
+            stopped_renders = 0
+            await asyncio.sleep(0.75)
 
 
 # =============================================================================
@@ -320,13 +452,30 @@ def _show_dashboard(page: ft.Page):
 # MAIN
 # =============================================================================
 
+def _thread_excepthook(args):
+    """Catch uncaught exceptions in ANY thread and log them."""
+    logger.error(
+        f"UNCAUGHT THREAD EXCEPTION in '{args.thread.name}': "
+        f"{args.exc_type.__name__}: {args.exc_value}",
+        exc_info=(args.exc_type, args.exc_value, args.exc_traceback),
+    )
+    # Also push to state so user sees it in the UI
+    try:
+        state = get_state()
+        state.update("last_action", f"ERRO FATAL: {args.exc_value}")
+        state.update("phase", "stopped")
+    except Exception:
+        pass
+
+
 def _flet_main(page: ft.Page):
     """Flet page setup."""
     global _page_ref
     _page_ref = page
 
     # Page configuration
-    page.title = "CrashBot v3.0 - Crash Game Assistant"
+    from src.gui.app_mode import get_title
+    page.title = f"{get_title()} (build {BUILD_TIME})"
     page.theme_mode = ft.ThemeMode.DARK
     page.bgcolor = BG_MAIN
     page.window.width = 1280
@@ -343,13 +492,11 @@ def _flet_main(page: ft.Page):
     except Exception:
         pass
 
-    # Setup logging
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    )
-    logging.getLogger("src.ws").setLevel(logging.WARNING)
-    logging.getLogger("src.data").setLevel(logging.WARNING)
+    # Setup logging (file only for src.* modules, no flet spam)
+    _setup_file_logging()
+
+    # Catch uncaught thread exceptions (e.g. import errors in bot thread)
+    threading.excepthook = _thread_excepthook
 
     # Set callbacks
     config.set_on_start(_on_config_start)

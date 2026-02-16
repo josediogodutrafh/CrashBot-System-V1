@@ -33,6 +33,15 @@ class BaseSetup(ABC):
     name: str = ""
     _cycles: List[List[int]] = []
 
+    # Propriedades estatisticas (defaults = comportamento comercial atual)
+    target_fixed: float = 0.0        # 0 = usar _sortear_target() aleatorio
+    threshold: float = 2.0           # limiar LOW/HIGH
+    trigger_base: int = 6            # baixas consecutivas para entrar
+    sizing_mode: str = "martingale"  # "martingale" | "flat" | "kelly"
+    adaptive_trigger: bool = False   # trigger dinamico baseado em rolling %LOW?
+    adaptive_window: int = 200       # janela rolling para adaptive trigger
+    kelly_window: int = 100          # janela para calculo Kelly fraction
+
     @property
     def cycles(self) -> List[List[int]]:
         return self._cycles
@@ -107,7 +116,7 @@ class BaseSetup(ABC):
                     "global_pos": global_pos + 1,
                     "multiplier": mult,
                     "value": value,
-                    "baixas": 6 + global_pos,
+                    "baixas": self.trigger_base + global_pos,
                 })
                 global_pos += 1
         return result

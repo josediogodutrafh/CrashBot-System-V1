@@ -9,17 +9,7 @@ from src.gui.theme import (
     TEXT_PRIMARY, TEXT_SECONDARY, TEXT_DIM,
     card_container, outline_button, neon_button,
 )
-
-# Setup buttons: (label, internal_name)
-SETUP_BUTTONS = [
-    ("F1 Conserv", "1/2"),
-    ("F2 Moder", "1/2 + 1/2"),
-    ("F3 Agrssv", "1/2 + 1/2 + 1/2"),
-    ("F4 Turbo", "1/2/4"),
-    ("F5 TurboDup", "1/2/4 + 1/2/4"),
-    ("F6 Ultra", "1/2/4/8"),
-    ("F7 Max", "1/2/4/8/16"),
-]
+from src.gui.app_mode import get_setup_buttons
 
 # Callbacks
 _on_setup_change = None
@@ -49,9 +39,9 @@ def create() -> ft.Container:
     _txt_action = ft.Text("Aguardando...", size=12, color=TEXT_SECONDARY)
     _txt_premium = ft.Text("", size=11, color=NEON_PURPLE)
 
-    # Setup buttons row
+    # Setup buttons row (dynamic from app_mode)
     setup_btns = []
-    for label, internal in SETUP_BUTTONS:
+    for label, internal in get_setup_buttons():
         setup_btns.append(outline_button(
             text=label, color=NEON_BLUE,
             on_click=_handle_setup, data=internal,
@@ -99,6 +89,13 @@ def update(state: dict) -> None:
     action = state.get("last_action", "")
     if _txt_action and action:
         _txt_action.value = action
+        # Highlight errors in red, bold
+        if "ERRO" in action:
+            _txt_action.color = NEON_RED
+            _txt_action.weight = ft.FontWeight.BOLD
+        else:
+            _txt_action.color = TEXT_SECONDARY
+            _txt_action.weight = None
 
     paused = state.get("paused", False)
     if _btn_pause_text:

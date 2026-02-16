@@ -1,6 +1,6 @@
 """
 Config Panel - Initial bot configuration form (Flet).
-Includes license validation before allowing bot start.
+Includes license validation and screen calibration before allowing bot start.
 """
 
 import threading
@@ -12,23 +12,12 @@ from src.gui.theme import (
     TEXT_PRIMARY, TEXT_SECONDARY, TEXT_DIM,
     card_container, section_title, neon_button,
 )
+from src.gui.app_mode import get_setup_list, get_display_names
 from src.security.license import load_saved_key, validate_license
-
-# Setup options (internal names that match setups.py)
-SETUP_INTERNAL = [
-    "1/2", "1/2 + 1/2", "1/2 + 1/2 + 1/2",
-    "1/2/4", "1/2/4 + 1/2/4", "1/2/4/8", "1/2/4/8/16",
-]
-
-SETUP_DISPLAY = [
-    "Conservador (1/2)",
-    "Moderado (1/2 + 1/2)",
-    "Agressivo (1/2 + 1/2 + 1/2)",
-    "Turbo (1/2/4)",
-    "Turbo Duplo (1/2/4 + 1/2/4)",
-    "Ultra (1/2/4/8)",
-    "Maximo (1/2/4/8/16)",
-]
+from src.bot.calibration import (
+    get_profile_names, get_profile, validate_profile,
+    run_calibration_wizard, AREA_LABELS,
+)
 
 GAIN_ACTIONS = ["encerrar", "suspender", "reinvestir"]
 LOSS_ACTIONS = ["encerrar", "suspender"]
@@ -61,6 +50,13 @@ _btn_start = None
 _btn_validate = None
 _progress_license = None
 
+# Calibration fields
+_dropdown_profile = None
+_btn_calibrate = None
+_txt_profile_status = None
+_preview_row = None
+_field_profile_name = None
+
 
 def set_on_start(callback):
     """Set the callback for when user clicks start."""
@@ -78,6 +74,8 @@ def create() -> ft.Container:
     global _txt_status, _txt_meta_val, _txt_sl_val
     global _txt_license_status, _txt_license_days
     global _btn_start, _btn_validate, _progress_license
+    global _dropdown_profile, _btn_calibrate, _txt_profile_status, _preview_row
+    global _field_profile_name
 
     _license_validated = False
 
@@ -124,16 +122,52 @@ def create() -> ft.Container:
         label_style=ft.TextStyle(color=TEXT_SECONDARY),
         width=200,
     )
+    setup_list = get_setup_list()
+    display_names = get_display_names()
     _dropdown_setup = ft.Dropdown(
         label="Setup",
-        options=[ft.dropdown.Option(key=internal, text=display)
-                 for internal, display in zip(SETUP_INTERNAL, SETUP_DISPLAY)],
-        value="1/2 + 1/2",
+        options=[ft.dropdown.Option(key=name, text=f"{display_names.get(name, name)} ({name})")
+                 for name in setup_list],
+        value=setup_list[1] if len(setup_list) > 1 else setup_list[0],
         bgcolor=BG_INPUT, color=TEXT_PRIMARY,
         border_color=NEON_BLUE, focused_border_color=NEON_BLUE,
         label_style=ft.TextStyle(color=TEXT_SECONDARY),
         width=420,
     )
+
+    # Calibration section
+    profile_names = get_profile_names()
+    _dropdown_profile = ft.Dropdown(
+        label="Perfil de Calibragem",
+        options=[ft.dropdown.Option(key=n, text=n) for n in profile_names],
+        value=profile_names[0] if profile_names else None,
+        bgcolor=BG_INPUT, color=TEXT_PRIMARY,
+        border_color=NEON_BLUE, focused_border_color=NEON_BLUE,
+        label_style=ft.TextStyle(color=TEXT_SECONDARY),
+        width=250,
+        on_change=_on_profile_change,
+    )
+    _field_profile_name = ft.TextField(
+        label="Nome do novo perfil",
+        hint_text="Ex: MeuMonitor_1920x1080",
+        bgcolor=BG_INPUT, color=TEXT_PRIMARY,
+        border_color=NEON_YELLOW, focused_border_color=NEON_YELLOW,
+        label_style=ft.TextStyle(color=TEXT_SECONDARY),
+        width=250, visible=False,
+    )
+    _btn_calibrate = neon_button(
+        "CALIBRAR NOVO",
+        icon=ft.Icons.CROP_FREE,
+        color=NEON_YELLOW,
+        on_click=_on_calibrate_click,
+        width=160,
+        height=42,
+    )
+    _preview_row = ft.Row([], spacing=8, wrap=True)
+    _txt_profile_status = ft.Text("", size=12, color=TEXT_SECONDARY)
+
+    # Populate preview for initial profile
+    _update_calibration_preview()
 
     _txt_meta_val = ft.Text("= R$ 100.00", size=12, color=TEXT_SECONDARY)
     _slider_meta = ft.Slider(
@@ -255,6 +289,18 @@ def create() -> ft.Container:
 
         ft.Divider(color=TEXT_DIM, height=20),
 
+        # Calibration
+        section_title("CALIBRAGEM DE TELA", ft.Icons.CROP_FREE),
+        ft.Row([
+            _dropdown_profile,
+            _btn_calibrate,
+        ], spacing=12, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+        _field_profile_name,
+        _preview_row,
+        _txt_profile_status,
+
+        ft.Divider(color=TEXT_DIM, height=20),
+
         # Stop Gain
         section_title("STOP GAIN", ft.Icons.TRENDING_UP),
         ft.Row([
@@ -332,7 +378,8 @@ def get_config() -> dict:
     return {
         "caixa": caixa,
         "banca": banca,
-        "setup_name": _dropdown_setup.value or "1/2 + 1/2",
+        "setup_name": _dropdown_setup.value or get_setup_list()[0],
+        "profile_name": _dropdown_profile.value if _dropdown_profile else "",
         "stop_gain_pct": meta_pct,
         "stop_loss_pct": sl_pct,
         "session_hours": float(_field_hours.value or 0),
@@ -366,16 +413,17 @@ def _on_validate_click(e):
 
     # Validate in background thread to not freeze UI
     def _do_validate():
-        result = validate_license(chave)
-        # Schedule UI update back on main thread
-        if _field_license and _field_license.page:
-            _field_license.page.run_task(lambda: _handle_validation_result(result))
+        try:
+            result = validate_license(chave)
+        except Exception as exc:
+            result = {"sucesso": False, "mensagem": f"Erro: {exc}"}
+        _handle_validation_result(result)
 
     threading.Thread(target=_do_validate, daemon=True).start()
 
 
-async def _handle_validation_result(result: dict):
-    """Process validation result on UI thread."""
+def _handle_validation_result(result: dict):
+    """Process validation result (page.update is thread-safe in Flet)."""
     global _license_validated
 
     _btn_validate.disabled = False
@@ -442,6 +490,13 @@ def _on_start_click(e):
         _set_license_error("Valide sua licenca antes de iniciar.")
         return
 
+    # Check calibration profile
+    profile_name = _dropdown_profile.value if _dropdown_profile else ""
+    if not profile_name:
+        _txt_profile_status.value = "Sem calibragem - bot operara em modo OBSERVACAO (sem apostas)"
+        _txt_profile_status.color = NEON_YELLOW
+        _safe_update()
+
     if _on_start_callback:
         cfg = get_config()
         set_status("Iniciando bot...")
@@ -466,6 +521,143 @@ def _on_sl_change(e):
         _txt_sl_val.value = f"= R$ {caixa * pct / 100:.2f}"
         if _txt_sl_val.page:
             _txt_sl_val.page.update()
+
+
+# =============================================================================
+# CALIBRATION CALLBACKS
+# =============================================================================
+
+def _on_profile_change(e):
+    """Handle profile dropdown selection change."""
+    _update_calibration_preview()
+    _safe_update()
+
+
+def _on_calibrate_click(e):
+    """Handle calibrate button click - show name field or start wizard."""
+    if not _field_profile_name.visible:
+        # First click: show name field
+        _field_profile_name.visible = True
+        _field_profile_name.value = ""
+        _field_profile_name.focus()
+        _btn_calibrate.content.controls[-1].value = "INICIAR"
+        _safe_update()
+        return
+
+    # Second click: start wizard
+    name = (_field_profile_name.value or "").strip()
+    if not name:
+        _txt_profile_status.value = "Digite um nome para o perfil"
+        _txt_profile_status.color = NEON_RED
+        _safe_update()
+        return
+
+    _field_profile_name.visible = False
+    _btn_calibrate.content.controls[-1].value = "CALIBRAR NOVO"
+    _btn_calibrate.disabled = True
+    _txt_profile_status.value = "Minimizando... Selecione as 3 areas na tela"
+    _txt_profile_status.color = NEON_YELLOW
+    _safe_update()
+
+    def _do_calibrate():
+        page = _field_license.page if _field_license else None
+
+        # Minimize Flet window
+        if page:
+            page.window.minimized = True
+            page.update()
+
+        import time
+        time.sleep(0.5)
+
+        result = run_calibration_wizard(name)
+
+        # Restore Flet window
+        if page:
+            page.window.minimized = False
+            page.window.focused = True
+            page.update()
+
+        _btn_calibrate.disabled = False
+
+        if result:
+            # Update dropdown with new profile
+            _dropdown_profile.options = [
+                ft.dropdown.Option(key=n, text=n)
+                for n in get_profile_names()
+            ]
+            _dropdown_profile.value = name
+            _update_calibration_preview()
+            _txt_profile_status.value = f"Perfil '{name}' calibrado com sucesso!"
+            _txt_profile_status.color = NEON_GREEN
+        else:
+            _txt_profile_status.value = "Calibragem cancelada"
+            _txt_profile_status.color = NEON_RED
+
+        _safe_update()
+
+    threading.Thread(target=_do_calibrate, daemon=True).start()
+
+
+def _update_calibration_preview():
+    """Update the visual preview of calibrated areas."""
+    if not _preview_row:
+        return
+
+    _preview_row.controls.clear()
+
+    profile_name = _dropdown_profile.value if _dropdown_profile else None
+    if not profile_name:
+        _preview_row.controls.append(
+            ft.Text("Nenhum perfil selecionado", size=11, color=TEXT_DIM, italic=True)
+        )
+        if _txt_profile_status:
+            _txt_profile_status.value = "Sem calibragem - modo observacao"
+            _txt_profile_status.color = NEON_YELLOW
+        return
+
+    profile = get_profile(profile_name)
+    if not profile or not validate_profile(profile):
+        _preview_row.controls.append(
+            ft.Text("Perfil incompleto ou invalido", size=11, color=NEON_RED)
+        )
+        if _txt_profile_status:
+            _txt_profile_status.value = "Perfil invalido"
+            _txt_profile_status.color = NEON_RED
+        return
+
+    # 3 mini-cards with area info
+    area_config = [
+        ("bet_value_area_1", "VALOR R$", ft.Icons.ATTACH_MONEY, NEON_GREEN),
+        ("target_area_1", "ALVO 2.00x", ft.Icons.TARGET, NEON_BLUE),
+        ("bet_button_area_1", "APOSTAR", ft.Icons.TOUCH_APP, NEON_YELLOW),
+    ]
+
+    for key, label, icon, color in area_config:
+        area = profile.get(key, {})
+        x, y = area.get("x", 0), area.get("y", 0)
+        w, h = area.get("width", 0), area.get("height", 0)
+
+        mini_card = ft.Container(
+            content=ft.Column([
+                ft.Row([
+                    ft.Icon(icon, size=14, color=color),
+                    ft.Text(label, size=10, weight=ft.FontWeight.BOLD, color=color),
+                ], spacing=4),
+                ft.Text(f"x:{x} y:{y}", size=9, color=TEXT_DIM),
+                ft.Text(f"{w}x{h} px", size=9, color=TEXT_DIM),
+            ], spacing=1, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+            bgcolor=BG_INPUT,
+            border=ft.border.all(1, color),
+            border_radius=8,
+            padding=ft.padding.all(8),
+            width=120,
+        )
+        _preview_row.controls.append(mini_card)
+
+    if _txt_profile_status:
+        _txt_profile_status.value = f"Perfil '{profile_name}' carregado"
+        _txt_profile_status.color = NEON_GREEN
 
 
 def update(state: dict) -> None:

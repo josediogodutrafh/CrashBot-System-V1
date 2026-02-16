@@ -23,6 +23,7 @@ import json
 import logging
 import os
 import random
+import sys
 import threading
 import time
 import tkinter as tk
@@ -53,8 +54,10 @@ from src.data.manager import (
 )
 from src.security.hwid import get_hwid
 from src.bot.strategy import StrategyEngine
-from src.bot.setups import BaseSetup, SetupInteligente, SETUP_LIST, get_setup, get_display_name
+from src.bot.setups import BaseSetup, SetupInteligente, SETUP_LIST
+from src.gui.app_mode import get_setup, get_display_name
 from src.bot.bankroll import BankrollManager
+from src.bot.calibration import get_profile, validate_profile, load_profiles
 from src.bot.schedule import ScheduleManager
 from src.bot.menu import HotKeyListener
 from src.ws.capture import CrashWSCapture, GamePhase
@@ -91,7 +94,9 @@ class BotController:
         loss_suspend_hours: float = 0,
         premium_only: bool = False,
         headless: bool = False,
+        profile_name: str = "",
     ):
+        self.logger = logging.getLogger(__name__)
         self.headless = headless
         self.config_path = str(PROFILES_PATH)
         self.config = self.load_config()
@@ -159,6 +164,7 @@ class BotController:
 
         # Estado
         self.running = False
+        self._stop_requested = False  # set by _on_stop, checked during connection
         self.session_start = datetime.now()
         self.explosions = []
         self.round_count = 0
@@ -169,6 +175,9 @@ class BotController:
         # Apostas
         self.executed_bet_pending: Optional[Dict] = None
         self.last_round_id: Optional[int] = None
+
+        # Flag: primeiro saldo WS recebido (para ajustar bankroll_base)
+        self._ws_balance_initialized = False
 
         # Controle de apostas da sessao
         self.session_hits = 0
@@ -187,12 +196,12 @@ class BotController:
         self.last_action = ""
         self.selected_profile = ""
 
-        # Logger
-        self.logger = logging.getLogger(__name__)
-        logging.basicConfig(
-            level=logging.WARNING,
-            format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-        )
+        # Logger (basicConfig only for non-frozen standalone mode)
+        if not getattr(sys, "frozen", False):
+            logging.basicConfig(
+                level=logging.WARNING,
+                format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+            )
 
         self.last_balance_alert_time = time.time()
 
@@ -202,8 +211,11 @@ class BotController:
         # Configurar áreas de aposta
         if not self.headless:
             self.selected_profile = self.setup_screen_areas()
+        elif profile_name:
+            # Headless (GUI Flet): carregar perfil especifico selecionado na config
+            self.selected_profile = self._load_named_profile(profile_name)
         else:
-            # Headless (GUI Flet): carregar primeiro perfil automaticamente
+            # Headless sem perfil: carregar primeiro perfil automaticamente
             self.selected_profile = self._load_default_profile()
 
         setup_raw = self.active_setup.name if self.active_setup else "N/A"
@@ -275,9 +287,10 @@ class BotController:
         self.last_action = f"⏸️ Bot {state}"
 
     def _on_stop(self):
-        """Callback do hot-key para encerrar."""
-        self.last_action = "🛑 Encerrando..."
+        """Callback do hot-key/GUI para encerrar."""
+        self.last_action = "Encerrando..."
         self.running = False
+        self._stop_requested = True
 
     # ── Profile Selection ──────────────────────────────────────────────
 
@@ -371,20 +384,12 @@ class BotController:
         print("Modo observacao")
         return ""
 
-    def _load_default_profile(self) -> str:
-        """Carrega o primeiro perfil de calibracao automaticamente (headless)."""
-        if not self.config:
-            self.logger.warning("Sem config - modo observacao")
+    def _load_named_profile(self, name: str) -> str:
+        """Carrega um perfil especifico pelo nome (via calibration module)."""
+        profile_data = get_profile(name)
+        if not profile_data or not validate_profile(profile_data):
+            self.logger.warning(f"Perfil '{name}' invalido - modo observacao")
             return ""
-
-        profiles = self.config.get("profiles", {})
-        if not profiles:
-            self.logger.warning("Nenhum perfil calibrado - modo observacao")
-            return ""
-
-        # Usar o primeiro perfil disponivel
-        profile_name = list(profiles.keys())[0]
-        profile_data = profiles[profile_name]
 
         self.screen_areas = {
             "bet_value_1": profile_data.get("bet_value_area_1"),
@@ -392,16 +397,23 @@ class BotController:
             "bet_button_1": profile_data.get("bet_button_area_1"),
         }
 
-        # Verificar se tem as 3 areas necessarias
         if self.can_execute_bets():
-            self.logger.info(f"Perfil '{profile_name}' carregado automaticamente")
-            return profile_name
-        else:
-            self.logger.warning(
-                f"Perfil '{profile_name}' incompleto - modo observacao"
-            )
-            self.screen_areas = {}
+            self.logger.info(f"Perfil '{name}' carregado (via GUI)")
+            return name
+
+        self.screen_areas = {}
+        return ""
+
+    def _load_default_profile(self) -> str:
+        """Carrega o primeiro perfil de calibracao automaticamente (headless)."""
+        profiles = load_profiles()
+        if not profiles:
+            self.logger.warning("Nenhum perfil calibrado - modo observacao")
             return ""
+
+        # Usar o primeiro perfil disponivel
+        profile_name = list(profiles.keys())[0]
+        return self._load_named_profile(profile_name)
 
     # ── WebSocket Event Callbacks ────────────────────────────────────────
 
@@ -445,12 +457,35 @@ class BotController:
         try:
             new_balance = data["balance"]
 
+            # Primeiro saldo WS: ajustar bankroll_base para o saldo
+            # REAL da conta (evita stop gain falso)
+            if not self._ws_balance_initialized:
+                self._ws_balance_initialized = True
+                self.logger.info(
+                    f"Primeiro saldo WS: R${new_balance:.2f} "
+                    f"(ajustando bankroll_base)"
+                )
+                with self.balance_lock:
+                    self.initial_balance = new_balance
+                    self.current_balance = new_balance
+                self.bankroll.bankroll_base = new_balance
+                self.bankroll.current_bankroll = new_balance
+                self.bankroll.session_start_balance = new_balance
+                self.balance_history.append(new_balance)
+                self.last_action = (
+                    f"Saldo detectado: R${new_balance:.2f}"
+                )
+                return
+
             with self.balance_lock:
                 old_balance = self.current_balance or 0.0
                 self.current_balance = new_balance
             self.balance_history.append(new_balance)
             change = new_balance - old_balance
-            self.last_action = f"💰 Saldo: R${new_balance:.2f} ({change:+.2f})"
+            self.last_action = (
+                f"Saldo: R${new_balance:.2f} "
+                f"({change:+.2f})"
+            )
 
             # Sincronizar bankroll manager
             self.bankroll.sync_balance(new_balance)
@@ -460,10 +495,14 @@ class BotController:
                 profit = self.bankroll.get_net_profit()
                 meta_pct = self.bankroll.meta_percent
                 notify_meta_reached(profit, meta_pct)
-                self.last_action = f"🎯 META ATINGIDA! +{meta_pct}%"
+                self.last_action = (
+                    f"META ATINGIDA! +{meta_pct}%"
+                )
 
         except Exception as e:
-            self.logger.error(f"Erro _on_balance_update: {e}")
+            self.logger.error(
+                f"Erro _on_balance_update: {e}"
+            )
 
     def _on_betting_phase(self, data: Dict):
         """Callback: fase de apostas iniciou.
@@ -520,6 +559,7 @@ class BotController:
 
     def _ws_event_loop(self):
         """Thread principal: registra callbacks e mantém WS captura viva."""
+        self.logger.info("_ws_event_loop: registrando callbacks...")
         # Registrar callbacks
         self.ws_capture.on("round_end", self._on_round_end)
         self.ws_capture.on("balance_update", self._on_balance_update)
@@ -527,7 +567,15 @@ class BotController:
         self.ws_capture.on("phase_change", self._on_phase_change)
 
         # Iniciar captura (cria thread daemon interna do WS)
-        self.ws_capture.start()
+        try:
+            self.logger.info("_ws_event_loop: chamando ws_capture.start()...")
+            self.ws_capture.start()
+            self.logger.info("_ws_event_loop: ws_capture.start() OK")
+        except Exception as e:
+            self.logger.error(f"_ws_event_loop: ws_capture.start() FALHOU: {e}")
+            self.last_action = f"ERRO: Falha ao iniciar captura: {e}"
+            self.running = False
+            return
 
         # Manter thread viva enquanto bot estiver rodando
         while self.running:
@@ -735,21 +783,112 @@ class BotController:
             )
             self.hotkey_listener.start()
 
-    def _run_main_loop(self):
-        self.logger.info("Iniciando Bot...")
-        self.last_action = "Conectando ao Chrome DevTools..."
+    def _is_gui_stop_requested(self) -> bool:
+        """Check if user clicked stop during connection setup."""
+        return self._stop_requested
 
-        # Conectar ao Chrome DevTools via WebSocket (auto-launch se necessario)
-        if not self.ws_capture.connect():
-            self.last_action = "ERRO: Falha ao conectar ao Chrome!"
-            self.logger.error(
-                "Falha ao conectar ao Chrome! "
-                "Chrome nao encontrado ou nao respondeu."
+    def _run_main_loop(self):
+        self.logger.info("=== _run_main_loop INICIANDO ===")
+        self.last_action = "[1/3] Verificando Chrome com debug port..."
+
+        # ── FASE 1: Garantir Chrome com debug port ────────────────
+        self.logger.info("FASE 1: Verificando Chrome...")
+
+        # Passo 1: Tentar lançar Chrome UMA VEZ (pode matar e relançar)
+        if not self.ws_capture._is_chrome_debug_running():
+            self.last_action = "[1/3] Lancando Chrome com debug port..."
+            self.logger.info("FASE 1: Chrome debug nao detectado, lancando...")
+            self.ws_capture.ensure_chrome_running()
+            # ensure_chrome_running pode demorar ~20s (kill + launch + wait)
+
+        # Passo 2: Aguardar Chrome responder na porta (max 90s)
+        # NÃO chama ensure_chrome_running de novo (evita matar Chrome do usuario)
+        start = time.time()
+        max_wait = 90
+        while not self.ws_capture._is_chrome_debug_running():
+            if self._is_gui_stop_requested():
+                self.logger.info("FASE 1: Stop requested")
+                return
+
+            elapsed = int(time.time() - start)
+            remaining = max_wait - elapsed
+            err = self.ws_capture.last_error
+            if err:
+                self.last_action = f"[1/3] {err} ({remaining}s)"
+            else:
+                self.last_action = (
+                    f"[1/3] Aguardando Chrome debug port... ({remaining}s)"
+                )
+
+            if elapsed >= max_wait:
+                self.last_action = (
+                    "ERRO: Chrome nao respondeu na porta 9222. "
+                    "Feche TODO o Chrome e tente novamente."
+                )
+                self.logger.error(f"FASE 1 FALHOU apos {elapsed}s")
+                return
+
+            time.sleep(2)
+
+        self.last_action = "[1/3] Chrome OK! Buscando aba do jogo..."
+        self.logger.info("FASE 1 OK: Chrome com debug port rodando")
+
+        # ── FASE 2: Aguardar aba do jogo (max 3 min) ───────────────
+        self.logger.info("FASE 2: Buscando aba do jogo...")
+        max_tab_wait = 180  # seconds
+        elapsed = 0
+        while not self.ws_capture.has_game_tab():
+            if self._is_gui_stop_requested():
+                self.logger.info("FASE 2: Stop requested")
+                return
+            remaining = max_tab_wait - elapsed
+            self.last_action = (
+                f"[2/3] Abra o jogo Crash no Chrome! "
+                f"({remaining}s restantes)"
             )
+            time.sleep(3)
+            elapsed += 3
+            if elapsed >= max_tab_wait:
+                self.last_action = (
+                    "ERRO: Jogo nao encontrado no Chrome! "
+                    "Abra o site crash/brabet no Chrome."
+                )
+                self.logger.error(
+                    "FASE 2 FALHOU: Aba do jogo nao encontrada apos 3 min"
+                )
+                return
+
+        self.last_action = "[2/3] Aba do jogo encontrada! Conectando WebSocket..."
+        self.logger.info("FASE 2 OK: Aba do jogo encontrada")
+
+        # ── FASE 3: Conectar DevTools (max 5 tentativas) ───────────
+        self.logger.info("FASE 3: Conectando DevTools...")
+        connected = False
+        for attempt in range(1, 6):
+            if self._is_gui_stop_requested():
+                self.logger.info("FASE 3: Stop requested")
+                return
+            self.last_action = (
+                f"[3/3] Conectando WebSocket... (tentativa {attempt}/5)"
+            )
+            self.logger.info(f"FASE 3: tentativa {attempt}/5")
+            if self.ws_capture.connect():
+                connected = True
+                break
+            self.logger.warning(
+                f"FASE 3: tentativa {attempt} falhou: "
+                f"{self.ws_capture.last_error}"
+            )
+            time.sleep(3)
+
+        if not connected:
+            ws_err = self.ws_capture.last_error or "falha desconhecida"
+            self.last_action = f"ERRO: {ws_err}"
+            self.logger.error(f"FASE 3 FALHOU: {ws_err}")
             return
 
-        self.logger.info("WebSocket conectado ao Chrome!")
-        self.last_action = "WebSocket conectado!"
+        self.logger.info("=== FASE 3 OK: WebSocket conectado! ===")
+        self.last_action = "WebSocket conectado! Iniciando captura..."
 
         # Saldo: usa o valor digitado pelo usuário (manual)
         account_balance = self.banca_escolhida or 100.0
@@ -764,7 +903,9 @@ class BotController:
         self.strategy.iniciar_sessao(strategy_bankroll, self.active_setup)
 
         self.running = True
+        self.logger.info("Iniciando threads (ws_event_loop + hotkeys)...")
         self._start_threads()
+        self.logger.info("Threads iniciadas OK")
 
         setup_raw = self.active_setup.name if self.active_setup else "N/A"
         setup_display = get_display_name(setup_raw)
