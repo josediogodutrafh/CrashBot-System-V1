@@ -358,7 +358,26 @@ class LicenseService:
             expiration = data.get("expiracao", data.get("expiration_date"))
             days_remaining = data.get("dias_restantes", data.get("days_remaining"))
 
-            # Verifica se expirou
+            # Verificar campo 'sucesso' da API (critical fix)
+            if not data.get("sucesso", True):
+                msg = data.get("mensagem", "Licença inválida")
+                is_expired = (
+                    days_remaining is not None and days_remaining <= 0
+                ) or "expir" in msg.lower()
+                return LicenseResult(
+                    valid=False,
+                    status=LicenseStatus.EXPIRED if is_expired else LicenseStatus.INVALID,
+                    message=msg,
+                    user_name=user_name,
+                    user_email=user_email,
+                    license_key=license_key,
+                    expiration_date=expiration,
+                    days_remaining=days_remaining,
+                    hwid=self.hwid,
+                    api_response=data,
+                )
+
+            # Verifica se expirou (segunda camada de segurança)
             if days_remaining is not None and days_remaining <= 0:
                 return LicenseResult(
                     valid=False,

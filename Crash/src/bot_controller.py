@@ -178,6 +178,12 @@ class BotController:
         self.last_balance_alert_time = time.time()
         self.live_display: Optional[Live] = None
 
+        # Controle de revalidação periódica de licença
+        self._license_key: Optional[str] = None
+        self._license_dias_restantes: Optional[int] = None
+        self._last_license_check: float = 0.0
+        self._license_recheck_interval: int = 1800  # 30 minutos
+
         self.selected_profile = self.setup_screen_areas()
         risk_mode = self._perguntar_configuracoes_sessao()
         self.selected_risk_mode = risk_mode
@@ -1566,10 +1572,47 @@ class BotController:
             response = requests.post(endpoint, json=data, timeout=10)
             if response.status_code == 200:
                 resp_data = response.json()
+
+                # Verificar campo 'sucesso' da resposta (critical fix)
+                if not resp_data.get("sucesso", False):
+                    msg = resp_data.get("mensagem", "Licença inválida")
+                    dias = resp_data.get("dias_restantes", 0)
+                    self.console.print(
+                        f"❌ ACESSO NEGADO: {msg}", style="bold red"
+                    )
+                    if dias is not None and dias <= 0:
+                        self.console.print(
+                            "⏰ Sua licença expirou. Renove em nosso site.",
+                            style="bold yellow",
+                        )
+                    return False
+
+                # Verificar dias restantes como segunda camada de segurança
+                dias_restantes = resp_data.get("dias_restantes")
+                if dias_restantes is not None and dias_restantes <= 0:
+                    self.console.print(
+                        "❌ ACESSO NEGADO: Licença expirada", style="bold red"
+                    )
+                    self.console.print(
+                        "⏰ Sua licença expirou. Renove em nosso site.",
+                        style="bold yellow",
+                    )
+                    return False
+
+                # Licença válida - salvar dias restantes para revalidação
+                self._license_key = license_key
+                self._license_dias_restantes = dias_restantes
+                self._last_license_check = time.time()
+
                 self.console.print(
                     f"✅ LICENÇA VÁLIDA! {resp_data.get('mensagem', '')}",
                     style="bold green",
                 )
+                if dias_restantes is not None:
+                    self.console.print(
+                        f"📅 Dias restantes: {dias_restantes}",
+                        style="cyan",
+                    )
 
                 # Carregar telegram_chat_id do servidor (se disponível)
                 telegram_chat_id = resp_data.get("telegram_chat_id")
@@ -1597,6 +1640,31 @@ class BotController:
         except requests.exceptions.RequestException:
             self.console.print("❌ ERRO CONEXÃO: Servidor offline.", style="bold red")
             return False
+
+    def _revalidate_license(self) -> bool:
+        """Revalida licença periodicamente durante a sessão."""
+        if not self._license_key:
+            return False
+        try:
+            local_hwid = get_hwid()
+            endpoint = f"{API_URL}/validar"
+            data = {"chave": self._license_key, "hwid": local_hwid}
+            response = requests.post(endpoint, json=data, timeout=10)
+            if response.status_code == 200:
+                resp_data = response.json()
+                if not resp_data.get("sucesso", False):
+                    return False
+                dias = resp_data.get("dias_restantes")
+                if dias is not None and dias <= 0:
+                    return False
+                self._license_dias_restantes = dias
+                self._last_license_check = time.time()
+                return True
+            return False
+        except Exception:
+            # Em caso de erro de rede, mantém a sessão ativa
+            # mas não atualiza o timestamp (vai tentar de novo)
+            return True
 
     def _run_main_loop(self):
         """Executa a lógica principal."""
@@ -1643,6 +1711,14 @@ class BotController:
         mode_name = self.selected_risk_mode.name if self.selected_risk_mode else "N/A"
         self.last_action = f"✅ SISTEMA INICIADO! Modo: {mode_name}"
         while self.running:
+            # Revalidação periódica de licença
+            elapsed = time.time() - self._last_license_check
+            if elapsed >= self._license_recheck_interval:
+                if not self._revalidate_license():
+                    self.last_action = "⏰ Licença expirada!"
+                    self.logger.warning("Licença expirou durante sessão")
+                    self.running = False
+                    break
             time.sleep(1)
 
     def start(self):
