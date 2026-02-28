@@ -15,7 +15,7 @@ from pathlib import Path
 # =============================================================================
 # CONFIGURACOES
 # =============================================================================
-PROJECT_DIR = Path(r"C:\IA\Crash\Projetos\Crash")
+PROJECT_DIR = Path(r"C:\IA\Tucunare_bot\Crash")
 SRC_DIR = PROJECT_DIR / "src"
 MAIN_FILE = "bot_controller.py"
 OUTPUT_NAME = "TucunareBot"
