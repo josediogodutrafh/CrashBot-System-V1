@@ -54,7 +54,11 @@ from database_manager import DatabaseManager  # noqa: E402
 from database_manager import RoundData  # noqa: E402
 from learning_engine import LearningEngine  # noqa: E402
 from security import get_hwid  # noqa: E402
-from strategy_engine import RiskMode, StrategyEngine  # noqa: E402
+from strategy_engine import (  # noqa: E402
+    EstrategiaDobras,
+    RiskMode,
+    StrategyEngine,
+)
 from vision.vision_system import VisionSystem  # noqa: E402
 
 # ==============================================================================
@@ -185,29 +189,41 @@ class BotController:
         self._license_recheck_interval: int = 1800  # 30 minutos
 
         self.selected_profile = self.setup_screen_areas()
-        risk_mode = self._perguntar_configuracoes_sessao()
+        risk_mode, estrategia_dobras = self._perguntar_configuracoes_sessao()
         self.selected_risk_mode = risk_mode
         self._pending_risk_mode = risk_mode
+        self.selected_estrategia = estrategia_dobras
 
         self.console.print("✅ BotController inicializado com sucesso!", style="green")
         self.console.print(
             f"📊 Database Manager ativo: {self.db_manager.session_id}", style="cyan"
         )
 
-    def _perguntar_configuracoes_sessao(self) -> RiskMode:
-        """Coleta o modo de risco do usuário."""
-        self.console.print("\n[bold cyan]━━━ CONFIGURAÇÃO DA SESSÃO ━━━[/bold cyan]")
-        self.console.print("\n[bold yellow]🎯 ESCOLHA SEU MODO DE RISCO:[/bold yellow]")
-        self.console.print("")
+    def _perguntar_configuracoes_sessao(self):
+        """Coleta modo de risco e estratégia de dobras."""
         self.console.print(
-            "  [green]1. CONSERVADOR[/green] - Menor risco, ganhos consistentes"
+            "\n[bold cyan]━━━ CONFIGURAÇÃO DA SESSÃO ━━━[/bold cyan]"
+        )
+
+        # 1. Modo de risco (perfil de entrada / gatilho)
+        self.console.print(
+            "\n[bold yellow]🎯 PERFIL DE ENTRADA:[/bold yellow]"
         )
         self.console.print("")
         self.console.print(
-            "  [yellow]2. MODERADO[/yellow] - Equilíbrio entre risco e retorno"
+            "  [green]1. CONSERVADOR[/green]"
+            " - Gatilho 7 baixas (mais seletivo)"
         )
         self.console.print("")
-        self.console.print("  [red]3. AGRESSIVO[/red] - Maior risco, maiores retornos")
+        self.console.print(
+            "  [yellow]2. MODERADO[/yellow]"
+            " - Gatilho 6 baixas (equilibrado)"
+        )
+        self.console.print("")
+        self.console.print(
+            "  [red]3. AGRESSIVO[/red]"
+            " - Gatilho 5 baixas (mais entradas)"
+        )
         self.console.print("")
 
         risk_mode = self._obter_escolha_valida(
@@ -226,10 +242,54 @@ class BotController:
         }
         color = mode_colors[risk_mode]
         self.console.print(
-            f"\n✅ Modo [{color}]{risk_mode.name}[/{color}] selecionado!",
+            f"\n✅ Perfil [{color}]{risk_mode.name}[/{color}]"
+            " selecionado!",
             style="bold",
         )
-        return risk_mode
+
+        # 2. Estratégia de dobras
+        self.console.print(
+            "\n[bold yellow]🎲 ESTRATÉGIA DE DOBRAS:[/bold yellow]"
+        )
+        self.console.print("")
+        self.console.print(
+            "  [magenta]1. 1-2[/magenta]"
+            " - 2 dobras (maior lucro, maior risco)"
+        )
+        self.console.print("")
+        self.console.print(
+            "  [blue]2. 1-2-1-2[/blue]"
+            " - 4 dobras (dois ciclos 1-2)"
+        )
+        self.console.print("")
+        self.console.print(
+            "  [green]3. 1-2-4[/green]"
+            " - 3 dobras (martingale clássico)"
+        )
+        self.console.print("")
+        self.console.print(
+            "  [red]4. 1-2-4-1-2-4[/red]"
+            " - 6 dobras (mais seguro)"
+        )
+        self.console.print("")
+
+        estrategia = self._obter_escolha_valida(
+            prompt="Escolha (1-4): ",
+            opcoes={
+                "1": EstrategiaDobras.DOBRAS_1_2,
+                "2": EstrategiaDobras.DOBRAS_1_2_1_2,
+                "3": EstrategiaDobras.DOBRAS_1_2_4,
+                "4": EstrategiaDobras.DOBRAS_1_2_4_1_2_4,
+            },
+        )
+
+        self.console.print(
+            f"\n✅ Estratégia [bold]{estrategia.value}[/bold]"
+            " selecionada!",
+            style="bold",
+        )
+
+        return risk_mode, estrategia
 
     def _obter_escolha_valida(self, prompt: str, opcoes: Dict[str, Any]) -> Any:
         """Helper genérico para obter uma escolha válida."""
@@ -1686,8 +1746,13 @@ class BotController:
         with self.balance_lock:
             banca_detectada = self.initial_balance or 100.0
         risk_mode_safe = self._pending_risk_mode or RiskMode.MODERADO
+        estrategia_safe = (
+            self.selected_estrategia or EstrategiaDobras.DOBRAS_1_2_4
+        )
         self.strategy.iniciar_sessao(
-            banca_inicial=banca_detectada, risk_mode=risk_mode_safe
+            banca=banca_detectada,
+            estrategia=estrategia_safe,
+            perfil=risk_mode_safe,
         )
         self.running = True
         self._send_telemetry(
