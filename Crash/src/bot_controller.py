@@ -65,7 +65,7 @@ from vision.vision_system import VisionSystem  # noqa: E402
 # 5. CONSTANTES GLOBAIS
 # ==============================================================================
 API_URL = "https://crash-api-jose.onrender.com"
-BOT_VERSION = "2.0.6"
+BOT_VERSION = "2.0.7"
 
 # Token padrão do bot Telegram (fallback)
 TELEGRAM_BOT_TOKEN_DEFAULT = "8329220374:AAHsK2aMseiAJpxzggsRutkz-S638eQWc8s"
