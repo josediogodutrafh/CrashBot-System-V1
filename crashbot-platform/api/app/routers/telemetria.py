@@ -413,13 +413,26 @@ async def _get_bots_ativos_detalhes(db: AsyncSession) -> List[Dict]:
                 "lucro"
             ),
             func.count(case((LogBot.tipo == "bet", 1))).label("apostas"),
+            func.count(
+                case(
+                    (
+                        and_(
+                            LogBot.tipo == "bet",
+                            LogBot.resultado == "hit",
+                        ),
+                        1,
+                    )
+                )
+            ).label("hits"),
             func.max(LogBot.modo_risco).label("modo"),
             func.max(LogBot.saldo).label("saldo"),
+            func.max(LogBot.banca_inicial).label("banca_inicial"),
+            func.max(LogBot.estrategia).label("estrategia"),
         )
         .where(LogBot.timestamp >= agora - timedelta(hours=24))
         .group_by(LogBot.hwid)
         .order_by(desc(func.max(LogBot.timestamp)))
-        .limit(20)
+        .limit(50)
     )
 
     result = await db.execute(query)
@@ -452,6 +465,10 @@ async def _get_bots_ativos_detalhes(db: AsyncSession) -> List[Dict]:
             else "recente" if inatividade < 30 else "inativo"
         )
 
+        total_apostas = row.apostas or 0
+        total_hits = row.hits or 0
+        win_rate = (total_hits / total_apostas * 100) if total_apostas > 0 else 0.0
+
         bots.append(
             {
                 "hwid": f"{hwid_str[:12]}...",
@@ -462,8 +479,12 @@ async def _get_bots_ativos_detalhes(db: AsyncSession) -> List[Dict]:
                 "minutos_inativo": int(inatividade),
                 "modo_risco": row.modo or "N/A",
                 "saldo_atual": float(row.saldo) if row.saldo else 0,
+                "banca_inicial": float(row.banca_inicial) if row.banca_inicial else 0,
                 "lucro_sessao": float(row.lucro) if row.lucro else 0,
-                "apostas_sessao": row.apostas or 0,
+                "apostas_sessao": total_apostas,
+                "hits_sessao": total_hits,
+                "win_rate": round(win_rate, 1),
+                "estrategia": row.estrategia or "N/A",
             }
         )
     return bots
