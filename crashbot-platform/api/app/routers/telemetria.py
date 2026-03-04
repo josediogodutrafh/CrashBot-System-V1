@@ -53,9 +53,8 @@ def _get_base_filters(
 def _get_valor_plano(plano: str, primeira_adesao: bool) -> float:
     """Retorna valor do plano para cálculos de receita."""
     precos = {
-        "semanal": {"normal": 149.90, "primeira": 49.90},
-        "quinzenal": {"normal": 249.90, "primeira": 89.90},
-        "mensal": {"normal": 449.90, "primeira": 149.90},
+        "semanal": {"normal": 69.00, "primeira": 49.90},
+        "mensal": {"normal": 249.00, "primeira": 149.90},
         "trial": {"normal": 0.0, "primeira": 0.0},
     }
     key = plano if plano in precos else "trial"
@@ -240,8 +239,6 @@ async def _calcular_receita_mensal(db: AsyncSession) -> float:
 
         if p_tipo == "semanal":
             total += valor * 4
-        elif p_tipo == "quinzenal":
-            total += valor * 2
         else:
             total += valor
 

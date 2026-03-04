@@ -34,17 +34,17 @@ const planosBase: PlanosMap = {
   },
   semanal: {
     nome: 'Acesso Semanal',
-    preco: 147.0,
+    preco: 69.0,
     dias: 7,
     descricao: 'Ideal para validar lucros a curto prazo.',
   },
   mensal: {
     nome: 'Licença Mensal PRO',
-    preco: 497.0,
+    preco: 249.0,
     dias: 30,
     descricao: 'Setup validado e suporte VIP incluso.',
     popular: true,
-    economize: 'R$ 91,00',
+    economize: 'R$ 27,00',
   },
 };
 

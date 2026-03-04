@@ -43,7 +43,7 @@ router = APIRouter(prefix="/api/v1/pagamento", tags=["pagamento"])
 class CriarPagamentoRequest(BaseModel):
     """Request para criar pagamento."""
 
-    plano: str  # trial, semanal, quinzenal, mensal
+    plano: str  # trial, semanal, mensal
     nome: str
     email: EmailStr
     whatsapp: str
@@ -114,21 +114,14 @@ PLANOS = {
     },
     "semanal": {
         "nome": "Semanal",
-        "preco_normal": 149.90,
+        "preco_normal": 69.00,
         "preco_primeira_adesao": 49.90,
         "dias": 7,
         "descricao": "Plano Semanal - 7 dias de acesso",
     },
-    "quinzenal": {
-        "nome": "Quinzenal",
-        "preco_normal": 249.90,
-        "preco_primeira_adesao": 89.90,
-        "dias": 15,
-        "descricao": "Plano Quinzenal - 15 dias de acesso",
-    },
     "mensal": {
         "nome": "Mensal",
-        "preco_normal": 449.90,
+        "preco_normal": 249.00,
         "preco_primeira_adesao": 149.90,
         "dias": 30,
         "descricao": "Plano Mensal - 30 dias de acesso",
@@ -699,7 +692,7 @@ async def verificar_elegibilidade(
     # Obter preços de cada plano
     planos_info = {}
 
-    for plano_key in ["semanal", "quinzenal", "mensal"]:
+    for plano_key in ["semanal", "mensal"]:
         preco_info = await obter_preco_plano(db, plano_key, dados.cpf, dados.hwid)
         plano_config = PLANOS[plano_key]
 

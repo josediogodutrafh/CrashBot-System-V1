@@ -132,7 +132,7 @@ async def obter_preco_plano(
 
     Args:
         db: Sessão do banco
-        plano: Tipo do plano (semanal, quinzenal, mensal)
+        plano: Tipo do plano (semanal, mensal)
         cpf: CPF do cliente
         hwid: Hardware ID (opcional)
 
@@ -146,9 +146,8 @@ async def obter_preco_plano(
     """
     # Preços dos planos
     PRECOS = {
-        "semanal": {"normal": 149.90, "primeira_adesao": 49.90, "dias": 7},
-        "quinzenal": {"normal": 249.90, "primeira_adesao": 89.90, "dias": 15},
-        "mensal": {"normal": 449.90, "primeira_adesao": 149.90, "dias": 30},
+        "semanal": {"normal": 69.00, "primeira_adesao": 49.90, "dias": 7},
+        "mensal": {"normal": 249.00, "primeira_adesao": 149.90, "dias": 30},
     }
 
     if plano not in PRECOS:
