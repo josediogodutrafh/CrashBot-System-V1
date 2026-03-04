@@ -1626,12 +1626,24 @@ class BotController:
             self.console.print("❌ Chave de licença ausente.", style="bold red")
             return False
         endpoint = f"{API_URL}/validar"
-        data = {"chave": license_key, "hwid": local_hwid}
+        data = {"chave": license_key, "hwid": local_hwid, "versao_bot": BOT_VERSION}
         self.console.print("🔒 Conectando ao servidor...", style="dim")
         try:
             response = requests.post(endpoint, json=data, timeout=10)
             if response.status_code == 200:
                 resp_data = response.json()
+
+                # Verificar se servidor exige atualização
+                if resp_data.get("force_update", False):
+                    download_url = resp_data.get("download_url", "")
+                    msg = resp_data.get("mensagem", "Atualização obrigatória")
+                    self.console.print(
+                        f"\n⚠️  {msg}", style="bold yellow"
+                    )
+                    if download_url:
+                        import webbrowser
+                        webbrowser.open(download_url)
+                    return False
 
                 # Verificar campo 'sucesso' da resposta (critical fix)
                 if not resp_data.get("sucesso", False):
@@ -1708,10 +1720,14 @@ class BotController:
         try:
             local_hwid = get_hwid()
             endpoint = f"{API_URL}/validar"
-            data = {"chave": self._license_key, "hwid": local_hwid}
+            data = {"chave": self._license_key, "hwid": local_hwid, "versao_bot": BOT_VERSION}
             response = requests.post(endpoint, json=data, timeout=10)
             if response.status_code == 200:
                 resp_data = response.json()
+                # Servidor exige atualização
+                if resp_data.get("force_update", False):
+                    self.last_action = "⚠️ Atualização obrigatória! Reinicie o bot."
+                    return False
                 if not resp_data.get("sucesso", False):
                     return False
                 dias = resp_data.get("dias_restantes")

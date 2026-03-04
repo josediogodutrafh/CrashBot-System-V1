@@ -10,6 +10,7 @@ from typing import Optional, cast
 from app.database import get_db
 from app.dependencies import get_current_admin, get_current_user
 from app.models import Licenca, LogBot, Usuario
+from app.models.versao_bot import VersaoBot
 from app.schemas.licenca import (
     TelemetriaRequest,
     TelemetriaResponse,
@@ -26,6 +27,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 limiter = Limiter(key_func=get_remote_address)
 
 router = APIRouter(prefix="/api/v1", tags=["licencas"])
+
+
+def _versao_menor(versao_cliente: str, versao_servidor: str) -> bool:
+    """Retorna True se versao_cliente < versao_servidor."""
+    try:
+        parts_c = [int(x) for x in versao_cliente.split(".")]
+        parts_s = [int(x) for x in versao_servidor.split(".")]
+        return parts_c < parts_s
+    except (ValueError, AttributeError):
+        return True  # Na dúvida, forçar update
 
 
 # ============================================================================
@@ -91,6 +102,38 @@ async def validar_licenca(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="HWID não autorizado. Licença já vinculada a outro computador.",
         )
+
+    # Verificar versão mínima obrigatória
+    force_update = False
+    download_url = None
+
+    result = await db.execute(
+        select(VersaoBot)
+        .where(VersaoBot.ativa == True, VersaoBot.obrigatoria == True)
+        .order_by(VersaoBot.created_at.desc())
+        .limit(1)
+    )
+    versao_obrigatoria = result.scalar_one_or_none()
+
+    if versao_obrigatoria:
+        versao_cliente = payload.versao_bot
+        versao_servidor = str(versao_obrigatoria.versao)
+
+        # Se o bot não envia versão (antigo) ou versão é menor, forçar update
+        if not versao_cliente or _versao_menor(versao_cliente, versao_servidor):
+            force_update = True
+            download_url = str(versao_obrigatoria.download_url)
+
+            # Bloquear bots antigos: retornar sucesso=False
+            return ValidarLicencaResponse(
+                sucesso=False,
+                mensagem=f"Atualização obrigatória para v{versao_servidor}. Baixe em: {download_url}",
+                dias_restantes=licenca.dias_restantes,  # type: ignore
+                ativa=bool(licenca.ativa),
+                telegram_chat_id=licenca.telegram_chat_id,  # type: ignore
+                force_update=True,
+                download_url=download_url,
+            )
 
     # Tudo OK!
     return ValidarLicencaResponse(

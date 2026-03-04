@@ -20,6 +20,9 @@ class ValidarLicencaRequest(BaseModel):
     hwid: str = Field(
         ..., min_length=5, max_length=100, description="Hardware ID do computador"
     )
+    versao_bot: str | None = Field(
+        default=None, description="Versão do bot (ex: 3.2.0)"
+    )
 
 
 class ValidarLicencaResponse(BaseModel):
@@ -31,6 +34,12 @@ class ValidarLicencaResponse(BaseModel):
     ativa: bool | None = Field(None, description="Se a licença está ativa")
     telegram_chat_id: str | None = Field(
         None, description="Chat ID do Telegram do cliente"
+    )
+    force_update: bool = Field(
+        default=False, description="Se o bot precisa atualizar"
+    )
+    download_url: str | None = Field(
+        default=None, description="URL para download da nova versão"
     )
 
 
