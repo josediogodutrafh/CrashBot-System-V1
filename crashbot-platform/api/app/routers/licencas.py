@@ -39,6 +39,21 @@ def _versao_menor(versao_cliente: str, versao_servidor: str) -> bool:
         return True  # Na dúvida, forçar update
 
 
+def _normalizar_chave(chave: str) -> str:
+    """Normaliza caracteres ambíguos em chaves de licença.
+
+    Converte 0→O, 1→I para resolver confusão entre caracteres
+    visualmente similares (O/0, I/1/L) em chaves geradas pelo
+    sistema antigo que permitia esses caracteres.
+    """
+    return (
+        chave.upper()
+        .replace("0", "O")
+        .replace("1", "I")
+        .replace("L", "I")
+    )
+
+
 # ============================================================================
 # ENDPOINT: VALIDAR LICENÇA
 # ============================================================================
@@ -54,9 +69,18 @@ async def validar_licenca(
     """
     Valida uma licença.
     """
-    # Buscar licença por chave
-    result = await db.execute(select(Licenca).where(Licenca.chave == payload.chave))
+    # Buscar licença por chave (com normalização de caracteres ambíguos)
+    chave_normalizada = _normalizar_chave(payload.chave)
+
+    result = await db.execute(select(Licenca).where(Licenca.chave == chave_normalizada))
     licenca = result.scalar_one_or_none()
+
+    # Fallback: tentar chave original caso a normalizada não encontre
+    if not licenca and chave_normalizada != payload.chave:
+        result = await db.execute(
+            select(Licenca).where(Licenca.chave == payload.chave)
+        )
+        licenca = result.scalar_one_or_none()
 
     # Licença não encontrada
     if not licenca:

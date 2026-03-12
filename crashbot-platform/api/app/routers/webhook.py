@@ -90,10 +90,22 @@ async def validate_and_link_license(
     Returns:
         tuple: (sucesso, mensagem)
     """
-    # Buscar licença (Quebra de linha para E501)
-    query = select(Licenca).where(Licenca.chave == license_key.upper().strip())
+    # Normalizar caracteres ambíguos (0↔O, 1↔I, L↔I)
+    from app.routers.licencas import _normalizar_chave
+
+    chave_normalizada = _normalizar_chave(license_key)
+
+    query = select(Licenca).where(Licenca.chave == chave_normalizada)
     result = await db.execute(query)
     licenca = result.scalar_one_or_none()
+
+    # Fallback: tentar chave original
+    if not licenca and chave_normalizada != license_key.upper().strip():
+        query = select(Licenca).where(
+            Licenca.chave == license_key.upper().strip()
+        )
+        result = await db.execute(query)
+        licenca = result.scalar_one_or_none()
 
     if not licenca:
         msg = (
