@@ -22,7 +22,7 @@ from app.database import get_db
 from app.models import Licenca
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(prefix="/api/v1/telegram", tags=["telegram"])
@@ -99,9 +99,20 @@ async def validate_and_link_license(
     Returns:
         tuple: (sucesso, mensagem)
     """
-    query = select(Licenca).where(
-        Licenca.chave == license_key.upper().strip()
+    # Normalizar caracteres ambíguos (0↔O, 1↔I, L↔I)
+    from app.routers.licencas import _normalizar_chave
+
+    chave_normalizada = _normalizar_chave(license_key)
+
+    chave_db_normalizada = func.replace(
+        func.replace(
+            func.replace(func.upper(Licenca.chave), "0", "O"),
+            "1", "I",
+        ),
+        "L", "I",
     )
+
+    query = select(Licenca).where(chave_db_normalizada == chave_normalizada)
     result = await db.execute(query)
     licenca = result.scalar_one_or_none()
 

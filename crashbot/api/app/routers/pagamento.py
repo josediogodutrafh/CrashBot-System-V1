@@ -134,8 +134,11 @@ PLANOS = {
 
 
 def gerar_chave_licenca() -> str:
-    """Gera uma chave de licença única no formato XXXX-XXXX-XXXX-XXXX."""
-    caracteres = string.ascii_uppercase + string.digits
+    """Gera uma chave de licença única no formato XXXX-XXXX-XXXX-XXXX.
+
+    Usa apenas caracteres sem ambiguidade visual (sem O/0, I/1/L).
+    """
+    caracteres = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
     partes = ["".join(secrets.choice(caracteres) for _ in range(4)) for _ in range(4)]
     return "-".join(partes)
 
