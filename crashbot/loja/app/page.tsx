@@ -503,44 +503,13 @@ export default function Home() {
                 </p>
               </div>
 
-              <div className="grid lg:grid-cols-3 gap-6 max-w-6xl mx-auto items-end">
-                {/* TRIAL */}
-                <Card className="bg-white border-slate-200 h-[420px] flex flex-col hover:border-purple-300 transition-all shadow-sm hover:shadow-lg">
-                  <CardHeader>
-                    <CardTitle className="text-slate-900">Trial Gratuito</CardTitle>
-                    <p className="text-sm text-slate-500">Para testar</p>
-                  </CardHeader>
-                  <CardContent className="flex-1 flex flex-col">
-                    <div className="text-3xl font-bold text-slate-900 mb-6">
-                      R$ 0,00
-                    </div>
-                    <ul className="space-y-4 text-sm text-slate-600 flex-1">
-                      <li className="flex gap-2">
-                        <Check className="w-4 h-4 text-slate-400" /> 7 Dias de
-                        Acesso
-                      </li>
-                      <li className="flex gap-2">
-                        <Check className="w-4 h-4 text-slate-400" /> 100%
-                        Funcional
-                      </li>
-                    </ul>
-                    <Link href="/checkout/trial" className="mt-auto">
-                      <Button
-                        variant="outline"
-                        className="w-full border-slate-300 text-slate-600 hover:bg-slate-50"
-                      >
-                        Baixar Trial
-                      </Button>
-                    </Link>
-                  </CardContent>
-                </Card>
-
+              <div className="flex justify-center max-w-lg mx-auto">
                 {/* MENSAL PRO */}
-                <div className="relative transform lg:-translate-y-4 z-10">
+                <div className="relative w-full">
                   <div className="absolute -inset-[2px] bg-gradient-to-b from-purple-500 to-pink-500 rounded-xl blur-sm opacity-60"></div>
                   <Card className="bg-slate-900 border-0 h-[500px] flex flex-col relative">
                     <div className="absolute top-0 right-4 top-4">
-                      <Badge className="bg-purple-600">POPULAR</Badge>
+                      <Badge className="bg-purple-600">ACESSO COMPLETO</Badge>
                     </div>
                     <CardHeader>
                       <CardTitle className="text-white text-2xl">
@@ -550,7 +519,7 @@ export default function Home() {
                     <CardContent className="flex-1 flex flex-col">
                       <div className="mb-2">
                         <span className="text-5xl font-bold text-white">
-                          R$ 249
+                          R$ 600
                         </span>
                         <span className="text-slate-400">/mês</span>
                       </div>
@@ -589,42 +558,6 @@ export default function Home() {
                     </CardContent>
                   </Card>
                 </div>
-
-                {/* SEMANAL */}
-                <Card className="bg-white border-slate-200 h-[420px] flex flex-col hover:border-purple-300 transition-all shadow-sm hover:shadow-lg">
-                  <CardHeader>
-                    <CardTitle className="text-slate-900">Semanal</CardTitle>
-                    <p className="text-sm text-slate-500">Curto Prazo</p>
-                  </CardHeader>
-                  <CardContent className="flex-1 flex flex-col">
-                    <div className="text-3xl font-bold text-slate-900 mb-6">
-                      R$ 69{' '}
-                      <span className="text-sm text-slate-400">/sem</span>
-                    </div>
-                    <ul className="space-y-4 text-sm text-slate-600 flex-1">
-                      <li className="flex gap-2">
-                        <Check className="w-4 h-4 text-purple-500" /> Setup
-                        Flexível estruturado em curto prazo
-                      </li>
-                      <li className="flex gap-2">
-                        <Check className="w-4 h-4 text-purple-500" /> Controle
-                        risco/retorno
-                      </li>
-                      <li className="flex gap-2">
-                        <Check className="w-4 h-4 text-purple-500" /> Suporte de
-                        instalação via WhatsApp/Telegram
-                      </li>
-                    </ul>
-                    <Link href="/checkout/semanal" className="mt-auto">
-                      <Button
-                        variant="secondary"
-                        className="w-full bg-slate-100 text-slate-700 border border-slate-300 hover:bg-slate-200"
-                      >
-                        Comprar Semanal
-                      </Button>
-                    </Link>
-                  </CardContent>
-                </Card>
               </div>
             </div>
           </section>

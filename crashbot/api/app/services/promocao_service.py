@@ -101,8 +101,7 @@ async def obter_preco_plano(
         dict com preco e dias, ou None se plano inválido
     """
     PRECOS = {
-        "semanal": {"preco": 69.00, "dias": 7},
-        "mensal": {"preco": 249.00, "dias": 30},
+        "mensal": {"preco": 600.00, "dias": 30},
     }
 
     if plano not in PRECOS:

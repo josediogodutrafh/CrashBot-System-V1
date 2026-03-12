@@ -43,7 +43,7 @@ router = APIRouter(prefix="/api/v1/pagamento", tags=["pagamento"])
 class CriarPagamentoRequest(BaseModel):
     """Request para criar pagamento."""
 
-    plano: str  # trial, semanal, mensal
+    plano: str  # mensal
     nome: str
     email: EmailStr
     whatsapp: str
@@ -107,21 +107,9 @@ def validar_cpf(cpf: str) -> bool:
 
 
 PLANOS = {
-    "trial": {
-        "nome": "Trial",
-        "preco": 0.00,
-        "dias": 7,
-        "descricao": "Período de teste gratuito - 7 dias",
-    },
-    "semanal": {
-        "nome": "Semanal",
-        "preco_normal": 69.00,
-        "dias": 7,
-        "descricao": "Plano Semanal - 7 dias de acesso",
-    },
     "mensal": {
         "nome": "Mensal",
-        "preco_normal": 249.00,
+        "preco_normal": 600.00,
         "dias": 30,
         "descricao": "Plano Mensal - 30 dias de acesso",
     },
@@ -683,7 +671,7 @@ async def verificar_elegibilidade(
     )
 
     planos_info = {}
-    for plano_key in ["semanal", "mensal"]:
+    for plano_key in ["mensal"]:
         preco_info = await obter_preco_plano(db, plano_key, dados.cpf, dados.hwid)
         plano_config = PLANOS[plano_key]
 
@@ -695,8 +683,8 @@ async def verificar_elegibilidade(
 
     return VerificarElegibilidadeResponse(
         cpf_valido=cpf_valido,
-        pode_usar_trial=trial_info["pode_usar_trial"] and cpf_valido,
-        motivo_trial=trial_info["motivo"] if not cpf_valido else "CPF inválido",
+        pode_usar_trial=False,
+        motivo_trial="Trial não disponível",
         planos=planos_info,
     )
 
