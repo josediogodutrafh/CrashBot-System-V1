@@ -21,7 +21,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from slowapi import Limiter
 from slowapi.util import get_remote_address
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 limiter = Limiter(key_func=get_remote_address)
@@ -70,17 +70,21 @@ async def validar_licenca(
     Valida uma licença.
     """
     # Buscar licença por chave (com normalização de caracteres ambíguos)
+    # Normaliza AMBOS os lados: input do cliente E valor no banco
     chave_normalizada = _normalizar_chave(payload.chave)
 
-    result = await db.execute(select(Licenca).where(Licenca.chave == chave_normalizada))
-    licenca = result.scalar_one_or_none()
+    chave_db_normalizada = func.replace(
+        func.replace(
+            func.replace(func.upper(Licenca.chave), "0", "O"),
+            "1", "I",
+        ),
+        "L", "I",
+    )
 
-    # Fallback: tentar chave original caso a normalizada não encontre
-    if not licenca and chave_normalizada != payload.chave:
-        result = await db.execute(
-            select(Licenca).where(Licenca.chave == payload.chave)
-        )
-        licenca = result.scalar_one_or_none()
+    result = await db.execute(
+        select(Licenca).where(chave_db_normalizada == chave_normalizada)
+    )
+    licenca = result.scalar_one_or_none()
 
     # Licença não encontrada
     if not licenca:

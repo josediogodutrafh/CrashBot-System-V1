@@ -19,7 +19,7 @@ from app.database import get_db
 from app.models import Licenca
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(prefix="/api/v1/telegram", tags=["telegram"])
@@ -91,21 +91,22 @@ async def validate_and_link_license(
         tuple: (sucesso, mensagem)
     """
     # Normalizar caracteres ambíguos (0↔O, 1↔I, L↔I)
+    # Normaliza AMBOS os lados: input do cliente E valor no banco
     from app.routers.licencas import _normalizar_chave
 
     chave_normalizada = _normalizar_chave(license_key)
 
-    query = select(Licenca).where(Licenca.chave == chave_normalizada)
+    chave_db_normalizada = func.replace(
+        func.replace(
+            func.replace(func.upper(Licenca.chave), "0", "O"),
+            "1", "I",
+        ),
+        "L", "I",
+    )
+
+    query = select(Licenca).where(chave_db_normalizada == chave_normalizada)
     result = await db.execute(query)
     licenca = result.scalar_one_or_none()
-
-    # Fallback: tentar chave original
-    if not licenca and chave_normalizada != license_key.upper().strip():
-        query = select(Licenca).where(
-            Licenca.chave == license_key.upper().strip()
-        )
-        result = await db.execute(query)
-        licenca = result.scalar_one_or_none()
 
     if not licenca:
         msg = (
