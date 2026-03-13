@@ -23,28 +23,14 @@ type PlanosMap = {
   [key: string]: PlanoInfo;
 };
 
-// --- NOVOS PREÇOS E PLANOS ---
+// --- PREÇOS E PLANOS ---
 const planosBase: PlanosMap = {
-  trial: {
-    nome: 'Trial Gratuito',
-    preco: 0,
-    dias: 7,
-    descricao: 'Teste completo da tecnologia por 7 dias.',
-    isTrial: true,
-  },
-  semanal: {
-    nome: 'Acesso Semanal',
-    preco: 69.0,
-    dias: 7,
-    descricao: 'Ideal para validar lucros a curto prazo.',
-  },
   mensal: {
     nome: 'Licença Mensal PRO',
-    preco: 249.0,
+    preco: 600.0,
     dias: 30,
     descricao: 'Setup validado e suporte VIP incluso.',
     popular: true,
-    economize: 'R$ 27,00',
   },
 };
 
