@@ -120,15 +120,31 @@ class OCREngine:
         self._preferred_backend = preferred_backend
 
         # Configura Tesseract
+        import os
+        import sys
+
         if tesseract_path and HAS_TESSERACT:
             pytesseract.pytesseract.tesseract_cmd = tesseract_path
         elif HAS_TESSERACT:
-            # Tenta path padrão Windows
-            default_path = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-            import os
+            # 1. Tenta pasta ao lado do executável (distribuição portátil)
+            if getattr(sys, 'frozen', False):
+                base_dir = os.path.dirname(sys.executable)
+            else:
+                base_dir = os.path.dirname(os.path.abspath(__file__))
+                base_dir = os.path.join(base_dir, '..', '..', '..')
 
-            if os.path.exists(default_path):
+            portable_path = os.path.join(base_dir, 'Tesseract-OCR', 'tesseract.exe')
+            portable_path = os.path.normpath(portable_path)
+
+            # 2. Tenta path padrão Windows
+            default_path = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+
+            if os.path.exists(portable_path):
+                pytesseract.pytesseract.tesseract_cmd = portable_path
+                logger.info(f"Tesseract encontrado (portátil): {portable_path}")
+            elif os.path.exists(default_path):
                 pytesseract.pytesseract.tesseract_cmd = default_path
+                logger.info(f"Tesseract encontrado (sistema): {default_path}")
 
         # Inicializa EasyOCR (lazy loading)
         self._easyocr_reader: Optional[easyocr.Reader] = None
