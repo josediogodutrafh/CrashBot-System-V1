@@ -435,10 +435,10 @@ export default function Home() {
 
               <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6 max-w-5xl mx-auto">
                 {[
-                  { name: 'Brabet', color: 'purple', url: 'https://www.brabet.com/?agentid=135486005' },
-                  { name: 'OneBra', color: 'blue', url: '#' },
-                  { name: 'WinBra', color: 'green', url: '#' },
-                  { name: 'PGWin', color: 'amber', url: '#' },
+                  { name: 'Brabet', color: 'purple', url: 'https://www.brabet.com' },
+                  { name: 'OneBra', color: 'blue', url: 'https://www.onebra.com' },
+                  { name: 'WinBra', color: 'green', url: 'https://www.winbra365.com' },
+                  { name: 'PGWin', color: 'amber', url: 'https://www.pgwin.com' },
                 ].map((plat) => (
                   <Card
                     key={plat.name}
@@ -455,7 +455,7 @@ export default function Home() {
                         <Button
                           size="sm"
                           variant="outline"
-                          className="w-full border-slate-600 text-slate-300 hover:bg-slate-800 mt-2"
+                          className="w-full border-slate-600 bg-white text-black font-semibold hover:bg-slate-200 mt-2"
                         >
                           Criar Conta
                         </Button>
