@@ -1,0 +1,34 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m nuitka --version)",
+      "Bash(python -m PyInstaller CrashBot.spec --noconfirm)",
+      "Bash(python -m PyInstaller CrashBot.spec --clean --noconfirm)",
+      "Bash(tasklist)",
+      "Bash(python -m PyInstaller --version)",
+      "Bash(vercel project ls)",
+      "Bash(ls -la /c/IA/Tucunare_bot/Crash/dist/CrashBot*)",
+      "Bash(curl -s https://crash-api-jose.onrender.com/api/v1/bot/versao)",
+      "Bash(curl -s https://crash-api-jose.onrender.com/health)",
+      "Bash(curl -s https://crash-api-jose.onrender.com/)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" https://crashbot-loja.vercel.app/)",
+      "Bash(grep -h \"^@router\\\\.\" \"/c/IA/Tucunare_bot/crashbot-platform/api/app/routers\"/*.py)",
+      "Bash(head -30 /c/IA/Tucunare_bot/crashbot-platform/loja/app/checkout/[plano]/page.tsx)",
+      "Bash(find /c/IA/Tucunare_bot/CrashBot -name *.json -type f)",
+      "Bash(grep -r \"class.*Platform\\\\|class.*Adapter\\\\|abstract\\\\|ABC\" /c/IA/Tucunare_bot/CrashBot --include=*.py)",
+      "Bash(grep -r \"brabet\\\\|plataforma\\\\|platform\" /c/IA/Tucunare_bot/crashbot-platform/loja --include=*.tsx --include=*.ts -n)",
+      "Bash(grep -r 'def ' /c/IA/Tucunare_bot/CrashBot/engine/vision/*.py /c/IA/Tucunare_bot/CrashBot/engine/trading/*.py)",
+      "Bash(find /c/IA/Tucunare_bot/CrashBot -type f -name *.py -exec wc -l {} +)",
+      "Bash(git add:*)",
+      "Bash(git commit -m ':*)",
+      "Bash(xargs -I {} basename {})",
+      "Bash(grep -E \"\\\\.\\(db|json|txt\\)$\")",
+      "Bash(grep -E \"\\\\.exe$\")",
+      "Bash(sort -k4 -rn)",
+      "Read(//c/IA/Tucunare_bot/**)",
+      "Bash(git mv:*)",
+      "Bash(git rm:*)",
+      "Bash(git rebase:*)"
+    ]
+  }
+}

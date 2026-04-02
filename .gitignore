@@ -1,46 +1,84 @@
-# Ignorar TODOS os ambientes virtuais de qualquer pasta
+# ═══════════════════════════════════════════════════════════════
+# TucunaréBot - .gitignore
+# ═══════════════════════════════════════════════════════════════
+
+# --- PYTHON ---
 .venv/
 venv/
 env/
-
-# Ignorar arquivos compilados
-__pycache__/
-*.pyc
-*.spec
-dist/
-build/
-# --- Ignorar arquivos de dados locais e logs ---
-*.log
-*.db
-*.db-shm
-*.db-wal
-.ipynb_checkpoints/
-
-# --- SEGURANÇA (MUITO IMPORTANTE) ---
-# Ignorar chaves de licença e configs com senhas
-license_key.txt
-config.json
-settings.json
-# --- Python ---
+ENV/
+*.venv
 __pycache__/
 *.py[cod]
 *$py.class
-.venv/
-venv/
-env/
+lib/
+libs/
+site-packages/
 
-# --- Node.js ---
+# --- NODE.JS ---
 node_modules/
 npm-debug.log
-dist/
+yarn-error.log
+.next/
 
-# --- Variáveis de Ambiente (SENHAS - MUITO IMPORTANTE) ---
+# --- EXECUTÁVEIS E BINÁRIOS ---
+*.exe
+*.dll
+*.pyd
+*.so
+*.dylib
+
+# --- BUILD ARTIFACTS ---
+build/
+dist/
+*.spec
+*.build/
+*.dist/
+*.onefile-build/
+
+# --- OCR (baixar separadamente) ---
+**/Tesseract-OCR/
+
+# --- DADOS LOCAIS SENSÍVEIS ---
+config.json
+license_key.txt
 .env
 .env.local
+.env.*
+*.key
+*.pem
+**/google_token.json
+**/gerar_token.py
 
-# --- Sistema Operacional ---
+# --- ML MODELS E DADOS ---
+*.pkl
+*.csv
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+banco de dados/
+
+# --- LOGS ---
+*.log
+logs/
+
+# --- NOTEBOOKS OUTPUT ---
+.ipynb_checkpoints/
+
+# --- NUITKA (compilador alternativo) ---
+test_nuitka*
+nuitka-crash-report*
+
+# --- SISTEMA ---
 .DS_Store
 Thumbs.db
+ehthumbs.db
+Desktop.ini
 
-# --- Logs do VS Code ---
+# --- IDE ---
 .vscode/
+.idea/
+
+# --- BOT V2 LEGADO (removido) ---
+Crash/
