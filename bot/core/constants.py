@@ -14,7 +14,7 @@ from typing import Any, Dict
 # VERSÃO E IDENTIFICAÇÃO
 # ═══════════════════════════════════════════════════════════════════════════════
 
-BOT_VERSION = "3.0.0"
+BOT_VERSION = "4.0.0"
 BOT_NAME = "TucunaréBot"
 BOT_AUTHOR = "TucunaréBot"
 
