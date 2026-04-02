@@ -79,9 +79,15 @@ export default function CheckoutPage() {
   });
   const [aceitouTermos, setAceitouTermos] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [loadingPix, setLoadingPix] = useState(false);
   const [verificandoElegibilidade, setVerificandoElegibilidade] =
     useState(false);
   const [error, setError] = useState('');
+  const [pixData, setPixData] = useState<{
+    qr_code: string;
+    qr_code_base64: string;
+    payment_id: number;
+  } | null>(null);
 
   // Estado para elegibilidade (apenas para validar Trial)
   const [elegibilidadeTrial, setElegibilidadeTrial] = useState<{
@@ -490,31 +496,77 @@ export default function CheckoutPage() {
                       </p>
                     )}
 
-                    {!isTrial && (
-                      <div className="mt-6 p-4 bg-slate-800/50 border border-slate-700 rounded-lg">
-                        <p className="text-sm font-semibold text-white mb-2">
-                          Pagar via Pix
+                    {!isTrial && !pixData && (
+                      <div className="mt-4">
+                        <button
+                          type="button"
+                          disabled={loadingPix || !formData.nome || !formData.email || !formData.cpf || !formData.whatsapp || !aceitouTermos}
+                          onClick={async () => {
+                            setLoadingPix(true);
+                            setError('');
+                            try {
+                              const response = await fetch(`${API_URL}/api/v1/pagamento/pix`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                  plano: planoId,
+                                  nome: formData.nome,
+                                  email: formData.email,
+                                  whatsapp: formData.whatsapp,
+                                  cpf: formData.cpf,
+                                }),
+                              });
+                              if (!response.ok) {
+                                const errorData = await response.json();
+                                throw new Error(errorData.detail || 'Erro ao gerar Pix');
+                              }
+                              const data = await response.json();
+                              setPixData(data);
+                            } catch (err) {
+                              setError(err instanceof Error ? err.message : 'Erro ao gerar Pix');
+                            } finally {
+                              setLoadingPix(false);
+                            }
+                          }}
+                          className="w-full h-12 text-sm font-semibold bg-slate-800 hover:bg-slate-700 text-white border border-slate-600 rounded-lg transition-all disabled:opacity-50"
+                        >
+                          {loadingPix ? 'Gerando Pix...' : 'Pagar via Pix'}
+                        </button>
+                      </div>
+                    )}
+
+                    {pixData && (
+                      <div className="mt-4 p-4 bg-slate-800/50 border border-green-500/30 rounded-lg text-center">
+                        <p className="text-sm font-semibold text-green-400 mb-3">
+                          QR Code Pix gerado!
                         </p>
-                        <p className="text-xs text-slate-400 mb-3">
-                          Envie o valor de <strong className="text-white">R$ {planoBase.preco.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong> para a chave Pix abaixo e envie o comprovante pelo WhatsApp:
-                        </p>
-                        <div className="flex items-center gap-2 bg-slate-900 p-3 rounded-md">
-                          <span className="text-green-400 font-mono text-sm flex-1">
-                            65993104621
+                        {pixData.qr_code_base64 && (
+                          <div className="bg-white p-3 rounded-lg inline-block mb-3">
+                            <img
+                              src={`data:image/png;base64,${pixData.qr_code_base64}`}
+                              alt="QR Code Pix"
+                              className="w-48 h-48"
+                            />
+                          </div>
+                        )}
+                        <p className="text-xs text-slate-400 mb-2">Ou copie o código Pix:</p>
+                        <div className="flex items-center gap-2 bg-slate-900 p-2 rounded-md">
+                          <span className="text-green-400 font-mono text-xs flex-1 truncate">
+                            {pixData.qr_code.substring(0, 50)}...
                           </span>
                           <button
                             type="button"
                             onClick={() => {
-                              navigator.clipboard.writeText('65993104621');
-                              alert('Chave Pix copiada!');
+                              navigator.clipboard.writeText(pixData.qr_code);
+                              alert('Código Pix copiado!');
                             }}
-                            className="text-xs bg-slate-700 hover:bg-slate-600 text-white px-3 py-1 rounded"
+                            className="text-xs bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded shrink-0"
                           >
                             Copiar
                           </button>
                         </div>
-                        <p className="text-xs text-slate-500 mt-2">
-                          Após o pagamento, envie o comprovante pelo WhatsApp para ativação da licença.
+                        <p className="text-xs text-slate-500 mt-3">
+                          Após o pagamento, sua licença será enviada automaticamente por e-mail.
                         </p>
                       </div>
                     )}

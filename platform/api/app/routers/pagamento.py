@@ -283,6 +283,114 @@ async def criar_pagamento(
 
 
 # ============================================================================
+# ENDPOINT: CRIAR PAGAMENTO PIX (QR CODE DIRETO)
+# ============================================================================
+
+
+class CriarPixResponse(BaseModel):
+    """Response com dados do Pix."""
+    payment_id: int
+    qr_code: str  # Código copia-e-cola
+    qr_code_base64: str  # QR code em base64 para exibir imagem
+    valor: float
+    plano: str
+
+
+@router.post("/pix", response_model=CriarPixResponse)
+async def criar_pagamento_pix(
+    dados: CriarPagamentoRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Cria um pagamento Pix direto via Payment API do MercadoPago.
+    Gera QR Code e copia-e-cola. O webhook é notificado automaticamente.
+    """
+    # Validar plano
+    if dados.plano not in PLANOS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Plano inválido. Escolha: {', '.join(PLANOS.keys())}",
+        )
+
+    plano = PLANOS[dados.plano]
+
+    # Obter preço
+    preco_info = await obter_preco_plano(db, dados.plano, dados.cpf, dados.hwid)
+    if not preco_info:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Plano inválido",
+        )
+
+    preco_final = preco_info["preco"]
+    is_primeira_adesao = preco_info["is_primeira_adesao"]
+
+    # Limpar CPF
+    cpf_limpo = re.sub(r'[^0-9]', '', dados.cpf)
+
+    # Configurar SDK
+    sdk = get_mp_sdk()
+
+    # Criar pagamento Pix direto
+    payment_data = {
+        "transaction_amount": float(preco_final),
+        "description": f"TucunaréBot - {plano['nome']}",
+        "payment_method_id": "pix",
+        "payer": {
+            "email": dados.email,
+            "first_name": dados.nome.split()[0] if dados.nome else "Cliente",
+            "last_name": " ".join(dados.nome.split()[1:]) if len(dados.nome.split()) > 1 else "",
+            "identification": {
+                "type": "CPF",
+                "number": cpf_limpo,
+            },
+        },
+        "notification_url": "https://crash-api-jose.onrender.com/api/v1/pagamento/webhook",
+        "metadata": {
+            "plano": dados.plano,
+            "dias": plano["dias"],
+            "nome": dados.nome,
+            "email": dados.email,
+            "whatsapp": dados.whatsapp,
+            "cpf": dados.cpf,
+            "hwid": dados.hwid,
+            "is_primeira_adesao": is_primeira_adesao,
+        },
+    }
+
+    try:
+        payment_response = sdk.payment().create(payment_data)
+        print(f"Resposta Pix MP: {payment_response}")
+
+        if payment_response.get("status") not in [200, 201]:
+            error_msg = payment_response.get("response", {}).get("message", "Erro desconhecido")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Erro Mercado Pago: {error_msg}",
+            )
+
+        payment = payment_response["response"]
+        pix_info = payment.get("point_of_interaction", {}).get("transaction_data", {})
+
+        return CriarPixResponse(
+            payment_id=payment["id"],
+            qr_code=pix_info.get("qr_code", ""),
+            qr_code_base64=pix_info.get("qr_code_base64", ""),
+            valor=preco_final,
+            plano=dados.plano,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erro ao criar Pix: {str(e)}",
+        )
+
+
+# ============================================================================
 # ENDPOINTS: TRIAL COM VERIFICAÇÃO WHATSAPP
 # ============================================================================
 
