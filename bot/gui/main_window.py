@@ -65,7 +65,7 @@ ItemID = Union[int, str]
 # CONSTANTES
 # ═══════════════════════════════════════════════════════════════════════════════
 
-WINDOW_TITLE = "TucunaréBot v3.0 - Powered by AI"
+WINDOW_TITLE = "TucunareBot v4.0 - Powered by AI"
 WINDOW_WIDTH = 1280
 WINDOW_HEIGHT = 800
 MIN_WIDTH = 1024

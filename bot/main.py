@@ -315,7 +315,6 @@ class CrashBotApp:
     def _init_core(self) -> bool:
         """Inicializa componentes core."""
         try:
-            from core.constants import BotConstants
             from core.events import get_event_bus
             from core.state import get_state
 

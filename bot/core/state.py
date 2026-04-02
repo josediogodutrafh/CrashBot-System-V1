@@ -396,6 +396,23 @@ class StatsState:
         self.total_loss = 0.0
 
 
+@dataclass
+class UIState:
+    """Estado da interface."""
+    visible: bool = True
+    current_tab: str = "dashboard"
+    log_lines: List[str] = field(default_factory=list)
+
+
+@dataclass
+class ConfigState:
+    """Estado de configuração."""
+    tesseract_path: str = ""
+    api_url: str = ""
+    telemetry_enabled: bool = True
+    sound_enabled: bool = True
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # STATE MANAGER
 # ═══════════════════════════════════════════════════════════════════════════════

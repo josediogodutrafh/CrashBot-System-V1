@@ -44,7 +44,7 @@ except ImportError:
 
 # Core imports
 from core.events import BotEvent, emit
-from core.state import BotState, get_state
+from core.state import get_state
 
 # Logger
 logger = logging.getLogger(__name__)
