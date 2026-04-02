@@ -472,6 +472,10 @@ class TelemetryService:
             if state.trading.risk_mode is not None:
                 enriched["risk_mode"] = state.trading.risk_mode.name
 
+            # Adiciona plataforma
+            if state.session.platform:
+                enriched["plataforma"] = state.session.platform
+
             return enriched
 
         except Exception as e:

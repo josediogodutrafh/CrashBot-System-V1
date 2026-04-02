@@ -106,6 +106,7 @@ class TelemetriaRequest(BaseModel):
     # Campos opcionais - Metadados
     versao_bot: str | None = Field(default=None, description="Versão do bot")
     sistema_operacional: str | None = Field(default=None, description="SO do cliente")
+    plataforma: str | None = Field(default=None, description="Plataforma: Brabet, OneBra, WinBra, PGWin")
 
 
 class TelemetriaResponse(BaseModel):

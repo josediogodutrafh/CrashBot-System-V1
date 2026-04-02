@@ -225,6 +225,7 @@ async def receber_telemetria(
         versao_bot=payload.versao_bot,
         sistema_operacional=payload.sistema_operacional,
         ip_cliente=ip_cliente,
+        plataforma=payload.plataforma,
     )
 
     db.add(novo_log)

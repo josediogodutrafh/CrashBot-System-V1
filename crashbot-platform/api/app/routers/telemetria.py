@@ -39,7 +39,9 @@ def _calcular_data_inicio(periodo: str) -> Optional[datetime]:
 
 
 def _get_base_filters(
-    data_inicio: Optional[datetime], hwid: Optional[str] = None
+    data_inicio: Optional[datetime],
+    hwid: Optional[str] = None,
+    plataforma: Optional[str] = None,
 ) -> List[Any]:
     """Retorna lista de filtros para queries."""
     filters = []
@@ -47,14 +49,15 @@ def _get_base_filters(
         filters.append(LogBot.timestamp >= data_inicio)
     if hwid:
         filters.append(LogBot.hwid == hwid)
+    if plataforma:
+        filters.append(LogBot.plataforma == plataforma)
     return filters
 
 
 def _get_valor_plano(plano: str, primeira_adesao: bool) -> float:
     """Retorna valor do plano para cálculos de receita."""
     precos = {
-        "semanal": {"normal": 69.00, "primeira": 49.90},
-        "mensal": {"normal": 249.00, "primeira": 149.90},
+        "mensal": {"normal": 2000.00, "primeira": 2000.00},
         "trial": {"normal": 0.0, "primeira": 0.0},
     }
     key = plano if plano in precos else "trial"

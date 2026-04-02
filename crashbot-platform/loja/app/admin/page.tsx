@@ -86,8 +86,7 @@ export default function AdminDashboard() {
       });
       const emailsUnicos = new Set(licencas.map((l) => l.email_cliente));
       const receita = licencas.reduce((acc, l) => {
-        if (l.plano_tipo === "mensal") return acc + 97;
-        if (l.plano_tipo === "semanal") return acc + 47;
+        if (l.plano_tipo === "mensal") return acc + 2000;
         return acc;
       }, 0);
 

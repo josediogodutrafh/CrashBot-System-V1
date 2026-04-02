@@ -72,6 +72,7 @@ class LogBot(Base):
     versao_bot = Column(String(20), nullable=True)
     sistema_operacional = Column(String(50), nullable=True)
     ip_cliente = Column(String(45), nullable=True)  # Suporta IPv6
+    plataforma = Column(String(30), nullable=True, index=True)  # Brabet, OneBra, WinBra, PGWin
 
     def __repr__(self):
         """Representação string do objeto."""
@@ -114,4 +115,5 @@ class LogBot(Base):
             "versao_bot": self.versao_bot,
             "sistema_operacional": self.sistema_operacional,
             "ip_cliente": self.ip_cliente,
+            "plataforma": self.plataforma,
         }

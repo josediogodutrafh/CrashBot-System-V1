@@ -19,16 +19,17 @@ Uso:
 from __future__ import annotations
 
 import logging
+import random
 import threading
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, Generator, List, Optional
 
-# Importa o EventBus para emitir eventos quando estado muda
-from core.events import BotEvent, emit, get_event_bus
+# Importa apenas BotEvent (emit será importado localmente quando necessário)
+from core.events import BotEvent
 
 # Configuração do logger
 logger = logging.getLogger(__name__)
@@ -109,6 +110,9 @@ class SessionState:
     start_time: Optional[datetime] = None
     round_count: int = 0
     last_round_id: Optional[int] = None
+
+    # Plataforma ativa
+    platform: str = "Brabet"
 
     # Configurações da sessão
     max_time_seconds: int = 8 * 3600  # 8 horas padrão
@@ -243,45 +247,67 @@ class StrategyState:
     # Martingale
     martingale_active: bool = False
     current_dobra: int = 1
-    max_dobra: int = 4
-    consecutive_losses: int = 0
+    max_dobras: int = 4
+    base_bet: float = 0.0
+    current_bet: float = 0.0
 
-    # Gatilho
-    trigger_threshold: float = 2.0
-    lows_needed: int = 8
+    # Gatilho (velas baixas consecutivas)
+    lows_needed: int = 8  # Quantidade de velas necessárias
     current_lows_count: int = 0
+    trigger_threshold: float = 2.0  # Abaixo disso é "low"
 
-    # ML
+    # ML/IA
+    ml_enabled: bool = True
     ml_confidence: float = 0.0
-    ml_confidence_threshold: float = 0.80
+    ml_prediction: Optional[str] = None
 
     # Última decisão
-    last_decision_text: str = "⏳ Aguardando primeira rodada..."
+    last_decision_text: str = ""
     last_decision_type: DecisionType = DecisionType.WAITING
     last_decision_time: Optional[datetime] = None
 
     @property
     def trigger_progress(self) -> str:
-        """Progresso do gatilho formatado."""
+        """Progresso do gatilho (ex: '5/8')."""
         return f"{self.current_lows_count}/{self.lows_needed}"
 
     @property
-    def lows_remaining(self) -> int:
-        """Quantas velas baixas faltam."""
-        return max(0, self.lows_needed - self.current_lows_count)
+    def is_trigger_ready(self) -> bool:
+        """Verifica se o gatilho está pronto para apostar."""
+        return self.current_lows_count >= self.lows_needed
+
+    def reset_trigger(self) -> None:
+        """Reseta contagem do gatilho."""
+        self.current_lows_count = 0
+
+    def reset_martingale(self) -> None:
+        """Reseta o martingale para dobra 1."""
+        self.martingale_active = False
+        self.current_dobra = 1
+        self.current_bet = self.base_bet
 
 
 @dataclass
 class ExplosionData:
-    """Dados de uma explosão."""
+    """Dados de uma explosão individual."""
 
     value: float
     timestamp: datetime = field(default_factory=datetime.now)
 
     @property
     def is_high(self) -> bool:
-        """Verifica se foi uma explosão alta (≥ 2.0)."""
+        """Verifica se é uma explosão alta (>= 2.0x)."""
         return self.value >= 2.0
+
+    @property
+    def color_code(self) -> str:
+        """Retorna código de cor baseado no valor."""
+        if self.value >= 10.0:
+            return "gold"
+        elif self.value >= 2.0:
+            return "green"
+        else:
+            return "red"
 
 
 @dataclass
@@ -360,55 +386,14 @@ class StatsState:
     def record_miss(self, loss: float) -> None:
         """Registra um MISS."""
         self.total_misses += 1
-        self.total_loss += abs(loss)
+        self.total_loss += loss
 
     def reset(self) -> None:
-        """Reseta estatísticas."""
+        """Reseta todas as estatísticas."""
         self.total_hits = 0
         self.total_misses = 0
         self.total_profit = 0.0
         self.total_loss = 0.0
-
-
-@dataclass
-class UIState:
-    """
-    Estado relacionado à interface.
-
-    Informações para exibição na UI.
-    """
-
-    last_action: str = ""
-    last_action_time: Optional[datetime] = None
-    notifications: List[Dict[str, Any]] = field(default_factory=list)
-
-    def set_action(self, message: str) -> None:
-        """Define a última ação."""
-        self.last_action = message
-        self.last_action_time = datetime.now()
-
-    def add_notification(self, message: str, type: str = "info") -> None:
-        """Adiciona uma notificação."""
-        self.notifications.append(
-            {"message": message, "type": type, "time": datetime.now()}
-        )
-        # Limita a 50 notificações
-        if len(self.notifications) > 50:
-            self.notifications = self.notifications[-50:]
-
-
-@dataclass
-class ConfigState:
-    """
-    Estado de configuração.
-
-    Perfis de tela e configurações do usuário.
-    """
-
-    selected_profile: str = ""
-    screen_areas: Dict[str, Any] = field(default_factory=dict)
-    telegram_enabled: bool = False
-    sound_enabled: bool = True
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -418,36 +403,30 @@ class ConfigState:
 
 class StateManager:
     """
-    Gerenciador centralizado de estado thread-safe.
+    Gerenciador central de estado do CrashBot.
 
-    Centraliza TODO o estado do bot em um único lugar,
-    eliminando variáveis espalhadas pelo código.
+    Centraliza todo o estado em um único lugar, garantindo:
+    - Thread-safety (todas operações usam locks)
+    - Imutabilidade quando necessário
+    - Eventos automáticos quando estado muda
+    - Snapshot completo para debug/telemetria
 
-    Features:
-        - Thread-safe (usa RLock)
-        - Emite eventos automaticamente em mudanças críticas
-        - Snapshot para debug/serialização
-        - Context manager para operações atômicas
+    Exemplo:
+        state = get_state()
 
-    Uso:
-        state = StateManager()
+        # Leitura
+        balance = state.trading.current_balance
 
-        # Acesso direto
-        state.session.status = SessionStatus.RUNNING
-        state.trading.current_balance = 1500.0
-
-        # Operações atômicas
-        with state.atomic():
-            state.trading.current_balance = 1600.0
-            state.stats.record_hit(100.0)
+        # Escrita (com lock automático)
+        state.set_balance(1500.0)
 
         # Snapshot
-        snapshot = state.get_snapshot()
+        data = state.get_snapshot()
     """
 
     def __init__(self, emit_events: bool = True):
         """
-        Inicializa o StateManager.
+        Inicializa o gerenciador de estado.
 
         Args:
             emit_events: Se True, emite eventos quando estado muda
@@ -461,26 +440,14 @@ class StateManager:
         self.strategy = StrategyState()
         self.history = HistoryState()
         self.stats = StatsState()
-        self.ui = UIState()
-        self.config = ConfigState()
-
-        # Watchers (callbacks chamados quando estado muda)
-        self._watchers: List[Callable[[str, Any, Any], None]] = []
 
         logger.debug("StateManager inicializado")
 
     @contextmanager
-    def atomic(self):
-        """
-        Context manager para operações atômicas.
-
-        Uso:
-            with state.atomic():
-                state.trading.current_balance = 1600.0
-                state.stats.record_hit(100.0)
-        """
+    def lock(self) -> Generator[None, None, None]:
+        """Context manager para operações atômicas."""
         with self._lock:
-            yield self
+            yield
 
     def reset(self) -> None:
         """Reseta todo o estado para valores iniciais."""
@@ -490,51 +457,26 @@ class StateManager:
             self.strategy = StrategyState()
             self.history = HistoryState()
             self.stats = StatsState()
-            self.ui = UIState()
-            # config NÃO é resetado (mantém perfil)
 
         logger.info("Estado resetado")
 
-    def reset_for_new_session(self) -> None:
-        """
-        Reseta estado para nova sessão, mantendo configurações.
-
-        Chamado quando muda de modo ou reinicia após suspensão.
-        """
-        with self._lock:
-            # Mantém
-            # - config (perfil de tela)
-            # - trading.risk_mode
-            # - trading.current_balance (se reiniciando)
-
-            # Reseta
-            self.session = SessionState()
-            self.strategy = StrategyState()
-            self.history.clear()
-            self.stats.reset()
-            self.ui = UIState()
-
-            # Atualiza lows_needed baseado no modo
-            if self.trading.risk_mode:
-                self._update_strategy_for_mode()
-
-        logger.info("Estado resetado para nova sessão")
+    # ═══════════════════════════════════════════════════════════════════════════
+    # MÉTODOS PRIVADOS
+    # ═══════════════════════════════════════════════════════════════════════════
 
     def _update_strategy_for_mode(self) -> None:
-        """Atualiza configurações de estratégia baseado no modo."""
-        import random
-
+        """Atualiza parâmetros da estratégia baseado no modo de risco."""
         mode_config = {
             RiskMode.CONSERVADOR: {
-                "banca_percent": 0.33,
-                "gatilho_opcoes": [8],
-                "meta_min": 0.25,
-                "meta_max": 0.40,
+                "banca_percent": 0.60,
+                "gatilho_opcoes": [8, 9, 10],
+                "meta_min": 0.20,
+                "meta_max": 0.35,
             },
             RiskMode.MODERADO: {
-                "banca_percent": 0.50,
+                "banca_percent": 0.80,
                 "gatilho_opcoes": [7, 8],
-                "meta_min": 0.30,
+                "meta_min": 0.25,
                 "meta_max": 0.45,
             },
             RiskMode.AGRESSIVO: {
@@ -545,7 +487,12 @@ class StateManager:
             },
         }
 
-        config = mode_config.get(self.trading.risk_mode, mode_config[RiskMode.MODERADO])
+        # Verifica se risk_mode não é None
+        current_mode = self.trading.risk_mode
+        if current_mode is None:
+            current_mode = RiskMode.MODERADO
+
+        config = mode_config.get(current_mode, mode_config[RiskMode.MODERADO])
 
         # Sorteia gatilho
         self.strategy.lows_needed = random.choice(config["gatilho_opcoes"])
@@ -565,13 +512,17 @@ class StateManager:
     # MÉTODOS DE CONVENIÊNCIA
     # ═══════════════════════════════════════════════════════════════════════════
 
-    def set_balance(self, new_balance: float, emit: bool = True) -> None:
+    def set_balance(
+        self,
+        new_balance: float,
+        should_emit: bool = True,
+    ) -> None:
         """
         Atualiza o saldo atual.
 
         Args:
             new_balance: Novo valor do saldo
-            emit: Se True, emite evento BALANCE_CHANGED
+            should_emit: Se True, emite evento BALANCE_CHANGED
         """
         with self._lock:
             old_balance = self.trading.current_balance
@@ -582,10 +533,14 @@ class StateManager:
             if len(self.trading.balance_history) > 1000:
                 self.trading.balance_history = self.trading.balance_history[-1000:]
 
-        if emit and self._emit_events and old_balance != new_balance:
-            from core.events import emit as emit_event
+        if should_emit and self._emit_events and old_balance != new_balance:
+            from core.events import emit as emit_func
 
-            emit_event(BotEvent.BALANCE_CHANGED, old=old_balance, new=new_balance)
+            emit_func(
+                BotEvent.BALANCE_CHANGED,
+                old=old_balance,
+                new=new_balance,
+            )
 
     def set_initial_balance(self, balance: float) -> None:
         """Define o saldo inicial (e atual se não definido)."""
@@ -595,13 +550,17 @@ class StateManager:
                 self.trading.current_balance = balance
             self.trading.balance_history.append(balance)
 
-    def add_explosion(self, value: float, emit: bool = True) -> None:
+    def add_explosion(
+        self,
+        value: float,
+        should_emit: bool = True,
+    ) -> None:
         """
         Adiciona uma explosão ao histórico.
 
         Args:
             value: Valor da explosão
-            emit: Se True, emite evento EXPLOSION_DETECTED
+            should_emit: Se True, emite evento EXPLOSION_DETECTED
         """
         with self._lock:
             self.history.add(value)
@@ -613,10 +572,10 @@ class StateManager:
             else:
                 self.strategy.current_lows_count = 0
 
-        if emit and self._emit_events:
-            from core.events import emit as emit_event
+        if should_emit and self._emit_events:
+            from core.events import emit as emit_func
 
-            emit_event(BotEvent.EXPLOSION_DETECTED, value=value)
+            emit_func(BotEvent.EXPLOSION_DETECTED, value=value)
 
     def set_decision(self, text: str, decision_type: DecisionType) -> None:
         """Atualiza a última decisão."""
@@ -625,7 +584,11 @@ class StateManager:
             self.strategy.last_decision_type = decision_type
             self.strategy.last_decision_time = datetime.now()
 
-    def set_risk_mode(self, mode: RiskMode, reinitialize: bool = True) -> None:
+    def set_risk_mode(
+        self,
+        mode: RiskMode,
+        reinitialize: bool = True,
+    ) -> None:
         """
         Define o modo de risco.
 
@@ -641,9 +604,9 @@ class StateManager:
                 self._update_strategy_for_mode()
 
         if self._emit_events:
-            from core.events import emit as emit_event
+            from core.events import emit as emit_func
 
-            emit_event(BotEvent.MODE_CHANGED, old=old_mode, new=mode)
+            emit_func(BotEvent.MODE_CHANGED, old=old_mode, new=mode)
 
     # ═══════════════════════════════════════════════════════════════════════════
     # SNAPSHOT / SERIALIZAÇÃO
@@ -659,6 +622,9 @@ class StateManager:
             Dicionário com todo o estado (serializável para JSON)
         """
         with self._lock:
+            risk_mode = self.trading.risk_mode
+            risk_mode_name = risk_mode.name if risk_mode else None
+
             return {
                 "timestamp": datetime.now().isoformat(),
                 "session": {
@@ -673,9 +639,7 @@ class StateManager:
                     "current_balance": self.trading.current_balance,
                     "profit": self.trading.profit,
                     "profit_percent": self.trading.profit_percent,
-                    "risk_mode": (
-                        self.trading.risk_mode.name if self.trading.risk_mode else None
-                    ),
+                    "risk_mode": risk_mode_name,
                     "goal_progress": self.trading.goal_progress_percent,
                     "is_goal_reached": self.trading.is_goal_reached,
                 },
@@ -753,7 +717,8 @@ def reset_state() -> None:
 
 if __name__ == "__main__":
     logging.basicConfig(
-        level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s"
+        level=logging.DEBUG,
+        format="%(asctime)s - %(levelname)s - %(message)s",
     )
 
     print("=" * 60)
@@ -773,24 +738,33 @@ if __name__ == "__main__":
     state.set_risk_mode(RiskMode.MODERADO)
     state.set_initial_balance(1000.0)
 
-    print(f"Modo: {state.trading.risk_mode.name} {state.trading.risk_mode.emoji}")
+    risk_mode = state.trading.risk_mode
+    if risk_mode:
+        print(f"Modo: {risk_mode.name} {risk_mode.emoji}")
     print(f"Saldo inicial: R$ {state.trading.initial_balance:.2f}")
-    print(f"Meta: {state.trading.profit_target_percent:.1%}")
+
+    target = state.trading.profit_target_percent
+    if target:
+        print(f"Meta: {target:.1%}")
     print(f"Gatilho: {state.strategy.lows_needed} velas")
 
     # Simula algumas explosões
     print("\n--- Simulando Explosões ---")
     explosions = [1.23, 1.45, 3.21, 1.89, 1.12, 4.56, 1.67, 2.34]
     for exp in explosions:
-        state.add_explosion(exp, emit=False)  # emit=False para não precisar do EventBus
+        # should_emit=False para não precisar do EventBus
+        state.add_explosion(exp, should_emit=False)
         emoji = "🟢" if exp >= 2.0 else "🔴"
-        print(f"  {emoji} {exp:.2f}x | Lows: {state.strategy.trigger_progress}")
+        print(f"  {emoji} {exp:.2f}x | " f"Lows: {state.strategy.trigger_progress}")
 
     # Simula mudança de saldo
     print("\n--- Atualizando Saldo ---")
-    state.set_balance(1150.0, emit=False)
+    state.set_balance(1150.0, should_emit=False)
     print(f"Novo saldo: R$ {state.trading.current_balance:.2f}")
-    print(f"Lucro: R$ {state.trading.profit:.2f} ({state.trading.profit_percent:.1f}%)")
+    print(
+        f"Lucro: R$ {state.trading.profit:.2f} "
+        f"({state.trading.profit_percent:.1f}%)"
+    )
     print(f"Progresso da meta: {state.trading.goal_progress_percent:.1f}%")
 
     # Simula apostas
@@ -798,7 +772,7 @@ if __name__ == "__main__":
     state.stats.record_hit(50.0)
     state.stats.record_hit(75.0)
     state.stats.record_miss(25.0)
-    print(f"Hits: {state.stats.total_hits} | Misses: {state.stats.total_misses}")
+    print(f"Hits: {state.stats.total_hits} | " f"Misses: {state.stats.total_misses}")
     print(f"Taxa de acerto: {state.stats.hit_rate:.1f}%")
     print(f"Lucro líquido: R$ {state.stats.net_profit:.2f}")
 

@@ -146,7 +146,7 @@ async def obter_preco_plano(
     """
     # Preços dos planos
     PRECOS = {
-        "mensal": {"normal": 600.00, "primeira_adesao": 600.00, "dias": 30},
+        "mensal": {"normal": 2000.00, "primeira_adesao": 2000.00, "dias": 30},
     }
 
     if plano not in PRECOS:

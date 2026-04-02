@@ -19,6 +19,36 @@ BOT_NAME = "CrashBot AI Pro"
 BOT_AUTHOR = "TucunaréBot"
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# PLATAFORMAS SUPORTADAS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+SUPPORTED_PLATFORMS = ["Brabet", "OneBra", "WinBra", "PGWin"]
+DEFAULT_PLATFORM = "Brabet"
+
+PLATFORM_DETAILS: Dict[str, Dict[str, Any]] = {
+    "Brabet": {
+        "display_name": "Brabet",
+        "color": (168, 85, 247),  # purple
+        "affiliate_url": "https://www.brabet.com/?agentid=135486005",
+    },
+    "OneBra": {
+        "display_name": "OneBra",
+        "color": (59, 130, 246),  # blue
+        "affiliate_url": "",
+    },
+    "WinBra": {
+        "display_name": "WinBra",
+        "color": (34, 197, 94),  # green
+        "affiliate_url": "",
+    },
+    "PGWin": {
+        "display_name": "PGWin",
+        "color": (234, 179, 8),  # amber
+        "affiliate_url": "",
+    },
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # API E ENDPOINTS
 # ═══════════════════════════════════════════════════════════════════════════════
 

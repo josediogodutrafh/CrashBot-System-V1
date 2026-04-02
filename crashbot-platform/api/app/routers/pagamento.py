@@ -43,7 +43,7 @@ router = APIRouter(prefix="/api/v1/pagamento", tags=["pagamento"])
 class CriarPagamentoRequest(BaseModel):
     """Request para criar pagamento."""
 
-    plano: str  # mensal
+    plano: str  # trial, semanal, mensal
     nome: str
     email: EmailStr
     whatsapp: str
@@ -107,12 +107,15 @@ def validar_cpf(cpf: str) -> bool:
 
 PLANOS = {
     "mensal": {
-        "nome": "Mensal",
-        "preco_normal": 600.00,
+        "nome": "Mensal Multi-Plataforma",
+        "preco_normal": 2000.00,
+        "preco_primeira_adesao": 2000.00,
         "dias": 30,
-        "descricao": "Plano Mensal - 30 dias de acesso",
+        "descricao": "Acesso a todas as plataformas por 30 dias",
     },
 }
+
+SUPPORTED_PLATFORMS = ["Brabet", "OneBra", "WinBra", "PGWin"]
 
 
 # ============================================================================
@@ -121,11 +124,8 @@ PLANOS = {
 
 
 def gerar_chave_licenca() -> str:
-    """Gera uma chave de licença única no formato XXXX-XXXX-XXXX-XXXX.
-
-    Usa apenas caracteres sem ambiguidade visual (sem O/0, I/1/L).
-    """
-    caracteres = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+    """Gera uma chave de licença única no formato XXXX-XXXX-XXXX-XXXX."""
+    caracteres = string.ascii_uppercase + string.digits
     partes = ["".join(secrets.choice(caracteres) for _ in range(4)) for _ in range(4)]
     return "-".join(partes)
 
@@ -696,8 +696,8 @@ async def verificar_elegibilidade(
 
     return VerificarElegibilidadeResponse(
         cpf_valido=cpf_valido,
-        pode_usar_trial=False,
-        motivo_trial="Trial não disponível",
+        pode_usar_trial=trial_info["pode_usar_trial"] and cpf_valido,
+        motivo_trial=trial_info["motivo"] if not cpf_valido else "CPF inválido",
         planos=planos_info,
     )
 

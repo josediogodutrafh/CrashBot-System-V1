@@ -360,12 +360,12 @@ export default function Home() {
                   padrões Lucrativos.
                 </p>
                 <div className="flex flex-col sm:flex-row gap-4">
-                  <Link href="/checkout/mensal" className="w-full sm:w-auto">
+                  <Link href="/checkout/trial" className="w-full sm:w-auto">
                     <Button
                       size="lg"
                       className="w-full h-14 bg-purple-600 hover:bg-purple-700 text-white font-bold text-lg shadow-[0_0_40px_-10px_rgba(147,51,234,0.5)] animate-pulse hover:animate-none"
                     >
-                      GARANTIR ACESSO VIP
+                      ⚡ Baixar Trial (7 Dias)
                     </Button>
                   </Link>
                   <Link href="#planos" className="w-full sm:w-auto">
@@ -413,80 +413,56 @@ export default function Home() {
             </div>
           </section>
 
-          {/* --- NOVA SEÇÃO DESTAQUE: PLATAFORMA BRABET --- */}
+          {/* --- SEÇÃO: PLATAFORMAS COMPATÍVEIS --- */}
           <section
             id="plataforma"
             className="py-24 bg-gradient-to-r from-[#0B0F19] via-[#101624] to-[#0B0F19] border-y border-white/5 relative overflow-hidden"
           >
-            {/* Efeitos de Fundo */}
             <div className="absolute top-0 right-0 p-64 bg-purple-500/5 blur-[100px] rounded-full pointer-events-none"></div>
 
             <div className="container mx-auto px-6 relative z-10">
-              <div className="grid lg:grid-cols-2 gap-16 items-center">
-                {/* Texto e Botão */}
-                <div className="space-y-8">
-                  <Badge className="bg-purple-500/20 text-purple-300 border-purple-500/30 px-3 py-1">
-                    PARCERIA OFICIAL
-                  </Badge>
-                  <h2 className="text-4xl md:text-5xl font-bold text-white leading-tight">
-                    Otimizado para <br />
-                    <span className="text-purple-400">BRABET</span>
-                  </h2>
-                  <p className="text-lg text-slate-300 leading-relaxed">
-                    Atualmente, nosso sistema disponibilizado opera
-                    exclusivamente para a interface do site de apostas da
-                    Brabet.
-                  </p>
+              <div className="text-center mb-16">
+                <Badge className="bg-purple-500/20 text-purple-300 border-purple-500/30 px-3 py-1 mb-4">
+                  MULTI-PLATAFORMA
+                </Badge>
+                <h2 className="text-4xl md:text-5xl font-bold text-white leading-tight">
+                  Compatível com <span className="text-purple-400">4 Plataformas</span>
+                </h2>
+                <p className="text-lg text-slate-300 mt-4 max-w-2xl mx-auto">
+                  Uma única licença, acesso a todas as plataformas. Escolha onde operar.
+                </p>
+              </div>
 
-                  <div className="bg-yellow-500/10 border border-yellow-500/20 p-4 rounded-lg flex gap-4 items-start">
-                    <AlertTriangle className="w-6 h-6 text-yellow-500 shrink-0 mt-1" />
-                    <div className="text-sm text-yellow-200">
-                      <strong>Atenção:</strong> Acesse com um clique na caixa
-                      verde abaixo ou aponte sua câmera para o QR Code ao lado!!
-                    </div>
-                  </div>
-
-                  <a
-                    href="https://www.brabet.com/?agentid=135486005"
-                    target="_blank"
-                    rel="noopener noreferrer"
+              <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6 max-w-5xl mx-auto">
+                {[
+                  { name: 'Brabet', color: 'purple', url: 'https://www.brabet.com/?agentid=135486005' },
+                  { name: 'OneBra', color: 'blue', url: '#' },
+                  { name: 'WinBra', color: 'green', url: '#' },
+                  { name: 'PGWin', color: 'amber', url: '#' },
+                ].map((plat) => (
+                  <Card
+                    key={plat.name}
+                    className="bg-slate-900/60 border-slate-700 hover:border-slate-500 transition-all text-center"
                   >
-                    <Button
-                      size="lg"
-                      className="w-full sm:w-auto h-16 px-8 bg-green-600 hover:bg-green-700 text-white font-bold text-lg shadow-[0_0_30px_-5px_rgba(34,197,94,0.4)]"
-                    >
-                      CRIAR CONTA NA BRABET
-                    </Button>
-                  </a>
-                </div>
-
-                {/* QR Code Gigante em Destaque */}
-                <div className="flex justify-center lg:justify-end">
-                  <div className="bg-white p-6 rounded-3xl shadow-2xl rotate-2 hover:rotate-0 transition-transform duration-500 relative group max-w-sm">
-                    <div className="absolute -inset-4 bg-gradient-to-br from-purple-500 to-blue-500 rounded-[2rem] blur opacity-30 group-hover:opacity-50 transition duration-500 -z-10"></div>
-
-                    <div className="text-center mb-4">
-                      <p className="text-slate-900 font-bold text-xl mb-1">
-                        Escaneie para Jogar
-                      </p>
-                      <p className="text-slate-500 text-sm">
-                        Acesso direto ao Cadastro
-                      </p>
-                    </div>
-
-                    <Image
-                      src="/qrcode-brabet.png"
-                      alt="QR Code Brabet"
-                      width={250}
-                      height={250}
-                      className="object-contain mx-auto"
-                    />
-
-                    <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-center gap-2 text-slate-400 text-sm">
-                      <Lock className="w-4 h-4" /> Link Seguro SSL
-                    </div>
-                  </div>
-                </div>
+                    <CardContent className="p-6 space-y-4">
+                      <div className="w-16 h-16 rounded-2xl bg-slate-800 flex items-center justify-center mx-auto">
+                        <span className="text-2xl font-bold text-white">
+                          {plat.name.charAt(0)}
+                        </span>
+                      </div>
+                      <h3 className="text-xl font-bold text-white">{plat.name}</h3>
+                      <a href={plat.url} target="_blank" rel="noopener noreferrer">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="w-full border-slate-600 text-slate-300 hover:bg-slate-800 mt-2"
+                        >
+                          Criar Conta
+                        </Button>
+                      </a>
+                    </CardContent>
+                  </Card>
+                ))}
               </div>
             </div>
           </section>
@@ -503,48 +479,45 @@ export default function Home() {
                 </p>
               </div>
 
-              <div className="flex justify-center max-w-lg mx-auto">
-                {/* MENSAL PRO */}
-                <div className="relative w-full">
+              <div className="max-w-lg mx-auto">
+                <div className="relative">
                   <div className="absolute -inset-[2px] bg-gradient-to-b from-purple-500 to-pink-500 rounded-xl blur-sm opacity-50"></div>
-                  <Card className="bg-[#0f172a] border-0 h-[500px] flex flex-col relative">
+                  <Card className="bg-[#0f172a] border-0 flex flex-col relative">
                     <div className="absolute top-0 right-4 top-4">
-                      <Badge className="bg-purple-600">ACESSO COMPLETO</Badge>
+                      <Badge className="bg-purple-600">MULTI-PLATAFORMA</Badge>
                     </div>
                     <CardHeader>
                       <CardTitle className="text-white text-2xl">
-                        Mensal <span className="text-purple-400">PRO</span>
+                        Licença Mensal <span className="text-purple-400">PRO</span>
                       </CardTitle>
                     </CardHeader>
-                    <CardContent className="flex-1 flex flex-col">
+                    <CardContent className="flex flex-col">
                       <div className="mb-2">
                         <span className="text-5xl font-bold text-white">
-                          R$ 600
+                          R$ 2.000
                         </span>
                         <span className="text-slate-500">/mês</span>
                       </div>
-                      <ul className="space-y-4 text-sm text-white flex-1 mt-8">
+                      <ul className="space-y-4 text-sm text-white mt-8">
                         <li className="flex gap-3">
                           <Check className="text-green-400" />{' '}
-                          <strong>
-                            Setup Flexível estruturado em longo prazo
-                          </strong>
+                          <strong>Acesso a todas as 4 plataformas</strong>
                         </li>
                         <li className="flex gap-3">
                           <Check className="text-green-400" />{' '}
-                          <strong>Melhor diluição de risco</strong>
+                          <strong>Brabet, OneBra, WinBra e PGWin</strong>
                         </li>
                         <li className="flex gap-3">
-                          <Check className="text-green-400" /> Suporte de
-                          instalação via WhatsApp/Telegram
+                          <Check className="text-green-400" /> Setup Flexível com diluição de risco
                         </li>
                         <li className="flex gap-3">
-                          <Check className="text-green-400" /> Receba telemetria
-                          pelo Telegram
+                          <Check className="text-green-400" /> Suporte VIP via WhatsApp/Telegram
                         </li>
                         <li className="flex gap-3">
-                          <Check className="text-green-400" /> Acesso a análises
-                          estratégicas semanais
+                          <Check className="text-green-400" /> Telemetria em tempo real pelo Telegram
+                        </li>
+                        <li className="flex gap-3">
+                          <Check className="text-green-400" /> Acesso a análises estratégicas semanais
                         </li>
                       </ul>
                       <Link href="/checkout/mensal" className="mt-8">
@@ -552,7 +525,7 @@ export default function Home() {
                           size="lg"
                           className="w-full bg-gradient-to-r from-purple-600 to-pink-600 font-bold h-14 shadow-lg hover:scale-[1.02] transition-transform"
                         >
-                          GARANTIR ACESSO VIP
+                          GARANTIR ACESSO
                         </Button>
                       </Link>
                     </CardContent>

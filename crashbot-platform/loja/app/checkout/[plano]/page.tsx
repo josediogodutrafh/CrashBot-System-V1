@@ -23,13 +23,13 @@ type PlanosMap = {
   [key: string]: PlanoInfo;
 };
 
-// --- PREÇOS E PLANOS ---
+// --- NOVOS PREÇOS E PLANOS ---
 const planosBase: PlanosMap = {
   mensal: {
-    nome: 'Licença Mensal PRO',
-    preco: 600.0,
+    nome: 'Licença Mensal Multi-Plataforma',
+    preco: 2000.0,
     dias: 30,
-    descricao: 'Setup validado e suporte VIP incluso.',
+    descricao: 'Acesso a Brabet, OneBra, WinBra e PGWin por 30 dias.',
     popular: true,
   },
 };
