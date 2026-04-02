@@ -360,12 +360,12 @@ export default function Home() {
                   padrões Lucrativos.
                 </p>
                 <div className="flex flex-col sm:flex-row gap-4">
-                  <Link href="/checkout/trial" className="w-full sm:w-auto">
+                  <Link href="/checkout/mensal" className="w-full sm:w-auto">
                     <Button
                       size="lg"
                       className="w-full h-14 bg-purple-600 hover:bg-purple-700 text-white font-bold text-lg shadow-[0_0_40px_-10px_rgba(147,51,234,0.5)] animate-pulse hover:animate-none"
                     >
-                      ⚡ Baixar Trial (7 Dias)
+                      GARANTIR ACESSO VIP
                     </Button>
                   </Link>
                   <Link href="#planos" className="w-full sm:w-auto">
