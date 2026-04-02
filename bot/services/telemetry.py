@@ -369,43 +369,67 @@ class TelemetryService:
 
         url = f"{self._api_base_url}{API_ENDPOINTS['telemetry']}"
 
-        # Monta payload com metadados
-        request_data = {
-            "bot_version": BOT_VERSION,
-            "user_id": self._user_id,
-            "license_key": self._license_key,
-            "hwid": self._hwid,
-            "session_id": self._session_id,
-            "events": [p.to_dict() for p in payloads],
-        }
+        sent = 0
+        failed = 0
 
-        try:
-            response = requests.post(
-                url,
-                json=request_data,
-                timeout=API_TIMEOUT,
-            )
+        for payload in payloads:
+            # Monta payload flat compatível com TelemetriaRequest do backend
+            event_data = payload.data if isinstance(payload.data, dict) else {}
+            request_data = {
+                "sessao_id": self._session_id or "unknown",
+                "hwid": self._hwid or "unknown",
+                "tipo": payload.event_type,
+                "dados": str(event_data),
+                "versao_bot": BOT_VERSION,
+                "lucro": event_data.get("profit", event_data.get("lucro", 0.0)),
+                "saldo": event_data.get("current_balance", event_data.get("saldo")),
+                "valor_aposta": event_data.get("bet_amount", event_data.get("valor_aposta")),
+                "banca_inicial": event_data.get("banca_inicial"),
+                "banca_final": event_data.get("banca_final"),
+                "modo_risco": event_data.get("risk_mode", event_data.get("modo_risco")),
+                "estrategia": event_data.get("estrategia"),
+                "target": event_data.get("target"),
+                "explosao": event_data.get("explosao", event_data.get("explosion")),
+                "resultado": event_data.get("resultado", event_data.get("result")),
+                "sequencia_perdas": event_data.get("sequencia_perdas"),
+                "dobra_atual": event_data.get("dobra_atual"),
+                "total_rodadas": event_data.get("round_count", event_data.get("total_rodadas")),
+                "plataforma": event_data.get("plataforma"),
+            }
 
-            if response.status_code in (200, 201, 202):
-                self._stats["sent"] += len(payloads)
-                logger.debug(f"Telemetria enviada: {len(payloads)} eventos")
-                return True
-            else:
-                self._stats["failed"] += len(payloads)
-                logger.warning(
-                    f"Erro ao enviar telemetria: HTTP {response.status_code}"
+            # Remove campos None para não enviar lixo
+            request_data = {k: v for k, v in request_data.items() if v is not None}
+
+            try:
+                response = requests.post(
+                    url,
+                    json=request_data,
+                    timeout=API_TIMEOUT,
                 )
-                return False
 
-        except requests.Timeout:
-            self._stats["failed"] += len(payloads)
-            logger.warning("Timeout ao enviar telemetria")
-            return False
+                if response.status_code in (200, 201, 202):
+                    sent += 1
+                else:
+                    failed += 1
+                    logger.warning(
+                        f"Erro ao enviar telemetria: HTTP {response.status_code}"
+                    )
 
-        except requests.RequestException as e:
-            self._stats["failed"] += len(payloads)
-            logger.error(f"Erro de conexão telemetria: {e}")
-            return False
+            except requests.Timeout:
+                failed += 1
+                logger.warning("Timeout ao enviar telemetria")
+
+            except requests.RequestException as e:
+                failed += 1
+                logger.error(f"Erro de conexão telemetria: {e}")
+
+        self._stats["sent"] += sent
+        self._stats["failed"] += failed
+
+        if sent > 0:
+            logger.debug(f"Telemetria enviada: {sent} eventos")
+
+        return failed == 0
 
     # ═══════════════════════════════════════════════════════════════════════════
     # INTEGRAÇÃO COM EVENTBUS

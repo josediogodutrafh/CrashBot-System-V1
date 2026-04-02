@@ -35,7 +35,7 @@ try:
 except ImportError:
     HAS_REQUESTS = False
 
-from core.constants import API_BASE_URL, API_ENDPOINTS, API_TIMEOUT
+from core.constants import API_BASE_URL, API_ENDPOINTS, API_TIMEOUT, BOT_VERSION
 
 # Core imports
 from core.events import BotEvent, emit, get_event_bus
@@ -268,8 +268,8 @@ class LicenseService:
 
         payload = {
             "chave": license_key,
-            "email": email,
             "hwid": self.hwid,
+            "versao_bot": BOT_VERSION,
         }
 
         try:
@@ -349,6 +349,25 @@ class LicenseService:
             LicenseResult com dados extraídos
         """
         try:
+            # Verificar se servidor exige atualização
+            if data.get("force_update", False):
+                download_url = data.get("download_url", "")
+                msg = data.get("mensagem", "Atualização obrigatória")
+                if download_url:
+                    try:
+                        import webbrowser
+                        webbrowser.open(download_url)
+                    except Exception:
+                        pass
+                return LicenseResult(
+                    valid=False,
+                    status=LicenseStatus.ERROR,
+                    message=msg,
+                    license_key=license_key,
+                    hwid=self.hwid,
+                    api_response=data,
+                )
+
             # Extrai dados do usuário
             user_name = data.get("nome", data.get("user_name", "Usuário"))
             user_email = data.get("email", "")
