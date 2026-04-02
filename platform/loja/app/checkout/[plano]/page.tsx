@@ -486,8 +486,37 @@ export default function CheckoutPage() {
                     {!isTrial && (
                       <p className="text-center text-xs text-slate-500 mt-4">
                         Você será redirecionado para o Mercado Pago para
-                        concluir a compra via PIX ou Cartão.
+                        concluir a compra via Cartão ou Boleto.
                       </p>
+                    )}
+
+                    {!isTrial && (
+                      <div className="mt-6 p-4 bg-slate-800/50 border border-slate-700 rounded-lg">
+                        <p className="text-sm font-semibold text-white mb-2">
+                          Pagar via Pix
+                        </p>
+                        <p className="text-xs text-slate-400 mb-3">
+                          Envie o valor de <strong className="text-white">R$ {planoBase.preco.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong> para a chave Pix abaixo e envie o comprovante pelo WhatsApp:
+                        </p>
+                        <div className="flex items-center gap-2 bg-slate-900 p-3 rounded-md">
+                          <span className="text-green-400 font-mono text-sm flex-1">
+                            65993104621
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText('65993104621');
+                              alert('Chave Pix copiada!');
+                            }}
+                            className="text-xs bg-slate-700 hover:bg-slate-600 text-white px-3 py-1 rounded"
+                          >
+                            Copiar
+                          </button>
+                        </div>
+                        <p className="text-xs text-slate-500 mt-2">
+                          Após o pagamento, envie o comprovante pelo WhatsApp para ativação da licença.
+                        </p>
+                      </div>
                     )}
                   </form>
                 </CardContent>
