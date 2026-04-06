@@ -11,6 +11,8 @@ from app.database import get_db
 from app.dependencies import get_current_admin, get_current_user
 from app.models import Licenca, LogBot, Usuario
 from app.models.versao_bot import VersaoBot
+from app.services.email_service import enviar_email, template_licenca_criada
+from passlib.context import CryptContext
 from app.schemas.licenca import (
     TelemetriaRequest,
     TelemetriaResponse,
@@ -27,6 +29,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 limiter = Limiter(key_func=get_remote_address)
 
 router = APIRouter(prefix="/api/v1", tags=["licencas"])
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+
+def _gerar_senha_temporaria(tamanho: int = 10) -> str:
+    """Gera uma senha temporaria aleatoria."""
+    import string
+    caracteres = string.ascii_letters + string.digits
+    return "".join(random.choices(caracteres, k=tamanho))
 
 
 def _versao_menor(versao_cliente: str, versao_servidor: str) -> bool:
@@ -284,13 +295,15 @@ async def criar_licenca(
     db: AsyncSession = Depends(get_db),
     current_admin: Usuario = Depends(get_current_admin),
 ):
-    """Cria uma nova licenca manualmente (admin)."""
-    # Gerar chave unica
-    # Gerar chave no formato XXXX-XXXX-XXXX-XXXX (sem caracteres ambíguos)
-    caracteres = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"  # Sem O, 0, I, 1, L
+    """Cria uma nova licenca manualmente (admin).
+
+    Tambem cria a conta do cliente (se nao existir) e envia email
+    com a chave de licenca + dados de acesso ao painel.
+    """
+    # Gerar chave no formato XXXX-XXXX-XXXX-XXXX (sem caracteres ambiguos)
+    caracteres = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
     chave = "-".join("".join(random.choices(caracteres, k=4)) for _ in range(4))
 
-    # Calcular data de expiracao
     data_expiracao = datetime.now(timezone.utc) + timedelta(days=payload.dias_validade)
 
     nova_licenca = Licenca(
@@ -307,6 +320,44 @@ async def criar_licenca(
     db.add(nova_licenca)
     await db.commit()
     await db.refresh(nova_licenca)
+
+    # Criar conta do cliente (se nao existir)
+    senha_temporaria = "(sua senha atual)"
+    result_user = await db.execute(
+        select(Usuario).where(Usuario.email == payload.email_cliente)
+    )
+    usuario_existente = result_user.scalar_one_or_none()
+
+    if not usuario_existente:
+        senha_temporaria = _gerar_senha_temporaria()
+        novo_usuario = Usuario(
+            email=payload.email_cliente,
+            senha_hash=pwd_context.hash(senha_temporaria),
+            nome=payload.cliente_nome,
+            is_admin=False,
+            is_active=True,
+        )
+        db.add(novo_usuario)
+        await db.commit()
+        print(f"Usuario criado: {payload.email_cliente}")
+
+    # Enviar email com licenca
+    try:
+        html_email = template_licenca_criada(
+            nome=payload.cliente_nome or "Cliente",
+            email=payload.email_cliente,
+            senha=senha_temporaria,
+            chave_licenca=chave,
+            plano=payload.plano_tipo or "manual",
+            dias=int(payload.dias_validade),
+        )
+        await enviar_email(
+            para=payload.email_cliente,
+            assunto="Sua licenca TucunareBot esta pronta!",
+            html=html_email,
+        )
+    except Exception as e:
+        print(f"Erro ao enviar email: {e}")
 
     return nova_licenca.to_dict()
 
