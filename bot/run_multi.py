@@ -23,6 +23,15 @@ if str(PROJECT_ROOT) not in sys.path:
 
 os.environ["APP_MODE"] = "multi"
 
+# Quando rodando como .exe (PyInstaller), apontar FLET_VIEW_PATH para o
+# cliente Flet bundled, evitando download em runtime (que falha sem internet
+# ou com problemas de SSL na máquina do cliente)
+if getattr(sys, "frozen", False):
+    bundle_dir = Path(sys._MEIPASS)
+    flet_client_path = bundle_dir / "flet_desktop" / "app" / "flet"
+    if flet_client_path.exists():
+        os.environ["FLET_VIEW_PATH"] = str(flet_client_path)
+
 from src.gui.app_multi import main
 
 if __name__ == "__main__":
