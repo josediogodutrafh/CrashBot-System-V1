@@ -289,6 +289,51 @@ class CriarLicencaRequest(BaseModel):
 # ============================================================================
 
 
+@router.post("/admin/test-email", status_code=status.HTTP_200_OK)
+async def test_email(
+    payload: dict,
+    current_admin: Usuario = Depends(get_current_admin),
+):
+    """Testa envio de email para diagnostico."""
+    import os
+    from app.config import settings
+
+    para = payload.get("para", "")
+    if not para:
+        return {"success": False, "error": "campo 'para' obrigatorio"}
+
+    # Diagnostico
+    api_key_env = os.getenv("RESEND_API_KEY", "")
+    api_key_settings = settings.RESEND_API_KEY or ""
+
+    diagnostico = {
+        "resend_api_key_env_set": bool(api_key_env),
+        "resend_api_key_env_prefix": api_key_env[:8] + "..." if api_key_env else "VAZIO",
+        "resend_api_key_settings_set": bool(api_key_settings),
+        "email_from": settings.EMAIL_FROM,
+    }
+
+    # Tentar enviar
+    try:
+        sucesso = await enviar_email(
+            para=para,
+            assunto="Teste TucunareBot - Email funcionando!",
+            html="<h1>Teste OK</h1><p>Se voce recebeu este email, o sistema esta funcionando.</p>",
+            texto="Teste OK - Sistema de email funcionando.",
+        )
+        return {
+            "success": sucesso,
+            "diagnostico": diagnostico,
+            "destinatario": para,
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "diagnostico": diagnostico,
+        }
+
+
 @router.delete("/admin/reset-clientes", status_code=status.HTTP_200_OK)
 async def reset_clientes(
     db: AsyncSession = Depends(get_db),
