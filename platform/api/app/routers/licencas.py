@@ -289,6 +289,38 @@ class CriarLicencaRequest(BaseModel):
 # ============================================================================
 
 
+@router.delete("/admin/reset-clientes", status_code=status.HTTP_200_OK)
+async def reset_clientes(
+    db: AsyncSession = Depends(get_db),
+    current_admin: Usuario = Depends(get_current_admin),
+):
+    """Reseta todos os clientes, licencas e logs (mantem apenas admins)."""
+    from sqlalchemy import delete
+
+    # Apagar logs (referencia licenca_id)
+    log_result = await db.execute(delete(LogBot))
+    logs_deleted = log_result.rowcount
+
+    # Apagar licencas
+    lic_result = await db.execute(delete(Licenca))
+    licencas_deleted = lic_result.rowcount
+
+    # Apagar usuarios nao-admin
+    user_result = await db.execute(
+        delete(Usuario).where(Usuario.is_admin == False)
+    )
+    users_deleted = user_result.rowcount
+
+    await db.commit()
+
+    return {
+        "success": True,
+        "logs_deleted": logs_deleted,
+        "licencas_deleted": licencas_deleted,
+        "usuarios_deleted": users_deleted,
+    }
+
+
 @router.post("/licencas", status_code=status.HTTP_201_CREATED)
 async def criar_licenca(
     payload: CriarLicencaRequest,
