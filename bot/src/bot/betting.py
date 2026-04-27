@@ -180,6 +180,8 @@ class BettingExecutor:
         import pyautogui
         import pyperclip
 
+        pyautogui.FAILSAFE = False
+
         bet_str = f"{max(1.0, bet_value):.2f}"
         target_str = f"{target:.2f}"
 

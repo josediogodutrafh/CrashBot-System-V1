@@ -16,21 +16,20 @@ import os
 import sys
 from pathlib import Path
 
+# PyInstaller com console=False define sys.stdout/stderr como None,
+# o que quebra uvicorn/logging. Redirecionar para devnull.
+if getattr(sys, "frozen", False):
+    if sys.stdout is None:
+        sys.stdout = open(os.devnull, "w")
+    if sys.stderr is None:
+        sys.stderr = open(os.devnull, "w")
+
 # Garante que a raiz do projeto está no sys.path
 PROJECT_ROOT = Path(__file__).parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 os.environ["APP_MODE"] = "multi"
-
-# Quando rodando como .exe (PyInstaller), apontar FLET_VIEW_PATH para o
-# cliente Flet bundled, evitando download em runtime (que falha sem internet
-# ou com problemas de SSL na máquina do cliente)
-if getattr(sys, "frozen", False):
-    bundle_dir = Path(sys._MEIPASS)
-    flet_client_path = bundle_dir / "flet_desktop" / "app" / "flet"
-    if flet_client_path.exists():
-        os.environ["FLET_VIEW_PATH"] = str(flet_client_path)
 
 from src.gui.app_multi import main
 

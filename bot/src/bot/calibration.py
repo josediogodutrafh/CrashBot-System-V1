@@ -179,6 +179,8 @@ def select_area_visual(title: str) -> Optional[dict]:
 
     # Forcar DPI awareness para coordenadas corretas
     import os
+    virtual_x, virtual_y = 0, 0
+    virtual_w, virtual_h = 0, 0
     if os.name == "nt":
         try:
             import ctypes
@@ -188,15 +190,37 @@ def select_area_visual(title: str) -> Optional[dict]:
                 ctypes.windll.user32.SetProcessDPIAware()
             except Exception:
                 pass
+        # Dimensoes do desktop VIRTUAL (cobre todos os monitores)
+        try:
+            import ctypes
+            user32 = ctypes.windll.user32
+            SM_XVIRTUALSCREEN = 76
+            SM_YVIRTUALSCREEN = 77
+            SM_CXVIRTUALSCREEN = 78
+            SM_CYVIRTUALSCREEN = 79
+            virtual_x = user32.GetSystemMetrics(SM_XVIRTUALSCREEN)
+            virtual_y = user32.GetSystemMetrics(SM_YVIRTUALSCREEN)
+            virtual_w = user32.GetSystemMetrics(SM_CXVIRTUALSCREEN)
+            virtual_h = user32.GetSystemMetrics(SM_CYVIRTUALSCREEN)
+        except Exception:
+            pass
 
     root = tk.Tk()
-    root.attributes('-fullscreen', True)
     root.attributes('-alpha', 0.3)
     root.attributes('-topmost', True)
     root.configure(bg='black')
+    root.overrideredirect(True)  # Remove barra de titulo
 
-    screen_w = root.winfo_screenwidth()
-    screen_h = root.winfo_screenheight()
+    if virtual_w > 0 and virtual_h > 0:
+        # Cobre todos os monitores (desktop virtual)
+        root.geometry(f"{virtual_w}x{virtual_h}+{virtual_x}+{virtual_y}")
+        screen_w = virtual_w
+        screen_h = virtual_h
+    else:
+        # Fallback: monitor primario apenas
+        root.attributes('-fullscreen', True)
+        screen_w = root.winfo_screenwidth()
+        screen_h = root.winfo_screenheight()
 
     canvas = tk.Canvas(
         root, width=screen_w, height=screen_h,

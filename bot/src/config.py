@@ -137,3 +137,18 @@ PLATFORM_PORTS = {
 # ==============================================================================
 for _d in [DB_DIR, MODELS_DIR, PARQUET_DIR, PROCESSED_DIR, CACHE_DIR, CONFIG_DIR, LOGS_DIR, RECORDINGS_DIR]:
     _d.mkdir(parents=True, exist_ok=True)
+
+# ==============================================================================
+# COPIAR CONFIGS DEFAULT (frozen: _internal/config/ → <exe_dir>/config/)
+# ==============================================================================
+if getattr(sys, "frozen", False):
+    _bundle_config = BUNDLE_DIR / "config"
+    if _bundle_config.exists() and _bundle_config != CONFIG_DIR:
+        import shutil
+        for _f in _bundle_config.iterdir():
+            _dest = CONFIG_DIR / _f.name
+            if not _dest.exists():
+                if _f.is_file():
+                    shutil.copy2(str(_f), str(_dest))
+                elif _f.is_dir():
+                    shutil.copytree(str(_f), str(_dest))

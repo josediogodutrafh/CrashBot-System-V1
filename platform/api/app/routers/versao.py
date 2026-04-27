@@ -157,3 +157,31 @@ async def toggle_versao(
     await db.commit()
 
     return {"success": True, "ativa": versao.ativa}
+
+
+@router.patch("/versao/{versao_id}/toggle-obrigatoria")
+async def toggle_obrigatoria(
+    versao_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_admin: Usuario = Depends(get_current_admin),
+):
+    """Alterna o flag obrigatoria de uma versao (admin).
+
+    Quando obrigatoria=False, clientes com versao menor nao sao
+    forcados a atualizar (continuam funcionando normalmente).
+    """
+    result = await db.execute(select(VersaoBot).where(VersaoBot.id == versao_id))
+    versao: Optional[VersaoBot] = result.scalar_one_or_none()
+
+    if not versao:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Versao nao encontrada",
+        )
+
+    status_atual = bool(versao.obrigatoria)
+    versao.obrigatoria = not status_atual  # type: ignore
+
+    await db.commit()
+
+    return {"success": True, "obrigatoria": versao.obrigatoria}

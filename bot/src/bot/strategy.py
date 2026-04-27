@@ -122,6 +122,11 @@ class MartingalePolicy:
         # Prejuizo acumulado no ciclo
         self._cycle_loss = 0.0
 
+        # LOWs contadas APOS o ultimo reset/win/break.
+        # Inicia "saturado" para permitir o trigger inicial assim
+        # que houver 6 LOWs no historico carregado.
+        self._lows_since_reset = 9999
+
         logger.info(
             f"Martingale: {setup.name} | "
             f"Banca=R${banca:.2f} | "
@@ -145,11 +150,26 @@ class MartingalePolicy:
         return count
 
     def feed_round(self, explosion: float):
-        """Alimenta com rodada (noop)."""
-        pass
+        """Atualiza contagem de LOWs desde o ultimo reset.
+
+        Garante que apos um break/win seja necessario aguardar 6 LOWs
+        novas antes de reativar - independentemente das LOWs que ja
+        estao no historico (incluindo as proprias apostas perdidas).
+        """
+        if explosion < self.threshold:
+            self._lows_since_reset += 1
+        else:
+            self._lows_since_reset = 0
 
     def check_trigger(self, history: deque) -> bool:
-        """Verifica se deve ativar."""
+        """Verifica se deve ativar.
+
+        Exige duas condicoes:
+        - 6 LOWs consecutivas no historico (gatilho original)
+        - 6 LOWs registradas APOS o ultimo reset (evita reativar
+          imediatamente apos um break, contando as proprias apostas
+          perdidas como parte do gatilho).
+        """
         if self.is_active:
             return False
 
@@ -165,7 +185,8 @@ class MartingalePolicy:
         except Exception as e:
             logger.error(f"Erro alerta: {e}")
 
-        if lows >= self.lows_needed:
+        if (lows >= self.lows_needed
+                and self._lows_since_reset >= self.lows_needed):
             self._activate()
             return True
 
@@ -299,6 +320,10 @@ class MartingalePolicy:
         self.target_ativo = 0.0
         self._cycle_loss = 0.0
         self.stats.current_dobra = 0
+        # Apos um reset (win ou break), exigir 6 LOWs novas antes
+        # de reativar. Zera o contador para nao reaproveitar LOWs
+        # antigas (incluindo as das proprias apostas perdidas).
+        self._lows_since_reset = 0
 
     def get_stats(self) -> SessionStats:
         return self.stats
@@ -446,14 +471,17 @@ class StrategyEngine:
         if needs_bet or triggered:
             triggered = True
 
-        lows = self.policy._count_consecutive_lows(
+        lows_hist = self.policy._count_consecutive_lows(
             self.explosion_history
         )
+        lows = min(lows_hist, self.policy._lows_since_reset)
         sn = self.policy.setup.name
         max_d = self.policy.setup.max_dobras
         needed = self.policy.lows_needed
+        # Limita o display a "needed" para nao mostrar 9999 inicial
+        lows_disp = min(lows, needed)
         msg = (
-            f"Baixas: {lows}/{needed} | "
+            f"Baixas: {lows_disp}/{needed} | "
             f"{sn} | Aguardando..."
         )
 
@@ -532,9 +560,16 @@ class StrategyEngine:
         active = self.policy.is_active
         d = self.policy.dobra_atual
         max_d = self.policy.setup.max_dobras
-        lows = self.policy._count_consecutive_lows(
+        # UI mostra o min entre LOWs do historico e LOWs apos reset
+        # para refletir o gatilho real (que exige ambas as condicoes).
+        lows_hist = self.policy._count_consecutive_lows(
             self.explosion_history
         )
+        lows_since_reset = min(
+            self.policy._lows_since_reset,
+            self.policy.lows_needed,
+        )
+        lows = min(lows_hist, lows_since_reset)
         sn = self.policy.setup.name
 
         if active:

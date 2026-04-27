@@ -1005,7 +1005,7 @@ def _create_license_view(page: ft.Page):
     msg_text = ft.Text("", color=NEON_RED, size=12)
     loading = ft.ProgressRing(width=20, height=20, visible=False)
 
-    def do_validate(e=None):
+    async def do_validate_async(e=None):
         chave = (chave_input.value or "").strip()
         if not chave:
             msg_text.value = "Digite sua chave de licenca."
@@ -1018,28 +1018,28 @@ def _create_license_view(page: ft.Page):
         msg_text.color = NEON_BLUE
         page.update()
 
-        result = validate_license(chave)
+        # Rodar validacao em thread para nao bloquear o event loop
+        import asyncio
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(None, validate_license, chave)
         loading.visible = False
 
         if result.get("sucesso"):
-            # Licenca valida - mostrar app principal
             nome = result.get("nome", "Cliente")
             dias = result.get("dias_restantes", "?")
             msg_text.value = f"OK! Bem-vindo {nome} ({dias} dias)"
             msg_text.color = NEON_GREEN
             page.update()
-            # Aguardar 1 segundo e ir para o app
-            import threading
-            def go_to_app():
-                import time
-                time.sleep(1)
-                page.controls.clear()
-                from src.ws.parsers import get_platform_names
-                platforms = get_platform_names()
-                config_view = _create_multi_config(platforms)
-                page.add(config_view)
-                page.update()
-            threading.Thread(target=go_to_app, daemon=True).start()
+
+            await asyncio.sleep(1)
+
+            # Transicao para o app principal (no mesmo contexto async)
+            page.controls.clear()
+            from src.ws.parsers import get_platform_names
+            platforms = get_platform_names()
+            config_view = _create_multi_config(platforms)
+            page.add(config_view)
+            page.update()
         else:
             msg = result.get("mensagem", "Licenca invalida")
             msg_text.value = msg
@@ -1047,12 +1047,8 @@ def _create_license_view(page: ft.Page):
             page.update()
 
             if result.get("force_update"):
-                # Servidor forcou update - fechar app apos 3s
-                import threading, time
-                def close_app():
-                    time.sleep(3)
-                    page.window.close()
-                threading.Thread(target=close_app, daemon=True).start()
+                await asyncio.sleep(3)
+                page.window.close()
 
     return ft.Container(
         content=ft.Column(
@@ -1069,7 +1065,7 @@ def _create_license_view(page: ft.Page):
                     controls=[
                         ft.ElevatedButton(
                             content=ft.Text("Validar e Entrar", weight=ft.FontWeight.BOLD),
-                            on_click=do_validate,
+                            on_click=do_validate_async,
                             bgcolor=NEON_GREEN,
                             color="#000000",
                             width=400,
@@ -1091,30 +1087,63 @@ def _create_license_view(page: ft.Page):
 def _flet_main(page: ft.Page):
     """Flet page setup for multi-platform mode."""
     global _page_ref, _config_on_start
-    _page_ref = page
-    _config_on_start = _start_brain
 
-    from src.config import BOT_VERSION
-    page.title = f"TucunareBot v{BOT_VERSION} - Multi-Plataforma"
-    page.theme_mode = ft.ThemeMode.DARK
-    page.bgcolor = BG_MAIN
-    page.window.width = 1400
-    page.window.height = 850
-    page.window.min_width = 1100
-    page.window.min_height = 650
-    page.padding = ft.padding.all(12)
+    try:
+        _page_ref = page
+        _config_on_start = _start_brain
 
-    _setup_file_logging()
+        from src.config import BOT_VERSION
+        page.title = f"TucunareBot v{BOT_VERSION} - Multi-Plataforma"
+        page.theme_mode = ft.ThemeMode.DARK
+        page.bgcolor = BG_MAIN
+        page.window.width = 1400
+        page.window.height = 850
+        page.window.min_width = 1100
+        page.window.min_height = 650
+        page.padding = ft.padding.all(12)
 
-    # Tela de licenca primeiro
-    license_view = _create_license_view(page)
-    page.add(license_view)
-    page.update()
+        _setup_file_logging()
+
+        # Tela de licenca primeiro
+        license_view = _create_license_view(page)
+        page.add(license_view)
+        page.update()
+
+    except Exception as exc:
+        import traceback
+        err_msg = traceback.format_exc()
+        # Gravar erro em arquivo
+        try:
+            crash_log = Path(sys.executable).parent / "crash.log" if getattr(sys, "frozen", False) else Path("crash.log")
+            crash_log.write_text(err_msg, encoding="utf-8")
+        except Exception:
+            pass
+        # Mostrar erro na tela do Flet
+        page.bgcolor = "#1a1a2e"
+        page.controls.clear()
+        page.add(
+            ft.Column([
+                ft.Text("TucunareBot - Erro na Inicializacao", size=24, color="#ef4444", weight=ft.FontWeight.BOLD),
+                ft.Text("Envie o conteudo abaixo para o suporte:", size=14, color="#ccc"),
+                ft.TextField(value=err_msg, multiline=True, min_lines=15, max_lines=25, read_only=True, width=900, text_size=11),
+            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=16)
+        )
+        page.update()
 
 
 def main():
     """Entry point for multi-platform mode."""
-    ft.app(target=_flet_main)
+    try:
+        ft.app(target=_flet_main, view=ft.AppView.WEB_BROWSER)
+    except Exception as exc:
+        import traceback
+        err_msg = traceback.format_exc()
+        try:
+            crash_log = Path(sys.executable).parent / "crash.log" if getattr(sys, "frozen", False) else Path("crash.log")
+            crash_log.write_text(err_msg, encoding="utf-8")
+        except Exception:
+            pass
+        raise
 
 
 if __name__ == "__main__":
