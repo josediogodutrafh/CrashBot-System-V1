@@ -46,6 +46,12 @@ export default function AdminClientes() {
   const [resetLoading, setResetLoading] = useState(false);
   const [resetMsg, setResetMsg] = useState({ tipo: '', texto: '' });
 
+  // Renovacao de licenca
+  const [renovarLicenca, setRenovarLicenca] = useState<Licenca | null>(null);
+  const [renovarDias, setRenovarDias] = useState<number>(30);
+  const [renovarLoading, setRenovarLoading] = useState(false);
+  const [renovarMsg, setRenovarMsg] = useState({ tipo: '', texto: '' });
+
   useEffect(() => {
     fetchClientes();
     fetchUsuarios();
@@ -169,6 +175,64 @@ export default function AdminClientes() {
       });
     } finally {
       setResetLoading(false);
+    }
+  };
+
+  const handleRenovar = async () => {
+    if (!renovarLicenca || renovarDias <= 0) return;
+
+    setRenovarLoading(true);
+    setRenovarMsg({ tipo: '', texto: '' });
+
+    const token = localStorage.getItem('token');
+
+    try {
+      const response = await fetch(
+        `${API_URL}/api/v1/licencas/${renovarLicenca.id}/renovar`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ dias: renovarDias }),
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        setRenovarMsg({
+          tipo: 'sucesso',
+          texto: `Licenca renovada! ${data.dias_restantes} dias restantes.`,
+        });
+        // Atualiza estado local sem refetch para manter o modal aberto
+        if (selectedCliente) {
+          const updated = {
+            ...selectedCliente,
+            licencas: selectedCliente.licencas.map((l) =>
+              l.id === renovarLicenca.id
+                ? { ...l, dias_restantes: data.dias_restantes, ativa: data.ativa, esta_expirada: false }
+                : l
+            ),
+          };
+          setSelectedCliente(updated);
+        }
+        await fetchClientes();
+        setTimeout(() => {
+          setRenovarLicenca(null);
+          setRenovarMsg({ tipo: '', texto: '' });
+        }, 2000);
+      } else {
+        const data = await response.json();
+        throw new Error(data.detail || 'Erro ao renovar licenca');
+      }
+    } catch (error) {
+      setRenovarMsg({
+        tipo: 'erro',
+        texto: error instanceof Error ? error.message : 'Erro ao renovar',
+      });
+    } finally {
+      setRenovarLoading(false);
     }
   };
 
@@ -340,20 +404,32 @@ export default function AdminClientes() {
                           : 'Desativada'}
                       </span>
                     </div>
-                    <div className="flex items-center gap-4 text-sm text-gray-500">
-                      <span className="px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded">
-                        {licenca.plano_tipo}
-                      </span>
-                      <span>Criada: {formatDate(licenca.created_at)}</span>
-                      {!licenca.esta_expirada && (
-                        <span
-                          className={
-                            licenca.dias_restantes <= 7 ? 'text-red-400' : ''
-                          }
-                        >
-                          {licenca.dias_restantes} dias restantes
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex items-center gap-4 text-sm text-gray-500 flex-wrap">
+                        <span className="px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded">
+                          {licenca.plano_tipo}
                         </span>
-                      )}
+                        <span>Criada: {formatDate(licenca.created_at)}</span>
+                        {!licenca.esta_expirada && (
+                          <span
+                            className={
+                              licenca.dias_restantes <= 7 ? 'text-red-400' : ''
+                            }
+                          >
+                            {licenca.dias_restantes} dias restantes
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => {
+                          setRenovarLicenca(licenca);
+                          setRenovarDias(30);
+                          setRenovarMsg({ tipo: '', texto: '' });
+                        }}
+                        className="px-3 py-1.5 bg-blue-600/20 text-blue-400 border border-blue-500/30 rounded-lg hover:bg-blue-600/30 transition-colors text-sm font-medium whitespace-nowrap"
+                      >
+                        Renovar
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -479,6 +555,98 @@ export default function AdminClientes() {
                 className="flex-1 px-4 py-3 bg-yellow-600 hover:bg-yellow-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-xl transition-colors"
               >
                 {resetLoading ? 'Resetando...' : 'Resetar Senha'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Renovar Licenca */}
+      {renovarLicenca && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
+          <div className="bg-[#12121a] rounded-2xl border border-purple-900/30 w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-white">Renovar Licenca</h3>
+              <button
+                onClick={() => {
+                  setRenovarLicenca(null);
+                  setRenovarMsg({ tipo: '', texto: '' });
+                }}
+                className="text-gray-400 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-gray-400 mb-2">
+              Chave:{' '}
+              <code className="text-purple-400 font-mono text-sm">
+                {renovarLicenca.chave}
+              </code>
+            </p>
+            <p className="text-gray-400 mb-4 text-sm">
+              {renovarLicenca.esta_expirada
+                ? 'Expirada — sera renovada a partir de hoje'
+                : `Atualmente: ${renovarLicenca.dias_restantes} dias restantes`}
+            </p>
+
+            {renovarMsg.texto && (
+              <div
+                className={`p-3 rounded-lg mb-4 text-sm ${
+                  renovarMsg.tipo === 'erro'
+                    ? 'bg-red-500/20 border border-red-500 text-red-300'
+                    : 'bg-green-500/20 border border-green-500 text-green-300'
+                }`}
+              >
+                {renovarMsg.texto}
+              </div>
+            )}
+
+            <div className="mb-4">
+              <label className="block text-gray-300 mb-2 text-sm">
+                Quantos dias adicionar?
+              </label>
+              <input
+                type="number"
+                min={1}
+                value={renovarDias}
+                onChange={(e) => setRenovarDias(parseInt(e.target.value) || 0)}
+                className="w-full bg-[#0a0a0f] border border-purple-900/30 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-purple-500/50"
+              />
+            </div>
+
+            <div className="flex gap-2 mb-6 flex-wrap">
+              {[7, 15, 30, 60, 90].map((d) => (
+                <button
+                  key={d}
+                  onClick={() => setRenovarDias(d)}
+                  className={`px-3 py-1.5 rounded-lg text-sm border transition-colors ${
+                    renovarDias === d
+                      ? 'bg-blue-600/30 border-blue-500 text-blue-300'
+                      : 'bg-[#0a0a0f] border-purple-900/30 text-gray-400 hover:border-blue-500/50'
+                  }`}
+                >
+                  +{d} dias
+                </button>
+              ))}
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setRenovarLicenca(null);
+                  setRenovarMsg({ tipo: '', texto: '' });
+                }}
+                className="flex-1 px-4 py-3 text-gray-400 hover:text-white border border-purple-900/30 rounded-xl transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleRenovar}
+                disabled={renovarLoading || renovarDias <= 0}
+                className="flex-1 px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-xl transition-colors"
+              >
+                {renovarLoading ? 'Renovando...' : `Renovar +${renovarDias} dias`}
               </button>
             </div>
           </div>

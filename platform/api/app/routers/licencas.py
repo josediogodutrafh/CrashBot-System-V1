@@ -471,6 +471,70 @@ async def toggle_licenca(
 
 
 # ============================================================================
+# ENDPOINT: RENOVAR LICENCA (Admin)
+# ============================================================================
+
+
+class RenovarLicencaRequest(BaseModel):
+    dias: int
+
+
+@router.post("/licencas/{licenca_id}/renovar")
+async def renovar_licenca(
+    licenca_id: int,
+    payload: RenovarLicencaRequest,
+    db: AsyncSession = Depends(get_db),
+    current_admin: Usuario = Depends(get_current_admin),
+):
+    """Adiciona N dias na data de expiracao da licenca.
+
+    Se a licenca estiver expirada (ou sem data_expiracao), conta a
+    partir de agora. Caso contrario, soma sobre a data atual de
+    expiracao. Tambem reativa a licenca se estiver desativada.
+    """
+    if payload.dias <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="O numero de dias deve ser positivo",
+        )
+
+    result = await db.execute(select(Licenca).where(Licenca.id == licenca_id))
+    licenca = result.scalar_one_or_none()
+
+    if not licenca:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Licenca nao encontrada",
+        )
+
+    now = datetime.now(timezone.utc)
+    base = licenca.data_expiracao
+    if base is not None:
+        base_dt = cast(datetime, base)
+        if base_dt.tzinfo is None:
+            base_dt = base_dt.replace(tzinfo=timezone.utc)
+        # Se ja expirou, renova a partir de agora
+        if base_dt < now:
+            base_dt = now
+    else:
+        base_dt = now
+
+    nova_expiracao = base_dt + timedelta(days=payload.dias)
+    licenca.data_expiracao = nova_expiracao  # type: ignore
+    licenca.ativa = True  # type: ignore  # renovar sempre reativa
+
+    await db.commit()
+    await db.refresh(licenca)
+
+    return {
+        "success": True,
+        "data_expiracao": nova_expiracao.isoformat(),
+        "dias_restantes": licenca.dias_restantes,
+        "ativa": bool(licenca.ativa),
+    }
+
+
+# ============================================================================
 # ENDPOINT: RESET HWID (Admin)
 # ============================================================================
 
