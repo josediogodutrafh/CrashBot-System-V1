@@ -16,13 +16,7 @@ Fluxo:
     3. Se nivel mudou, executa acao correspondente
     4. Loga a decisao
 
-Mapeamento Brabet (%LOW ~55%, trigger 6):
-    AGRESSIVO  (0.8-1.0): Half-Kelly 2B trigger 6, aposta x1.20
-    NORMAL     (0.5-0.8): Half-Kelly 2B trigger 6, aposta x1.00
-    CONSERVADOR(0.3-0.5): Half-Kelly 1B trigger 6, aposta x0.70
-    DEFENSIVO  (0.0-0.3): PAUSA (nao aposta)
-
-Mapeamento Onebra/PGWin/Winbra (%LOW ~50-53%, trigger 7):
+Mapeamento (todas as plataformas, trigger 7):
     AGRESSIVO  (0.8-1.0): Half-Kelly 2B trigger 7, aposta x1.20
     NORMAL     (0.5-0.8): Half-Kelly 2B trigger 7, aposta x1.00
     CONSERVADOR(0.3-0.5): Half-Kelly 1B trigger 7, aposta x0.70
@@ -58,28 +52,28 @@ STRATEGY_MAP: Dict[str, LevelConfig] = {
     "agressivo": LevelConfig(
         setup_name="moderado",
         compound_pct=0.0,
-        trigger=6,
+        trigger=7,
         bet_multiplier=1.20,
         description="Fase segura: aposta +20%",
     ),
     "normal": LevelConfig(
         setup_name="moderado",
         compound_pct=0.0,
-        trigger=6,
+        trigger=7,
         bet_multiplier=1.00,
         description="Fase normal: aposta padrao",
     ),
     "conservador": LevelConfig(
         setup_name="moderado",
         compound_pct=0.0,
-        trigger=6,
+        trigger=7,
         bet_multiplier=0.70,
         description="Fase arriscada: aposta -30%",
     ),
     "defensivo": LevelConfig(
         setup_name="moderado",
         compound_pct=0.0,
-        trigger=6,
+        trigger=7,
         bet_multiplier=1.00,
         pause_bets=True,
         description="Fase perigosa: PAUSA",

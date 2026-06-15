@@ -30,12 +30,12 @@ from src.analysis.trend_cache import (
 logger = logging.getLogger(__name__)
 
 # %LOW empírico por plataforma (dados reais do DB)
-# Brabet: 55%, Onebra: 52%, PGWin: 51%, Winbra: 48%
+# Brabet: 55%, Onebra: 52%
+# 7bra / k813bet: sem dados ainda → usam EXPECTED_PCT_LOW (default global)
+# até acumular histórico real no DB.
 PLATFORM_PCT_LOW = {
     "brabet": 0.5455,
     "onebra": 0.5210,
-    "pgwin": 0.5140,
-    "winbra": 0.4790,
 }
 
 # Similarity thresholds

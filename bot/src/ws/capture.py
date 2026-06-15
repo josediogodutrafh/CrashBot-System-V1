@@ -282,6 +282,48 @@ class CrashWSCapture:
                 except Exception as e:
                     logger.warning("Nao conseguiu remover %s: %s", name, e)
 
+    def _build_dns_flags(self, game_url: str = "") -> List[str]:
+        """Flags do Chrome para contornar bloqueio de DNS via DoH.
+
+        Duas camadas:
+        1. --host-resolver-rules: mapeia o dominio do jogo para o IP que nos
+           mesmos resolvemos via DoH (Cloudflare/Google). Garante que a
+           pagina abre mesmo com o DNS do provedor bloqueado. O Host/SNI
+           original e mantido, entao CDNs (CloudFront/Vercel) roteiam certo.
+        2. DoH nativo do Chrome (modo secure): cobre os demais recursos da
+           pagina (CDN, websocket, API) tambem via DNS-over-HTTPS.
+
+        Best-effort: se a resolucao DoH falhar, retorna as flags que der
+        (ou vazio) sem nunca quebrar o lancamento do Chrome.
+        """
+        flags: List[str] = [
+            "--enable-features=DnsOverHttps",
+            "--dns-over-https-mode=secure",
+            (
+                "--dns-over-https-templates="
+                "https://cloudflare-dns.com/dns-query "
+                "https://dns.google/dns-query"
+            ),
+        ]
+
+        try:
+            from src.ws.dns_resolver import build_host_resolver_rules
+
+            urls = [u for u in [game_url, getattr(self, "game_url", "")] if u]
+            rules = build_host_resolver_rules(urls)
+            if rules:
+                flags.append(f"--host-resolver-rules={rules}")
+                logger.info("DoH host-resolver-rules: %s", rules)
+            else:
+                logger.info(
+                    "DoH: sem regras de host (resolucao falhou); "
+                    "Chrome usara DoH nativo."
+                )
+        except Exception as e:
+            logger.warning("Falha ao montar regras DoH: %s", e)
+
+        return flags
+
     def ensure_chrome_running(
         self, game_url: str = ""
     ) -> bool:
@@ -344,6 +386,16 @@ class CrashWSCapture:
             "--disable-popup-blocking",
             f"--user-agent={realistic_ua}",
         ]
+
+        # === Contorno de bloqueio de DNS do provedor (DoH) ===
+        # Alguns provedores adulteram o DNS para bloquear sites de aposta;
+        # por isso "em um PC entra e em outro nao". Aqui forcamos o Chrome
+        # do bot a resolver DNS via HTTPS (Cloudflare/Google), ignorando o
+        # DNS do sistema/roteador. Afeta SOMENTE este Chrome dedicado e
+        # reverte sozinho ao fechar (nao mexe na rede do Windows).
+        # Pode ser desligado com a variavel de ambiente CRASHBOT_DOH=0.
+        if os.environ.get("CRASHBOT_DOH", "1") != "0":
+            cmd += self._build_dns_flags(game_url)
 
         if game_url:
             cmd.append(game_url)
