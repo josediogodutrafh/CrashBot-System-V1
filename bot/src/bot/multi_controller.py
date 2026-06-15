@@ -106,7 +106,7 @@ class MultiPlatformController:
     # ── Window Positioning ───────────────────────────────────────────
 
     # Ordem fixa das plataformas (esquerda → direita)
-    PLATFORM_ORDER = ["brabet", "onebra", "pgwin", "winbra"]
+    PLATFORM_ORDER = ["brabet", "onebra", "7bra", "k813bet"]
 
     def _position_windows_when_ready(self):
         """Aguarda HWNDs de todos os Chromes e posiciona em grid.
@@ -140,7 +140,7 @@ class MultiPlatformController:
         self._position_windows_grid(hwnds)
 
     def _collect_hwnds_ordered(self) -> List[tuple]:
-        """Coleta HWNDs na ordem fixa: brabet → onebra → pgwin → winbra.
+        """Coleta HWNDs na ordem fixa: brabet → onebra → 7bra → k813bet.
 
         Returns:
             Lista de (name, hwnd) na ordem PLATFORM_ORDER.

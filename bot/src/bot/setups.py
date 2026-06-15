@@ -12,7 +12,7 @@ Moderado:     1x, 2x, 4x     (3 bets, divisor 7)
 Conservador:  1x, 2x, 4x, 8x (4 bets, divisor 15)
 
 Bet base = banca / divisor
-Trigger: 6 LOWs consecutivos (< 2.0x)
+Trigger: 7 LOWs consecutivos (< 2.0x)
 """
 
 import logging
@@ -28,7 +28,7 @@ class BaseSetup(ABC):
     name: str = ""
     pattern: List[int] = []
     threshold: float = 2.0
-    trigger_base: int = 6
+    trigger_base: int = 7
 
     @property
     def divisor(self) -> int:

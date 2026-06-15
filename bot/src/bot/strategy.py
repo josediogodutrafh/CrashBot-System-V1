@@ -7,7 +7,7 @@ STRATEGY ENGINE - Martingale Classico
 
 Banca fixa, 3 modos (agressivo/moderado/conservador).
 - Target randomico: 1.98x a 2.00x (anti-deteccao)
-- Gatilho: 6 baixas consecutivas (< 2.0x)
+- Gatilho: 7 baixas consecutivas (< 2.0x)
 - Progressao: 1x, 2x, 4x, 8x (depende do modo)
 """
 
@@ -93,7 +93,7 @@ class MartingalePolicy:
     Martingale classico com banca fixa.
 
     Fluxo:
-    1. Aguarda 6 LOWs consecutivos
+    1. Aguarda 7 LOWs consecutivos
     2. Bet 1: unit base (banca/divisor)
     3. Perdeu → Bet 2: 2x unit
     4. Perdeu → Bet 3: 4x unit (se modo permite)
@@ -124,7 +124,7 @@ class MartingalePolicy:
 
         # LOWs contadas APOS o ultimo reset/win/break.
         # Inicia "saturado" para permitir o trigger inicial assim
-        # que houver 6 LOWs no historico carregado.
+        # que houver 7 LOWs no historico carregado.
         self._lows_since_reset = 9999
 
         logger.info(
@@ -152,7 +152,7 @@ class MartingalePolicy:
     def feed_round(self, explosion: float):
         """Atualiza contagem de LOWs desde o ultimo reset.
 
-        Garante que apos um break/win seja necessario aguardar 6 LOWs
+        Garante que apos um break/win seja necessario aguardar 7 LOWs
         novas antes de reativar - independentemente das LOWs que ja
         estao no historico (incluindo as proprias apostas perdidas).
         """
@@ -165,8 +165,8 @@ class MartingalePolicy:
         """Verifica se deve ativar.
 
         Exige duas condicoes:
-        - 6 LOWs consecutivas no historico (gatilho original)
-        - 6 LOWs registradas APOS o ultimo reset (evita reativar
+        - 7 LOWs consecutivas no historico (gatilho original)
+        - 7 LOWs registradas APOS o ultimo reset (evita reativar
           imediatamente apos um break, contando as proprias apostas
           perdidas como parte do gatilho).
         """
@@ -320,7 +320,7 @@ class MartingalePolicy:
         self.target_ativo = 0.0
         self._cycle_loss = 0.0
         self.stats.current_dobra = 0
-        # Apos um reset (win ou break), exigir 6 LOWs novas antes
+        # Apos um reset (win ou break), exigir 7 LOWs novas antes
         # de reativar. Zera o contador para nao reaproveitar LOWs
         # antigas (incluindo as das proprias apostas perdidas).
         self._lows_since_reset = 0

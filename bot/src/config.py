@@ -128,8 +128,8 @@ MULTI_CONFIG_PATH = CONFIG_DIR / "multi_platforms.json"
 PLATFORM_PORTS = {
     "brabet": 9222,
     "onebra": 9223,
-    "pgwin": 9224,
-    "winbra": 9225,
+    "7bra": 9224,
+    "k813bet": 9225,
 }
 
 # ==============================================================================

@@ -17,18 +17,18 @@
     "profile": "",
     "advisor_enabled": false
   },
-  "pgwin": {
-    "enabled": false,
-    "game_url": "https://www.pgwin.com/?f=game_Crash",
+  "7bra": {
+    "enabled": true,
+    "game_url": "https://www.7bracasino.com/?f=game_Crash",
     "banca": "1000",
     "modo": "moderado",
     "recording": false,
     "profile": "",
     "advisor_enabled": false
   },
-  "winbra": {
-    "enabled": false,
-    "game_url": "https://www.winbra365.com/?f=game_Crash",
+  "k813bet": {
+    "enabled": true,
+    "game_url": "https://www.k813bet.com/?f=game_Crash",
     "banca": "1000",
     "modo": "moderado",
     "recording": false,
