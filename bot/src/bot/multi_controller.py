@@ -1,5 +1,5 @@
 """
-MultiPlatformController - Cérebro que gerencia 4 plataformas simultâneas.
+MultiPlatformController - Cérebro que gerencia 5 plataformas simultâneas.
 
 Orquestra múltiplas PlatformSessions, cada uma com captura WS,
 strategy e bankroll independentes. O cérebro coordena:
@@ -14,7 +14,7 @@ Uso:
 
     configs = [
         PlatformConfig("brabet", port=9222, ...),
-        PlatformConfig("onebra", port=9223, ...),
+        PlatformConfig("7bra", port=9224, ...),
     ]
     brain = MultiPlatformController(configs)
     brain.start_all()
@@ -106,7 +106,7 @@ class MultiPlatformController:
     # ── Window Positioning ───────────────────────────────────────────
 
     # Ordem fixa das plataformas (esquerda → direita)
-    PLATFORM_ORDER = ["brabet", "onebra", "7bra", "k813bet"]
+    PLATFORM_ORDER = ["brabet", "7bra", "k813bet", "spbetl", "insbet"]
 
     def _position_windows_when_ready(self):
         """Aguarda HWNDs de todos os Chromes e posiciona em grid.
@@ -140,7 +140,7 @@ class MultiPlatformController:
         self._position_windows_grid(hwnds)
 
     def _collect_hwnds_ordered(self) -> List[tuple]:
-        """Coleta HWNDs na ordem fixa: brabet → onebra → 7bra → k813bet.
+        """Coleta HWNDs na ordem fixa: brabet → 7bra → k813bet → spbetl → insbet.
 
         Returns:
             Lista de (name, hwnd) na ordem PLATFORM_ORDER.

@@ -127,9 +127,10 @@ MULTI_CONFIG_PATH = CONFIG_DIR / "multi_platforms.json"
 # Default debug ports per platform
 PLATFORM_PORTS = {
     "brabet": 9222,
-    "onebra": 9223,
     "7bra": 9224,
     "k813bet": 9225,
+    "spbetl": 9226,
+    "insbet": 9227,
 }
 
 # ==============================================================================

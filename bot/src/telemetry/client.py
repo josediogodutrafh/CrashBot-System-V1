@@ -87,7 +87,7 @@ class TelemetryClient:
 
         Args:
             tipo: sessao_inicio, aposta, sessao_fim, erro, modo_alterado, alerta
-            plataforma: brabet, onebra, winbra, pgwin
+            plataforma: brabet, 7bra, k813bet, spbetl, insbet
             ...demais campos opcionais
         """
         if not self._enabled:

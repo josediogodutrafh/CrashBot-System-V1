@@ -19,26 +19,6 @@
                 "width": 159,
                 "height": 38
             }
-        },
-        "onebra_cal": {
-            "bet_value_area_1": {
-                "x": 414,
-                "y": 867,
-                "width": 73,
-                "height": 33
-            },
-            "target_area_1": {
-                "x": 622,
-                "y": 868,
-                "width": 77,
-                "height": 35
-            },
-            "bet_button_area_1": {
-                "x": 814,
-                "y": 866,
-                "width": 102,
-                "height": 30
-            }
         }
     }
 }

@@ -1,7 +1,7 @@
 """
 CrashBot GUI - Multi-Platform Mode.
 
-Dashboard for 4 platforms simultaneously.
+Dashboard for 5 platforms simultaneously.
 - Tab-based view: one tab per platform
 - Aggregate sidebar with totals
 - Independent start/stop per platform
@@ -350,7 +350,7 @@ def _create_aggregate_panel() -> ft.Container:
     ctrls["total_hits"] = ft.Text("0", size=13, color=NEON_GREEN)
     ctrls["total_misses"] = ft.Text("0", size=13, color=NEON_RED)
     ctrls["hit_rate"] = ft.Text("0%", size=13, color=TEXT_PRIMARY)
-    ctrls["platforms_running"] = ft.Text("0/4", size=13, color=NEON_BLUE)
+    ctrls["platforms_running"] = ft.Text("0/5", size=13, color=NEON_BLUE)
     ctrls["total_rounds"] = ft.Text("0", size=13, color=TEXT_PRIMARY)
 
     # Per-platform status dots

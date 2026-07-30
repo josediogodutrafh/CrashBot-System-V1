@@ -8,15 +8,6 @@
     "profile": "",
     "advisor_enabled": false
   },
-  "onebra": {
-    "enabled": true,
-    "game_url": "https://www.onebra.com/?f=game_Crash",
-    "banca": "1000",
-    "modo": "moderado",
-    "recording": false,
-    "profile": "",
-    "advisor_enabled": false
-  },
   "7bra": {
     "enabled": true,
     "game_url": "https://www.7bracasino.com/?f=game_Crash",
@@ -29,6 +20,24 @@
   "k813bet": {
     "enabled": true,
     "game_url": "https://www.k813bet.com/?f=game_Crash",
+    "banca": "1000",
+    "modo": "moderado",
+    "recording": false,
+    "profile": "",
+    "advisor_enabled": false
+  },
+  "spbetl": {
+    "enabled": true,
+    "game_url": "https://www.spbetl.com/?f=game_Crash",
+    "banca": "1000",
+    "modo": "moderado",
+    "recording": false,
+    "profile": "",
+    "advisor_enabled": false
+  },
+  "insbet": {
+    "enabled": true,
+    "game_url": "https://www.insbet.com/?f=game_Crash",
     "banca": "1000",
     "modo": "moderado",
     "recording": false,
