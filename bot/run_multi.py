@@ -5,11 +5,12 @@
 Crash Lab - Modo Multi-Plataforma (Cérebro)
 Execute: python run_multi.py
 
-Abre dashboard para 4 plataformas simultâneas:
+Abre dashboard para 5 plataformas simultâneas:
   - Brabet   (porta 9222)
-  - Onebra   (porta 9223)
   - 7Bra     (porta 9224)
   - K813Bet  (porta 9225)
+  - SPBetl   (porta 9226)
+  - InsBet   (porta 9227)
 """
 
 import os

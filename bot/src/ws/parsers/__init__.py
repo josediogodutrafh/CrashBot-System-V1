@@ -4,15 +4,17 @@ WS Parsers - Adaptadores de protocolo por plataforma.
 
 from src.ws.parsers.base import BaseParser, ParsedEvent  # noqa: F401
 from src.ws.parsers.brabet import BrabetParser
-from src.ws.parsers.onebra import OnebraParser
 from src.ws.parsers.sevenbra import SevenBraParser
 from src.ws.parsers.k813bet import K813BetParser
+from src.ws.parsers.spbetl import SPBetlParser
+from src.ws.parsers.insbet import InsBetParser
 
 PARSERS = {
     "brabet": BrabetParser,
-    "onebra": OnebraParser,
     "7bra": SevenBraParser,
     "k813bet": K813BetParser,
+    "spbetl": SPBetlParser,
+    "insbet": InsBetParser,
 }
 
 
