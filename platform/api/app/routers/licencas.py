@@ -40,14 +40,45 @@ def _gerar_senha_temporaria(tamanho: int = 10) -> str:
     return "".join(random.choices(caracteres, k=tamanho))
 
 
+def _normalizar_versao(versao: str) -> str:
+    """Remove prefixo 'v' e espaços. 'v5.3.0' -> '5.3.0'.
+
+    O painel admin costuma receber a versão copiada da tag do GitHub
+    (que tem o 'v'), mas aqui trabalhamos só com o número.
+    """
+    if not versao:
+        return ""
+    return versao.strip().lstrip("vV")
+
+
+def _parse_versao(versao: str) -> Optional[list]:
+    """Converte '5.3.0' em [5, 3, 0]. Retorna None se não for parseável."""
+    try:
+        partes = [int(x) for x in _normalizar_versao(versao).split(".")]
+    except (ValueError, AttributeError):
+        return None
+    if not partes:
+        return None
+    # Completa com zeros: '6.0' e '6.0.0' devem comparar igual
+    while len(partes) < 3:
+        partes.append(0)
+    return partes
+
+
 def _versao_menor(versao_cliente: str, versao_servidor: str) -> bool:
     """Retorna True se versao_cliente < versao_servidor."""
-    try:
-        parts_c = [int(x) for x in versao_cliente.split(".")]
-        parts_s = [int(x) for x in versao_servidor.split(".")]
-        return parts_c < parts_s
-    except (ValueError, AttributeError):
-        return True  # Na dúvida, forçar update
+    parts_s = _parse_versao(versao_servidor)
+    if parts_s is None:
+        # Versão cadastrada no painel está inválida (ex: digitada errada).
+        # NÃO forçar update: o cliente não tem como satisfazer a exigência
+        # e ficaria preso em loop de download infinito.
+        return False
+
+    parts_c = _parse_versao(versao_cliente)
+    if parts_c is None:
+        return True  # Bot antigo/sem versão: forçar update
+
+    return parts_c < parts_s
 
 
 def _normalizar_chave(chave: str) -> str:
@@ -156,7 +187,7 @@ async def validar_licenca(
 
     if versao_obrigatoria:
         versao_cliente = payload.versao_bot
-        versao_servidor = str(versao_obrigatoria.versao)
+        versao_servidor = _normalizar_versao(str(versao_obrigatoria.versao))
 
         # Se o bot não envia versão (antigo) ou versão é menor, forçar update
         if not versao_cliente or _versao_menor(versao_cliente, versao_servidor):
